@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx --yes supabase gen types typescript --project-id odpcgeiaikdvpoydcfyu)",
+      "Bash(echo \"EXIT=$?\")",
+      "mcp__claude_ai_Supabase__generate_typescript_types",
+      "Bash(rm -f types.generated.tmp types.err.tmp)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"TSC_EXIT=$?\")",
+      "Bash(cp src/lib/types.ts /tmp/types.real.ts)",
+      "Bash(printf 'export type Database = any;\\\\n')",
+      "Bash(echo \"TSC_EXIT_WITH_ANY=$?\")",
+      "Bash(cp /tmp/types.real.ts src/lib/types.ts)"
+    ]
+  }
+}

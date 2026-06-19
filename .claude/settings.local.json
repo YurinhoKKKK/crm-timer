@@ -10,7 +10,14 @@
       "Bash(cp src/lib/types.ts /tmp/types.real.ts)",
       "Bash(printf 'export type Database = any;\\\\n')",
       "Bash(echo \"TSC_EXIT_WITH_ANY=$?\")",
-      "Bash(cp /tmp/types.real.ts src/lib/types.ts)"
+      "Bash(cp /tmp/types.real.ts src/lib/types.ts)",
+      "mcp__claude_ai_Supabase__execute_sql",
+      "Bash(npm run *)",
+      "PowerShell(foreach \\($p in 3000,3001\\) { $c = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue; if \\($c\\) { foreach \\($conn in $c\\) { $proc = Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue; \"Port $p -> PID $\\($conn.OwningProcess\\) \\($\\($proc.ProcessName\\)\\)\" } } else { \"Port $p -> livre\" } })",
+      "PowerShell(Stop-Process *)",
+      "Bash(npx next *)",
+      "PowerShell(npx tsc --noEmit)",
+      "PowerShell(git add *)"
     ]
   }
 }

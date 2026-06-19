@@ -3,7 +3,6 @@ import { guardRole } from "@/components/guardRole";
 import LogoutButton from "@/components/LogoutButton";
 import type { Company } from "@/lib/types";
 import NewCompanyForm from "./NewCompanyForm";
-import CompanyConsultants from "./CompanyConsultants";
 
 type ConsultantOption = { id: string; full_name: string; email: string };
 
@@ -97,39 +96,41 @@ export default async function EmpresasPage() {
             {companies.map((company) => {
               const linked = consultantsByCompany.get(company.id) ?? [];
               return (
-                <li
-                  key={company.id}
-                  className="rounded-xl border border-platinum bg-white p-4 shadow-sm"
-                >
-                  <div className="flex flex-col gap-1">
-                    <span className="font-medium text-gunmetal">
-                      {company.name}
-                    </span>
+                <li key={company.id}>
+                  <Link
+                    href={`/admin/empresas/${company.id}`}
+                    className="group block rounded-xl border border-platinum bg-white p-4 shadow-sm transition hover:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-gunmetal group-hover:text-risd">
+                        {company.name}
+                      </span>
+                      <span className="text-sm text-gunmetal/30 group-hover:text-risd">
+                        →
+                      </span>
+                    </div>
                     {company.whatsapp_group_name || company.whatsapp_contact_id ? (
-                      <span className="text-sm text-gunmetal/60">
-                        WhatsApp:{" "}
-                        {company.whatsapp_group_name ?? "(sem nome)"}
-                        {company.whatsapp_contact_id && (
-                          <span className="text-gunmetal/40">
-                            {" "}
-                            · {company.whatsapp_contact_id}
-                          </span>
-                        )}
+                      <span className="mt-1 block text-sm text-gunmetal/60">
+                        WhatsApp: {company.whatsapp_group_name ?? "(sem nome)"}
                       </span>
                     ) : (
-                      <span className="text-sm text-gunmetal/40">
+                      <span className="mt-1 block text-sm text-gunmetal/40">
                         Sem grupo de WhatsApp vinculado.
                       </span>
                     )}
-                  </div>
-
-                  <div className="mt-4 border-t border-platinum pt-4">
-                    <CompanyConsultants
-                      companyId={company.id}
-                      consultores={consultores}
-                      selectedIds={linked.map((c) => c.id)}
-                    />
-                  </div>
+                    {linked.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {linked.map((c) => (
+                          <span
+                            key={c.id}
+                            className="rounded-full border border-platinum bg-paper px-2 py-0.5 text-xs text-gunmetal/70"
+                          >
+                            {c.full_name || c.email}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </Link>
                 </li>
               );
             })}

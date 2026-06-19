@@ -26,7 +26,7 @@ const SECTIONS: Section[] = [
     href: "/admin/tarefas",
     title: "Tarefas",
     description: "Criar tarefas únicas ou diárias para os colaboradores.",
-    ready: false,
+    ready: true,
   },
 ];
 

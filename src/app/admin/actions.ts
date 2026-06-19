@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase-server";
-import type { Role } from "@/lib/types";
+import type { Role, TaskKind, TablesInsert } from "@/lib/types";
 
 const VALID_ROLES: Role[] = ["pending", "colaborador", "consultor", "admin"];
 
@@ -149,5 +149,241 @@ export async function setCompanyConsultants(
   }
 
   revalidatePath("/admin/empresas");
+  return { error: null };
+}
+
+// Atualiza os dados básicos de uma empresa (consultores são geridos por
+// setCompanyConsultants).
+export async function updateCompany(
+  companyId: string,
+  input: { name: string; whatsappContactId: string; whatsappGroupName: string }
+): Promise<{ error: string | null }> {
+  const name = input.name.trim();
+  if (!name) {
+    return { error: "Informe o nome da empresa." };
+  }
+
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Sessão expirada. Faça login novamente." };
+  }
+
+  const { error } = await supabase
+    .from("companies")
+    .update({
+      name,
+      whatsapp_contact_id: normalize(input.whatsappContactId),
+      whatsapp_group_name: normalize(input.whatsappGroupName),
+    })
+    .eq("id", companyId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/admin/empresas");
+  revalidatePath(`/admin/empresas/${companyId}`);
+  return { error: null };
+}
+
+// Exclui uma empresa. ATENÇÃO: o cascade do banco remove também os vínculos
+// de consultores, os templates e as instâncias de tarefa dessa empresa.
+export async function deleteCompany(
+  companyId: string
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Sessão expirada. Faça login novamente." };
+  }
+
+  const { error } = await supabase.from("companies").delete().eq("id", companyId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/admin/empresas");
+  return { error: null };
+}
+
+// ---------------------------------------------------------------------------
+// Tarefas (Passo 2.3)
+// ---------------------------------------------------------------------------
+
+type TaskTemplateInput = {
+  title: string;
+  description: string;
+  instructions: string;
+  companyId: string;
+  collaboratorId: string;
+  kind: TaskKind;
+  startDate: string; // YYYY-MM-DD (usado em "unica")
+  dueTime: string; // HH:MM (opcional)
+  weekdays: number[]; // 0-6 (usado em "diaria")
+  endDate: string; // YYYY-MM-DD (opcional, "diaria")
+  active?: boolean; // só aplicado na edição
+};
+
+type TemplateFields = {
+  title: string;
+  description: string | null;
+  instructions: string | null;
+  company_id: string;
+  collaborator_id: string;
+  kind: TaskKind;
+  due_time: string | null;
+  weekdays: number[] | null;
+  end_date: string | null;
+  start_date?: string;
+};
+
+// Valida e normaliza a entrada do formulário de tarefa, compartilhado por
+// criar e editar. Retorna os campos prontos para gravar ou uma mensagem.
+function validateTemplateInput(
+  input: TaskTemplateInput
+): { error: string } | { fields: TemplateFields } {
+  const title = input.title.trim();
+  if (!title) return { error: "Informe o título da tarefa." };
+  if (!input.companyId) return { error: "Selecione a empresa." };
+  if (!input.collaboratorId) return { error: "Selecione o colaborador." };
+  if (input.kind !== "unica" && input.kind !== "diaria") {
+    return { error: "Tipo de tarefa inválido." };
+  }
+
+  const weekdays = Array.from(new Set(input.weekdays)).sort((a, b) => a - b);
+
+  if (input.kind === "unica" && !input.startDate) {
+    return { error: "Informe a data da tarefa única." };
+  }
+  if (input.kind === "diaria" && weekdays.length === 0) {
+    return { error: "Selecione ao menos um dia da semana." };
+  }
+  if (weekdays.some((d) => d < 0 || d > 6)) {
+    return { error: "Dia da semana inválido." };
+  }
+
+  const fields: TemplateFields = {
+    title,
+    description: normalize(input.description),
+    instructions: normalize(input.instructions),
+    company_id: input.companyId,
+    collaborator_id: input.collaboratorId,
+    kind: input.kind,
+    due_time: normalize(input.dueTime),
+    weekdays: input.kind === "unica" ? null : weekdays,
+    end_date: input.kind === "unica" ? null : normalize(input.endDate),
+  };
+  if (input.kind === "unica" || input.startDate) {
+    fields.start_date = input.startDate;
+  }
+
+  return { fields };
+}
+
+// Cria um task_template. Os triggers do banco cuidam das instâncias:
+// "unica" gera a task_instance na hora (trg_unique_template); "diaria" é
+// materializada por generate_daily_tasks conforme os weekdays.
+export async function createTaskTemplate(
+  input: TaskTemplateInput
+): Promise<{ error: string | null; id?: string }> {
+  const result = validateTemplateInput(input);
+  if ("error" in result) {
+    return { error: result.error };
+  }
+
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Sessão expirada. Faça login novamente." };
+  }
+
+  const row: TablesInsert<"task_templates"> = {
+    ...result.fields,
+    created_by: user.id,
+  };
+
+  const { data, error } = await supabase
+    .from("task_templates")
+    .insert(row)
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    return { error: error?.message ?? "Não foi possível criar a tarefa." };
+  }
+
+  revalidatePath("/admin/tarefas");
+  return { error: null, id: data.id };
+}
+
+// Atualiza um task_template existente. Obs.: a edição NÃO altera instâncias já
+// geradas — vale para as próximas gerações da tarefa.
+export async function updateTaskTemplate(
+  templateId: string,
+  input: TaskTemplateInput
+): Promise<{ error: string | null }> {
+  const result = validateTemplateInput(input);
+  if ("error" in result) {
+    return { error: result.error };
+  }
+
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Sessão expirada. Faça login novamente." };
+  }
+
+  const { error } = await supabase
+    .from("task_templates")
+    .update({ ...result.fields, active: input.active ?? true })
+    .eq("id", templateId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/admin/tarefas");
+  revalidatePath(`/admin/tarefas/${templateId}`);
+  return { error: null };
+}
+
+// Exclui um task_template. As instâncias já geradas permanecem (o banco usa
+// ON DELETE SET NULL em task_instances.template_id), apenas desvinculadas.
+export async function deleteTaskTemplate(
+  templateId: string
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Sessão expirada. Faça login novamente." };
+  }
+
+  const { error } = await supabase
+    .from("task_templates")
+    .delete()
+    .eq("id", templateId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/admin/tarefas");
   return { error: null };
 }

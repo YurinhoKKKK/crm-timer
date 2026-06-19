@@ -17,7 +17,11 @@
       "PowerShell(Stop-Process *)",
       "Bash(npx next *)",
       "PowerShell(npx tsc --noEmit)",
-      "PowerShell(git add *)"
+      "PowerShell(git add *)",
+      "Bash(cat)",
+      "Bash(git commit *)",
+      "PowerShell(npm run *)",
+      "PowerShell(git remote -v; \"---\"; git status --short)"
     ]
   }
 }

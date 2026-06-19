@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createCompany } from "../actions";
+import GroupSelect from "./GroupSelect";
 
 type ConsultantOption = { id: string; full_name: string; email: string };
 
@@ -100,44 +101,14 @@ export default function NewCompanyForm({
         />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label
-            htmlFor="group-name"
-            className="mb-1 block text-sm font-medium text-gunmetal"
-          >
-            Nome do grupo WhatsApp{" "}
-            <span className="font-normal text-gunmetal/40">(opcional)</span>
-          </label>
-          <input
-            id="group-name"
-            type="text"
-            value={groupName}
-            onChange={(e) => setGroupName(e.target.value)}
-            className={inputClass}
-          />
-        </div>
-        <div>
-          <label
-            htmlFor="contact-id"
-            className="mb-1 block text-sm font-medium text-gunmetal"
-          >
-            contactId da Digisac{" "}
-            <span className="font-normal text-gunmetal/40">(opcional)</span>
-          </label>
-          <input
-            id="contact-id"
-            type="text"
-            value={contactId}
-            onChange={(e) => setContactId(e.target.value)}
-            className={inputClass}
-          />
-        </div>
-      </div>
-      <p className="text-xs text-gunmetal/40">
-        O dropdown automático com os grupos da Digisac chega no próximo passo;
-        por enquanto preencha à mão se já tiver os dados.
-      </p>
+      <GroupSelect
+        contactId={contactId}
+        groupName={groupName}
+        onChange={(id, name) => {
+          setContactId(id);
+          setGroupName(name);
+        }}
+      />
 
       {consultores.length > 0 && (
         <fieldset>

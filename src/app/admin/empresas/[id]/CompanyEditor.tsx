@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Company } from "@/lib/types";
 import { updateCompany } from "../../actions";
+import GroupSelect from "../GroupSelect";
 
 const inputClass =
   "w-full rounded-lg border border-platinum bg-white px-3 py-2 text-sm text-gunmetal shadow-sm transition focus:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2";
@@ -59,34 +60,14 @@ export default function CompanyEditor({ company }: { company: Company }) {
         />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label htmlFor="edit-group" className={labelClass}>
-            Nome do grupo WhatsApp{" "}
-            <span className="font-normal text-gunmetal/40">(opcional)</span>
-          </label>
-          <input
-            id="edit-group"
-            type="text"
-            value={groupName}
-            onChange={(e) => setGroupName(e.target.value)}
-            className={inputClass}
-          />
-        </div>
-        <div>
-          <label htmlFor="edit-contact" className={labelClass}>
-            contactId da Digisac{" "}
-            <span className="font-normal text-gunmetal/40">(opcional)</span>
-          </label>
-          <input
-            id="edit-contact"
-            type="text"
-            value={contactId}
-            onChange={(e) => setContactId(e.target.value)}
-            className={inputClass}
-          />
-        </div>
-      </div>
+      <GroupSelect
+        contactId={contactId}
+        groupName={groupName}
+        onChange={(id, name) => {
+          setContactId(id);
+          setGroupName(name);
+        }}
+      />
 
       {status === "error" && errorMsg && (
         <p className="text-sm text-red-600">{errorMsg}</p>

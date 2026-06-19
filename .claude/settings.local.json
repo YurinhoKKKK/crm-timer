@@ -21,7 +21,10 @@
       "Bash(cat)",
       "Bash(git commit *)",
       "PowerShell(npm run *)",
-      "PowerShell(git remote -v; \"---\"; git status --short)"
+      "PowerShell(git remote -v; \"---\"; git status --short)",
+      "PowerShell(git push *)",
+      "mcp__claude_ai_Supabase__list_edge_functions",
+      "mcp__claude_ai_Supabase__deploy_edge_function"
     ]
   }
 }

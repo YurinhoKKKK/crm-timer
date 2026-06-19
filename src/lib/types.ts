@@ -366,6 +366,7 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
       my_collaborator_companies: { Args: never; Returns: string[] }
       my_consultant_companies: { Args: never; Returns: string[] }
+      sync_template_instances: { Args: { p_template: string }; Returns: number }
     }
     Enums: {
       task_kind: "unica" | "diaria"

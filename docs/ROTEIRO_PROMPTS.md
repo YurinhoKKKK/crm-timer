@@ -30,7 +30,7 @@ Aplique essa identidade de forma consistente. Confirme que entendeu.
 
 ---
 
-## PASSO 1 — Tipos TypeScript
+## PASSO 1 — Tipos TypeScript (Feito)
 
 ```
 Gere os tipos TypeScript completos do banco com o Supabase CLI e substitua 
@@ -66,7 +66,7 @@ Agora a gestão de empresas no painel admin:
 Teste criar uma empresa e atribuir um consultor.
 ```
 
-## PASSO 2.3 — Admin: cadastro de tarefas
+## PASSO 2.3 — Admin: cadastro de tarefas (Feito)
 
 ```
 Agora o cadastro de tarefas no painel admin. Cria registros em 
@@ -84,7 +84,7 @@ Teste criar uma tarefa única e confirmar que a task_instance apareceu.
 
 ---
 
-## PASSO 3 — Edge Function: listar grupos da Digisac
+## PASSO 3 — Edge Function: listar grupos da Digisac (Feito)
 
 ```
 Crie uma Supabase Edge Function chamada "digisac-groups" que lista os 
@@ -107,7 +107,7 @@ o contactId selecionado em whatsapp_contact_id.
 
 ---
 
-## PASSO 4.1 — Colaborador: tela inicial (empresas)
+## PASSO 4.1 — Colaborador: tela inicial (empresas) (Feito)
 
 ```
 Construa a tela inicial do painel do colaborador (src/app/colaborador):

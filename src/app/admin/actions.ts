@@ -356,6 +356,14 @@ export async function updateTaskTemplate(
     return { error: error.message };
   }
 
+  // Propaga a edição para as instâncias ainda não iniciadas (a_fazer).
+  const { error: syncError } = await supabase.rpc("sync_template_instances", {
+    p_template: templateId,
+  });
+  if (syncError) {
+    return { error: `Tarefa salva, mas falhou ao propagar: ${syncError.message}` };
+  }
+
   revalidatePath("/admin/tarefas");
   revalidatePath(`/admin/tarefas/${templateId}`);
   return { error: null };

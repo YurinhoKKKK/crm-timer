@@ -124,7 +124,7 @@ IMPORTANTE: o colaborador só pode ver as próprias tarefas, nunca as de
 outros colaboradores na mesma empresa.
 ```
 
-## PASSO 4.2 — Colaborador: tela da empresa
+## PASSO 4.2 — Colaborador: tela da empresa (Feito)
 
 ```
 Crie a tela da empresa no painel do colaborador 
@@ -137,7 +137,7 @@ Crie a tela da empresa no painel do colaborador
 - Clicar numa tarefa leva para a tela da tarefa (passo 4.3).
 ```
 
-## PASSO 4.3 — Colaborador: tela da tarefa + TIMER
+## PASSO 4.3 — Colaborador: tela da tarefa + TIMER (Feito/Revisar)
 
 ```
 Esta é a tela mais importante. Crie a tela da tarefa 

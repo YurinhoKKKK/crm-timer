@@ -367,6 +367,12 @@ export type Database = {
       my_collaborator_companies: { Args: never; Returns: string[] }
       my_consultant_companies: { Args: never; Returns: string[] }
       sync_template_instances: { Args: { p_template: string }; Returns: number }
+      timer_start: { Args: { p_task: string }; Returns: string }
+      timer_pause: { Args: { p_task: string }; Returns: number }
+      timer_finish: {
+        Args: { p_task: string; p_note: string; p_send: boolean }
+        Returns: number
+      }
     }
     Enums: {
       task_kind: "unica" | "diaria"

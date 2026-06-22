@@ -30,14 +30,14 @@ export async function pauseTimer(
   return { error: null, totalSeconds: (data as number) ?? 0 };
 }
 
-// Finaliza a tarefa com o resumo obrigatório. sendWhatsapp por enquanto só
-// marca a intenção; o envio real é o Passo 5.
+// Finaliza a tarefa com o resumo obrigatório. Se sendWhatsapp = true, dispara
+// o resumo ao grupo da empresa via Edge Function send-whatsapp.
 export async function finishTask(
   taskId: string,
   companyId: string,
   note: string,
   sendWhatsapp: boolean
-): Promise<{ error: string | null; totalSeconds?: number }> {
+): Promise<{ error: string | null; totalSeconds?: number; warning?: string }> {
   const trimmed = note.trim();
   if (!trimmed) {
     return { error: "Escreva um resumo do que foi feito." };
@@ -54,11 +54,24 @@ export async function finishTask(
     return { error: error.message };
   }
 
-  // TODO (Passo 5): quando sendWhatsapp = true, invocar a Edge Function
-  // send-whatsapp com { companyId, message: trimmed } para disparar ao grupo.
+  // A tarefa já está finalizada no banco neste ponto. O envio ao WhatsApp é
+  // best-effort: se falhar, a finalização permanece e devolvemos um aviso.
+  let warning: string | undefined;
+  if (sendWhatsapp) {
+    const { data: sendData, error: sendErr } = await supabase.functions.invoke(
+      "send-whatsapp",
+      { body: { companyId, message: trimmed } }
+    );
+    const apiError = (sendData as { error?: string } | null)?.error;
+    if (sendErr || apiError) {
+      warning =
+        "Tarefa finalizada, mas o envio ao WhatsApp falhou: " +
+        (apiError ?? sendErr?.message ?? "erro desconhecido");
+    }
+  }
 
   revalidatePath(`/colaborador/${companyId}/${taskId}`);
   revalidatePath(`/colaborador/${companyId}`);
   revalidatePath("/colaborador");
-  return { error: null, totalSeconds: (data as number) ?? 0 };
+  return { error: null, totalSeconds: (data as number) ?? 0, warning };
 }

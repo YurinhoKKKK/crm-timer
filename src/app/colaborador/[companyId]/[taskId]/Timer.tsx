@@ -42,6 +42,7 @@ export default function Timer({
   const [finishing, setFinishing] = useState(false);
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   // Tique de 1s enquanto rodando (o tempo autoritativo vem do servidor ao pausar).
@@ -88,13 +89,13 @@ export default function Timer({
 
   async function handleFinish(send: boolean) {
     setError(null);
+    setWarning(null);
     setBusy(true);
-    const { error: err, totalSeconds: total } = await finishTask(
-      taskId,
-      companyId,
-      note,
-      send
-    );
+    const {
+      error: err,
+      totalSeconds: total,
+      warning: warn,
+    } = await finishTask(taskId, companyId, note, send);
     setBusy(false);
     if (err) {
       setError(err);
@@ -104,6 +105,7 @@ export default function Timer({
     setStartedAtMs(null);
     setLocalStatus("finalizada");
     setFinishing(false);
+    if (warn) setWarning(warn);
     startTransition(() => router.refresh());
   }
 
@@ -132,6 +134,11 @@ export default function Timer({
               {completionNote || note}
             </p>
           </div>
+        )}
+        {warning && (
+          <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+            {warning}
+          </p>
         )}
       </section>
     );
@@ -238,8 +245,9 @@ export default function Timer({
             </button>
           </div>
           <p className="mt-2 text-xs text-gunmetal/40">
-            O envio ao WhatsApp será ativado no próximo passo; por ora a opção
-            apenas registra a intenção.
+            &quot;Enviar ao WhatsApp&quot; dispara o resumo ao grupo vinculado à
+            empresa. Se a empresa não tiver grupo, a tarefa é finalizada mesmo
+            assim e um aviso é exibido.
           </p>
         </div>
       )}

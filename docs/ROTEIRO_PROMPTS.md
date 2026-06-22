@@ -137,7 +137,7 @@ Crie a tela da empresa no painel do colaborador
 - Clicar numa tarefa leva para a tela da tarefa (passo 4.3).
 ```
 
-## PASSO 4.3 — Colaborador: tela da tarefa + TIMER (Feito/Revisar)
+## PASSO 4.3 — Colaborador: tela da tarefa + TIMER (Feito)
 
 ```
 Esta é a tela mais importante. Crie a tela da tarefa 
@@ -168,7 +168,7 @@ Teste todo o ciclo: iniciar, pausar, retomar, finalizar com resumo.
 
 ---
 
-## PASSO 5 — Edge Function: envio ao WhatsApp
+## PASSO 5 — Edge Function: envio ao WhatsApp (Feito)
 
 ```
 Crie a Supabase Edge Function "send-whatsapp" que envia o resumo de uma 

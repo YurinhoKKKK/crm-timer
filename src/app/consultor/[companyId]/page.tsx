@@ -112,7 +112,7 @@ export default async function ConsultorEmpresaPage({
             Erro ao carregar tarefas: {error.message}
           </div>
         ) : (
-          <ConsultorTaskList tasks={tasks} />
+          <ConsultorTaskList companyId={company.id} tasks={tasks} />
         )}
       </div>
     </main>

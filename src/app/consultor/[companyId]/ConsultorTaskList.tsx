@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import type { TaskStatus } from "@/lib/types";
 
 export type ConsultorTaskItem = {
@@ -47,8 +48,10 @@ function formatDue(due: string | null): string {
 }
 
 export default function ConsultorTaskList({
+  companyId,
   tasks,
 }: {
+  companyId: string;
   tasks: ConsultorTaskItem[];
 }) {
   const [sort, setSort] = useState<SortKey>("prazo");
@@ -106,29 +109,31 @@ export default function ConsultorTaskList({
           const overdue = open && dueMs !== null && dueMs < now;
 
           return (
-            <li
-              key={t.id}
-              className="rounded-xl border border-platinum bg-white p-4 shadow-sm"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate font-medium text-gunmetal">
-                  {t.title}
-                </span>
-                <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${meta.className}`}
-                >
-                  {meta.label}
-                </span>
-              </div>
+            <li key={t.id}>
+              <Link
+                href={`/consultor/${companyId}/${t.id}`}
+                className="group block rounded-xl border border-platinum bg-white p-4 shadow-sm transition hover:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate font-medium text-gunmetal group-hover:text-risd">
+                    {t.title}
+                  </span>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${meta.className}`}
+                  >
+                    {meta.label}
+                  </span>
+                </div>
 
-              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gunmetal/60">
-                <span>Colaborador: {t.collaboratorName}</span>
-                <span>Prazo: {formatDue(t.due_at)}</span>
-                <span>Tempo: {formatDuration(t.total_seconds)}</span>
-                {overdue && (
-                  <span className="font-medium text-red-600">Atrasada</span>
-                )}
-              </div>
+                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gunmetal/60">
+                  <span>Colaborador: {t.collaboratorName}</span>
+                  <span>Prazo: {formatDue(t.due_at)}</span>
+                  <span>Tempo: {formatDuration(t.total_seconds)}</span>
+                  {overdue && (
+                    <span className="font-medium text-red-600">Atrasada</span>
+                  )}
+                </div>
+              </Link>
             </li>
           );
         })}

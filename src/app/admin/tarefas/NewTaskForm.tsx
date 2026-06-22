@@ -30,16 +30,20 @@ function todayISO(): string {
 export default function NewTaskForm({
   companies,
   collaborators,
+  lockedCompany,
 }: {
   companies: Option[];
   collaborators: PersonOption[];
+  // Quando definido, a empresa vem pré-selecionada e travada (uso dentro da
+  // tela de detalhe da empresa). O usuário não escolhe a empresa.
+  lockedCompany?: Option;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
-  const [companyId, setCompanyId] = useState("");
+  const [companyId, setCompanyId] = useState(lockedCompany?.id ?? "");
   const [collaboratorId, setCollaboratorId] = useState("");
   const [kind, setKind] = useState<TaskKind>("unica");
   const [startDate, setStartDate] = useState(todayISO());
@@ -53,7 +57,7 @@ export default function NewTaskForm({
     setTitle("");
     setDescription("");
     setInstructions("");
-    setCompanyId("");
+    setCompanyId(lockedCompany?.id ?? "");
     setCollaboratorId("");
     setKind("unica");
     setStartDate(todayISO());
@@ -168,20 +172,32 @@ export default function NewTaskForm({
           <label htmlFor="task-company" className={labelClass}>
             Empresa
           </label>
-          <select
-            id="task-company"
-            required
-            value={companyId}
-            onChange={(e) => setCompanyId(e.target.value)}
-            className={inputClass}
-          >
-            <option value="">Selecione…</option>
-            {companies.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          {lockedCompany ? (
+            <div
+              id="task-company"
+              className={`${inputClass} flex items-center justify-between bg-paper text-gunmetal/70`}
+            >
+              <span className="truncate">{lockedCompany.name}</span>
+              <span className="ml-2 shrink-0 text-xs text-gunmetal/40">
+                empresa atual
+              </span>
+            </div>
+          ) : (
+            <select
+              id="task-company"
+              required
+              value={companyId}
+              onChange={(e) => setCompanyId(e.target.value)}
+              className={inputClass}
+            >
+              <option value="">Selecione…</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
         <div>
           <label htmlFor="task-collaborator" className={labelClass}>

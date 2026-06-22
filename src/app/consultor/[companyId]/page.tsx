@@ -3,11 +3,13 @@ import { notFound } from "next/navigation";
 import { guardRole } from "@/components/guardRole";
 import LogoutButton from "@/components/LogoutButton";
 import type { TaskStatus } from "@/lib/types";
+import NewTaskForm from "@/app/admin/tarefas/NewTaskForm";
 import ConsultorTaskList, {
   type ConsultorTaskItem,
 } from "./ConsultorTaskList";
 
 type CompanyRow = { id: string; name: string };
+type PersonOption = { id: string; full_name: string; email: string };
 
 type InstanceRow = {
   id: string;
@@ -35,19 +37,27 @@ export default async function ConsultorEmpresaPage({
   const { companyId } = params;
   const { supabase } = await guardRole(["consultor"]);
 
-  const [{ data: companyData }, { data: tasksData, error }] = await Promise.all([
-    // RLS só devolve a empresa se ela for atribuída a este consultor.
-    supabase.from("companies").select("id, name").eq("id", companyId).maybeSingle(),
-    supabase
-      .from("task_instances")
-      .select(
-        "id, title, status, due_at, total_seconds, created_at, collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email)"
-      )
-      .eq("company_id", companyId),
-  ]);
+  const [{ data: companyData }, { data: tasksData, error }, { data: collaboratorsData }] =
+    await Promise.all([
+      // RLS só devolve a empresa se ela for atribuída a este consultor.
+      supabase.from("companies").select("id, name").eq("id", companyId).maybeSingle(),
+      supabase
+        .from("task_instances")
+        .select(
+          "id, title, status, due_at, total_seconds, created_at, collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email)"
+        )
+        .eq("company_id", companyId),
+      supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .eq("role", "colaborador")
+        .order("full_name", { ascending: true }),
+    ]);
 
   const company = companyData as CompanyRow | null;
   if (!company) notFound();
+
+  const collaborators = (collaboratorsData as PersonOption[]) ?? [];
 
   const rows = (tasksData as InstanceRow[]) ?? [];
   const tasks: ConsultorTaskItem[] = rows.map((r) => {
@@ -106,6 +116,14 @@ export default async function ConsultorEmpresaPage({
             />
           </div>
         </section>
+
+        {collaborators.length > 0 && (
+          <NewTaskForm
+            companies={[{ id: company.id, name: company.name }]}
+            collaborators={collaborators}
+            lockedCompany={{ id: company.id, name: company.name }}
+          />
+        )}
 
         {error ? (
           <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">

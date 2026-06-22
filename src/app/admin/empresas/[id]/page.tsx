@@ -6,8 +6,10 @@ import type { Company } from "@/lib/types";
 import CompanyConsultants from "../CompanyConsultants";
 import CompanyEditor from "./CompanyEditor";
 import DeleteCompanyButton from "./DeleteCompanyButton";
+import NewTaskForm from "@/app/admin/tarefas/NewTaskForm";
 
 type ConsultantOption = { id: string; full_name: string; email: string };
+type CollaboratorOption = { id: string; full_name: string; email: string };
 type CompanyLink = {
   consultant: ConsultantOption | ConsultantOption[] | null;
 };
@@ -25,30 +27,40 @@ export default async function EmpresaDetailPage({
   const { id } = params;
   const { supabase } = await guardRole(["admin"]);
 
-  const [{ data: companyData }, { data: linksData }, { data: consultoresData }] =
-    await Promise.all([
-      supabase
-        .from("companies")
-        .select("id, name, whatsapp_contact_id, whatsapp_group_name, created_at, updated_at")
-        .eq("id", id)
-        .maybeSingle(),
-      supabase
-        .from("company_consultants")
-        .select(
-          "consultant:profiles!company_consultants_consultant_id_fkey(id, full_name, email)"
-        )
-        .eq("company_id", id),
-      supabase
-        .from("profiles")
-        .select("id, full_name, email")
-        .eq("role", "consultor")
-        .order("full_name", { ascending: true }),
-    ]);
+  const [
+    { data: companyData },
+    { data: linksData },
+    { data: consultoresData },
+    { data: colaboradoresData },
+  ] = await Promise.all([
+    supabase
+      .from("companies")
+      .select("id, name, whatsapp_contact_id, whatsapp_group_name, created_at, updated_at")
+      .eq("id", id)
+      .maybeSingle(),
+    supabase
+      .from("company_consultants")
+      .select(
+        "consultant:profiles!company_consultants_consultant_id_fkey(id, full_name, email)"
+      )
+      .eq("company_id", id),
+    supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      .eq("role", "consultor")
+      .order("full_name", { ascending: true }),
+    supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      .eq("role", "colaborador")
+      .order("full_name", { ascending: true }),
+  ]);
 
   const company = companyData as Company | null;
   if (!company) notFound();
 
   const consultores = (consultoresData as ConsultantOption[]) ?? [];
+  const colaboradores = (colaboradoresData as CollaboratorOption[]) ?? [];
   const selectedIds: string[] = [];
   for (const link of (linksData as CompanyLink[]) ?? []) {
     const c = first(link.consultant);
@@ -84,6 +96,23 @@ export default async function EmpresaDetailPage({
             consultores={consultores}
             selectedIds={selectedIds}
           />
+        </section>
+
+        <section className="mb-6">
+          <h2 className="mb-3 text-sm font-medium text-gunmetal/70">
+            Tarefas desta empresa
+          </h2>
+          {colaboradores.length === 0 ? (
+            <div className="rounded-xl border border-platinum bg-white p-5 text-sm text-gunmetal/50 shadow-sm">
+              Cadastre ao menos um colaborador para criar tarefas.
+            </div>
+          ) : (
+            <NewTaskForm
+              companies={[{ id: company.id, name: company.name }]}
+              collaborators={colaboradores}
+              lockedCompany={{ id: company.id, name: company.name }}
+            />
+          )}
         </section>
 
         <section className="rounded-xl border border-red-200 bg-red-50 p-5">

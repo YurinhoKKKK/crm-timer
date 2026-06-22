@@ -192,7 +192,7 @@ esta função. Teste com uma empresa vinculada ao grupo "Teste 1 (Yuri)"
 
 ---
 
-## PASSO 6 — Painel do consultor
+## PASSO 6 — Painel do consultor (Feito)
 
 ```
 Construa o painel do consultor (src/app/consultor). É similar ao admin, 

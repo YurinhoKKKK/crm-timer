@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { guardRole } from "@/components/guardRole";
-import LogoutButton from "@/components/LogoutButton";
+import AppShell from "@/components/AppShell";
 import type { TaskStatus } from "@/lib/types";
 import PeriodFilter, { type Period } from "./PeriodFilter";
 import TimeByCompanyChart, { type CompanyTime } from "./TimeByCompanyChart";
@@ -21,29 +21,22 @@ const PERIODS: Period[] = ["hoje", "7d", "30d", "tudo"];
 const STATUS_CARDS: {
   status: TaskStatus;
   label: string;
-  accent: string;
+  dot: string;
+  value: string;
 }[] = [
-  { status: "a_fazer", label: "A fazer", accent: "text-gunmetal" },
-  { status: "iniciada", label: "Iniciadas", accent: "text-risd" },
-  { status: "finalizada", label: "Finalizadas", accent: "text-green-600" },
-  { status: "cancelada", label: "Canceladas", accent: "text-gunmetal/40" },
-];
-
-const NAV_SECTIONS = [
+  { status: "a_fazer", label: "A fazer", dot: "bg-fg-subtle", value: "text-fg" },
+  { status: "iniciada", label: "Iniciadas", dot: "bg-risd", value: "text-risd" },
   {
-    href: "/admin/usuarios",
-    title: "Usuários",
-    description: "Liberar acessos e definir cargos.",
+    status: "finalizada",
+    label: "Finalizadas",
+    dot: "bg-emerald-500",
+    value: "text-emerald-600 dark:text-emerald-400",
   },
   {
-    href: "/admin/empresas",
-    title: "Empresas",
-    description: "Cadastrar clientes e vincular grupos de WhatsApp.",
-  },
-  {
-    href: "/admin/tarefas",
-    title: "Tarefas",
-    description: "Criar tarefas únicas ou diárias.",
+    status: "cancelada",
+    label: "Canceladas",
+    dot: "bg-fg-subtle",
+    value: "text-fg-muted",
   },
 ];
 
@@ -110,7 +103,6 @@ export default async function AdminPage({
 
   const companyName = new Map(companies.map((c) => [c.id, c.name]));
 
-  // Contagem por status.
   const statusCount: Record<TaskStatus, number> = {
     a_fazer: 0,
     iniciada: 0,
@@ -186,169 +178,154 @@ export default async function AdminPage({
     .sort((a, b) => b.seconds - a.seconds);
 
   return (
-    <main className="min-h-screen bg-paper p-4 sm:p-8">
-      <div className="mx-auto max-w-5xl">
-        <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-gunmetal">
-              Painel do Administrador
-            </h1>
-            <p className="text-sm text-gunmetal/60">
-              Bem-vindo, {profile.full_name}
-            </p>
-          </div>
-          <LogoutButton />
-        </header>
+    <AppShell
+      user={{ name: profile.full_name, role: "admin" }}
+      title="Dashboard"
+      subtitle={`Bem-vindo, ${profile.full_name}`}
+    >
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-sm font-medium text-fg-muted">
+          Visão geral · {PERIOD_LABEL[period]}
+        </h2>
+        <PeriodFilter value={period} />
+      </div>
 
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-sm font-medium text-gunmetal/70">
-            Visão geral · {PERIOD_LABEL[period]}
-          </h2>
-          <PeriodFilter value={period} />
+      {instancesError ? (
+        <div className="rounded-xl border border-red-300/60 bg-red-50 p-6 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+          Erro ao carregar os dados: {instancesError.message}
         </div>
-
-        {instancesError ? (
-          <div className="mb-8 rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
-            Erro ao carregar os dados: {instancesError.message}
-          </div>
-        ) : (
-          <>
-            {/* Cards por status (clicáveis) */}
-            <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {STATUS_CARDS.map((card) => (
-                <Link
-                  key={card.status}
-                  href={`/admin/instancias?status=${card.status}&periodo=${period}`}
-                  className="group rounded-xl border border-platinum bg-white p-5 shadow-sm transition hover:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2"
-                >
-                  <p className="text-sm text-gunmetal/60">{card.label}</p>
-                  <p className={`mt-1 text-3xl font-semibold ${card.accent}`}>
-                    {statusCount[card.status]}
-                  </p>
-                  <p className="mt-2 text-xs text-gunmetal/40 group-hover:text-risd">
-                    Ver tarefas →
-                  </p>
-                </Link>
-              ))}
-            </div>
-
-            {/* Métricas extras */}
-            <div className="mb-8 grid gap-4 sm:grid-cols-2">
-              <div className="rounded-xl border border-platinum bg-white p-5 shadow-sm">
-                <p className="text-sm text-gunmetal/60">Tempo total gasto</p>
-                <p className="mt-1 text-3xl font-semibold text-gunmetal">
-                  {formatDuration(totalSeconds)}
-                </p>
-              </div>
+      ) : (
+        <>
+          {/* Cards por status (clicáveis) */}
+          <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {STATUS_CARDS.map((card) => (
               <Link
-                href={`/admin/instancias?status=atrasadas&periodo=${period}`}
-                className="group rounded-xl border border-platinum bg-white p-5 shadow-sm transition hover:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2"
+                key={card.status}
+                href={`/admin/instancias?status=${card.status}&periodo=${period}`}
+                className="group rounded-xl border border-line bg-surface p-5 shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
               >
-                <p className="text-sm text-gunmetal/60">Tarefas atrasadas</p>
+                <div className="flex items-center gap-2">
+                  <span className={`h-2 w-2 rounded-full ${card.dot}`} />
+                  <p className="text-sm text-fg-muted">{card.label}</p>
+                </div>
                 <p
-                  className={`mt-1 text-3xl font-semibold ${
-                    overdue > 0 ? "text-red-600" : "text-gunmetal"
-                  }`}
+                  className={`mt-2 font-mono text-3xl font-semibold tabular-nums ${card.value}`}
                 >
-                  {overdue}
+                  {statusCount[card.status]}
                 </p>
-                <p className="mt-2 text-xs text-gunmetal/40 group-hover:text-risd">
+                <p className="mt-2 text-xs text-fg-subtle transition group-hover:text-risd">
                   Ver tarefas →
                 </p>
               </Link>
+            ))}
+          </div>
+
+          {/* Métricas extras */}
+          <div className="mb-6 grid gap-4 sm:grid-cols-2">
+            <div className="rounded-xl border border-line bg-surface p-5 shadow-card">
+              <p className="text-sm text-fg-muted">Tempo total gasto</p>
+              <p className="mt-2 font-mono text-3xl font-semibold tabular-nums text-fg">
+                {formatDuration(totalSeconds)}
+              </p>
             </div>
-
-            {/* Ranking de empresas por tempo */}
-            <section className="mb-8 rounded-xl border border-platinum bg-white p-5 shadow-sm">
-              <h3 className="mb-4 text-sm font-medium text-gunmetal/70">
-                Tempo por empresa
-              </h3>
-              <TimeByCompanyChart data={chartData} />
-            </section>
-
-            {/* Resumo por colaborador */}
-            <section className="mb-8 rounded-xl border border-platinum bg-white p-5 shadow-sm">
-              <h3 className="mb-4 text-sm font-medium text-gunmetal/70">
-                Resumo por colaborador
-              </h3>
-              {collaboratorRows.length === 0 ? (
-                <p className="py-6 text-center text-sm text-gunmetal/40">
-                  Nenhuma atividade de colaborador no período.
-                </p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-platinum text-left text-xs text-gunmetal/50">
-                        <th className="pb-2 font-medium">Colaborador</th>
-                        <th className="pb-2 text-right font-medium">Tempo</th>
-                        <th className="pb-2 text-right font-medium">Tarefas</th>
-                        <th className="pb-2 pl-4 font-medium">Concluídas</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {collaboratorRows.map((r) => (
-                        <tr
-                          key={r.id}
-                          className="border-b border-platinum/60 last:border-0"
-                        >
-                          <td className="py-2.5 pr-4 font-medium text-gunmetal">
-                            {r.name}
-                          </td>
-                          <td className="py-2.5 text-right tabular-nums text-gunmetal/70">
-                            {formatDuration(r.seconds)}
-                          </td>
-                          <td className="py-2.5 text-right tabular-nums text-gunmetal/70">
-                            {r.done}/{r.total}
-                          </td>
-                          <td className="py-2.5 pl-4">
-                            <div className="flex items-center gap-2">
-                              <div
-                                className="h-2 w-24 overflow-hidden rounded-full bg-platinum"
-                                role="progressbar"
-                                aria-valuenow={r.percent}
-                                aria-valuemin={0}
-                                aria-valuemax={100}
-                              >
-                                <div
-                                  className="h-full rounded-full bg-risd"
-                                  style={{ width: `${r.percent}%` }}
-                                />
-                              </div>
-                              <span className="tabular-nums text-xs text-gunmetal/60">
-                                {r.percent}%
-                              </span>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-          </>
-        )}
-
-        {/* Navegação */}
-        <h2 className="mb-3 text-sm font-medium text-gunmetal/70">Gerenciar</h2>
-        <div className="grid gap-4 sm:grid-cols-3">
-          {NAV_SECTIONS.map((section) => (
             <Link
-              key={section.href}
-              href={section.href}
-              className="group rounded-xl border border-platinum bg-white p-5 shadow-sm transition hover:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2"
+              href={`/admin/instancias?status=atrasadas&periodo=${period}`}
+              className="group rounded-xl border border-line bg-surface p-5 shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
             >
-              <h3 className="font-medium text-gunmetal group-hover:text-risd">
-                {section.title}
-              </h3>
-              <p className="mt-1 text-sm text-gunmetal/60">
-                {section.description}
+              <div className="flex items-center gap-2">
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    overdue > 0 ? "bg-red-500" : "bg-fg-subtle"
+                  }`}
+                />
+                <p className="text-sm text-fg-muted">Tarefas atrasadas</p>
+              </div>
+              <p
+                className={`mt-2 font-mono text-3xl font-semibold tabular-nums ${
+                  overdue > 0
+                    ? "text-red-600 dark:text-red-400"
+                    : "text-fg"
+                }`}
+              >
+                {overdue}
+              </p>
+              <p className="mt-2 text-xs text-fg-subtle transition group-hover:text-risd">
+                Ver tarefas →
               </p>
             </Link>
-          ))}
-        </div>
-      </div>
-    </main>
+          </div>
+
+          {/* Ranking de empresas por tempo */}
+          <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
+            <h3 className="mb-4 text-sm font-semibold text-fg">
+              Tempo por empresa
+            </h3>
+            <TimeByCompanyChart data={chartData} />
+          </section>
+
+          {/* Resumo por colaborador */}
+          <section className="mb-2 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
+            <h3 className="mb-4 text-sm font-semibold text-fg">
+              Resumo por colaborador
+            </h3>
+            {collaboratorRows.length === 0 ? (
+              <p className="py-6 text-center text-sm text-fg-subtle">
+                Nenhuma atividade de colaborador no período.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-fg-subtle">
+                      <th className="pb-3 font-medium">Colaborador</th>
+                      <th className="pb-3 text-right font-medium">Tempo</th>
+                      <th className="pb-3 text-right font-medium">Tarefas</th>
+                      <th className="pb-3 pl-4 font-medium">Concluídas</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {collaboratorRows.map((r) => (
+                      <tr
+                        key={r.id}
+                        className="border-b border-line/60 last:border-0"
+                      >
+                        <td className="py-3 pr-4 font-medium text-fg">
+                          {r.name}
+                        </td>
+                        <td className="py-3 text-right font-mono tabular-nums text-fg-muted">
+                          {formatDuration(r.seconds)}
+                        </td>
+                        <td className="py-3 text-right font-mono tabular-nums text-fg-muted">
+                          {r.done}/{r.total}
+                        </td>
+                        <td className="py-3 pl-4">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="h-2 w-24 overflow-hidden rounded-full bg-surface-2"
+                              role="progressbar"
+                              aria-valuenow={r.percent}
+                              aria-valuemin={0}
+                              aria-valuemax={100}
+                            >
+                              <div
+                                className="h-full rounded-full bg-risd"
+                                style={{ width: `${r.percent}%` }}
+                              />
+                            </div>
+                            <span className="font-mono text-xs tabular-nums text-fg-muted">
+                              {r.percent}%
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </>
+      )}
+    </AppShell>
   );
 }

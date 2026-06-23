@@ -3,14 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateTaskInstance } from "../../actions";
+import { inputClass, labelClass, hintClass, btnPrimary } from "@/lib/ui";
 
 type PersonOption = { id: string; full_name: string; email: string };
 type SaveStatus = "idle" | "saving" | "saved" | "error";
-
-const inputClass =
-  "w-full rounded-lg border border-platinum bg-white px-3 py-2 text-sm text-gunmetal shadow-sm transition focus:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2";
-
-const labelClass = "mb-1 block text-sm font-medium text-gunmetal";
 
 // ISO (UTC) -> valor de <input type="datetime-local"> no horário local.
 function isoToLocalInput(iso: string | null): string {
@@ -100,8 +96,7 @@ export default function TaskInstanceEditor({
 
       <div>
         <label htmlFor="ti-description" className={labelClass}>
-          Descrição{" "}
-          <span className="font-normal text-gunmetal/40">(opcional)</span>
+          Descrição <span className={hintClass}>(opcional)</span>
         </label>
         <textarea
           id="ti-description"
@@ -114,8 +109,7 @@ export default function TaskInstanceEditor({
 
       <div>
         <label htmlFor="ti-instructions" className={labelClass}>
-          Instruções{" "}
-          <span className="font-normal text-gunmetal/40">(opcional)</span>
+          Instruções <span className={hintClass}>(opcional)</span>
         </label>
         <textarea
           id="ti-instructions"
@@ -129,8 +123,7 @@ export default function TaskInstanceEditor({
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label htmlFor="ti-due" className={labelClass}>
-            Prazo{" "}
-            <span className="font-normal text-gunmetal/40">(opcional)</span>
+            Prazo <span className={hintClass}>(opcional)</span>
           </label>
           <input
             id="ti-due"
@@ -162,15 +155,11 @@ export default function TaskInstanceEditor({
       </div>
 
       {status === "error" && errorMsg && (
-        <p className="text-sm text-red-600">{errorMsg}</p>
+        <p className="text-sm text-red-600 dark:text-red-400">{errorMsg}</p>
       )}
 
       <div className="flex items-center gap-3">
-        <button
-          type="submit"
-          disabled={status === "saving"}
-          className="rounded-lg bg-risd px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-chrysler focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-        >
+        <button type="submit" disabled={status === "saving"} className={btnPrimary}>
           {status === "saving" ? "Salvando…" : "Salvar alterações"}
         </button>
         <span className="text-xs" aria-live="polite">

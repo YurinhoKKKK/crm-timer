@@ -4,11 +4,9 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createCompany } from "../actions";
 import GroupSelect from "./GroupSelect";
+import { inputClass, labelClass, btnPrimary, btnSecondary } from "@/lib/ui";
 
 type ConsultantOption = { id: string; full_name: string; email: string };
-
-const inputClass =
-  "w-full rounded-lg border border-platinum bg-white px-3 py-2 text-sm text-gunmetal shadow-sm transition focus:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2";
 
 export default function NewCompanyForm({
   consultores,
@@ -65,11 +63,7 @@ export default function NewCompanyForm({
   if (!open) {
     return (
       <div className="mb-6">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="rounded-lg bg-risd px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-chrysler focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2"
-        >
+        <button type="button" onClick={() => setOpen(true)} className={btnPrimary}>
           Nova empresa
         </button>
       </div>
@@ -79,15 +73,12 @@ export default function NewCompanyForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="mb-6 space-y-4 rounded-xl border border-platinum bg-white p-5 shadow-sm"
+      className="mb-6 space-y-4 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6"
     >
-      <h2 className="font-medium text-gunmetal">Nova empresa</h2>
+      <h2 className="font-semibold text-fg">Nova empresa</h2>
 
       <div>
-        <label
-          htmlFor="company-name"
-          className="mb-1 block text-sm font-medium text-gunmetal"
-        >
+        <label htmlFor="company-name" className={labelClass}>
           Nome da empresa
         </label>
         <input
@@ -112,7 +103,7 @@ export default function NewCompanyForm({
 
       {consultores.length > 0 && (
         <fieldset>
-          <legend className="mb-2 text-sm font-medium text-gunmetal">
+          <legend className="mb-2 text-sm font-medium text-fg">
             Consultores responsáveis
           </legend>
           <div className="flex flex-wrap gap-2">
@@ -123,8 +114,8 @@ export default function NewCompanyForm({
                   key={c.id}
                   className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition ${
                     checked
-                      ? "border-risd bg-brand-soft text-gunmetal"
-                      : "border-platinum bg-white text-gunmetal/70 hover:border-risd/50"
+                      ? "border-risd bg-brand-tint text-fg"
+                      : "border-line bg-surface text-fg-muted hover:border-risd/50"
                   }`}
                 >
                   <input
@@ -141,14 +132,10 @@ export default function NewCompanyForm({
         </fieldset>
       )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       <div className="flex items-center gap-2">
-        <button
-          type="submit"
-          disabled={isPending}
-          className="rounded-lg bg-risd px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-chrysler focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-        >
+        <button type="submit" disabled={isPending} className={btnPrimary}>
           {isPending ? "Salvando…" : "Salvar empresa"}
         </button>
         <button
@@ -157,7 +144,7 @@ export default function NewCompanyForm({
             reset();
             setOpen(false);
           }}
-          className="rounded-lg border border-platinum bg-white px-4 py-2 text-sm text-gunmetal/70 transition hover:border-risd/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2"
+          className={btnSecondary}
         >
           Cancelar
         </button>

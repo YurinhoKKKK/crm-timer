@@ -2,14 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase-browser";
+import { inputClass, labelClass, hintClass } from "@/lib/ui";
 
 type Group = { id: string; name: string; number: string | null };
 type Mode = "loading" | "list" | "manual";
-
-const inputClass =
-  "w-full rounded-lg border border-platinum bg-white px-3 py-2 text-sm text-gunmetal shadow-sm transition focus:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2";
-
-const labelClass = "mb-1 block text-sm font-medium text-gunmetal";
 
 // Seleção do grupo de WhatsApp. Tenta carregar os grupos da Digisac via Edge
 // Function (digisac-groups); se falhar, cai no preenchimento manual para não
@@ -70,7 +66,7 @@ export default function GroupSelect({
     return (
       <div>
         <span className={labelClass}>Grupo de WhatsApp</span>
-        <p className="text-sm text-gunmetal/50">Carregando grupos da Digisac…</p>
+        <p className="text-sm text-fg-subtle">Carregando grupos da Digisac…</p>
       </div>
     );
   }
@@ -84,8 +80,7 @@ export default function GroupSelect({
     return (
       <div>
         <label htmlFor="group-select" className={labelClass}>
-          Grupo de WhatsApp{" "}
-          <span className="font-normal text-gunmetal/40">(opcional)</span>
+          Grupo de WhatsApp <span className={hintClass}>(opcional)</span>
         </label>
         <select
           id="group-select"
@@ -109,7 +104,7 @@ export default function GroupSelect({
         <button
           type="button"
           onClick={() => setMode("manual")}
-          className="mt-1 text-xs text-gunmetal/50 underline-offset-2 hover:text-risd hover:underline"
+          className="mt-1 text-xs text-fg-subtle underline-offset-2 hover:text-risd hover:underline"
         >
           Inserir manualmente
         </button>
@@ -121,7 +116,7 @@ export default function GroupSelect({
   return (
     <div className="space-y-3">
       {loadError && (
-        <p className="text-xs text-gunmetal/50">
+        <p className="text-xs text-fg-subtle">
           Não foi possível listar os grupos da Digisac ({loadError}). Preencha
           manualmente.
         </p>
@@ -129,8 +124,7 @@ export default function GroupSelect({
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label htmlFor="manual-group" className={labelClass}>
-            Nome do grupo{" "}
-            <span className="font-normal text-gunmetal/40">(opcional)</span>
+            Nome do grupo <span className={hintClass}>(opcional)</span>
           </label>
           <input
             id="manual-group"
@@ -142,8 +136,7 @@ export default function GroupSelect({
         </div>
         <div>
           <label htmlFor="manual-contact" className={labelClass}>
-            contactId da Digisac{" "}
-            <span className="font-normal text-gunmetal/40">(opcional)</span>
+            contactId da Digisac <span className={hintClass}>(opcional)</span>
           </label>
           <input
             id="manual-contact"
@@ -158,7 +151,7 @@ export default function GroupSelect({
         <button
           type="button"
           onClick={() => setMode("list")}
-          className="text-xs text-gunmetal/50 underline-offset-2 hover:text-risd hover:underline"
+          className="text-xs text-fg-subtle underline-offset-2 hover:text-risd hover:underline"
         >
           Escolher da lista
         </button>

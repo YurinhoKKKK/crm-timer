@@ -58,7 +58,7 @@ export default function RoleSelect({
         value={role}
         onChange={handleChange}
         disabled={disabled || status === "saving"}
-        className="rounded-lg border border-platinum bg-white px-3 py-2 text-sm text-gunmetal shadow-sm transition focus:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+        className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg shadow-sm transition focus:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:cursor-not-allowed disabled:opacity-60"
       >
         {ROLES.map((r) => (
           <option key={r.value} value={r.value}>
@@ -69,11 +69,11 @@ export default function RoleSelect({
 
       <span className="min-w-[5.5rem] text-xs" aria-live="polite">
         {status === "saving" && (
-          <span className="text-gunmetal/60">Salvando…</span>
+          <span className="text-fg-muted">Salvando…</span>
         )}
         {status === "saved" && <span className="text-risd">Salvo</span>}
         {status === "error" && (
-          <span className="text-red-600" title={errorMsg ?? undefined}>
+          <span className="text-red-600 dark:text-red-400" title={errorMsg ?? undefined}>
             Erro ao salvar
           </span>
         )}

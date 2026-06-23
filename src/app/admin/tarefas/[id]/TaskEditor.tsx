@@ -4,6 +4,13 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { TaskKind, TaskTemplate } from "@/lib/types";
 import { updateTaskTemplate } from "../../actions";
+import {
+  inputClass,
+  labelClass,
+  hintClass,
+  btnPrimary,
+  chipClass,
+} from "@/lib/ui";
 
 type Option = { id: string; name: string };
 type PersonOption = { id: string; full_name: string; email: string };
@@ -18,11 +25,6 @@ const WEEKDAYS = [
   { value: 5, label: "Sex" },
   { value: 6, label: "Sáb" },
 ];
-
-const inputClass =
-  "w-full rounded-lg border border-platinum bg-white px-3 py-2 text-sm text-gunmetal shadow-sm transition focus:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2";
-
-const labelClass = "mb-1 block text-sm font-medium text-gunmetal";
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
@@ -112,8 +114,7 @@ export default function TaskEditor({
 
       <div>
         <label htmlFor="t-description" className={labelClass}>
-          Descrição{" "}
-          <span className="font-normal text-gunmetal/40">(opcional)</span>
+          Descrição <span className={hintClass}>(opcional)</span>
         </label>
         <textarea
           id="t-description"
@@ -126,8 +127,7 @@ export default function TaskEditor({
 
       <div>
         <label htmlFor="t-instructions" className={labelClass}>
-          Instruções{" "}
-          <span className="font-normal text-gunmetal/40">(opcional)</span>
+          Instruções <span className={hintClass}>(opcional)</span>
         </label>
         <textarea
           id="t-instructions"
@@ -185,14 +185,7 @@ export default function TaskEditor({
           {(["unica", "diaria"] as TaskKind[]).map((k) => {
             const isActive = kind === k;
             return (
-              <label
-                key={k}
-                className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition ${
-                  isActive
-                    ? "border-risd bg-brand-soft text-gunmetal"
-                    : "border-platinum bg-white text-gunmetal/70 hover:border-risd/50"
-                }`}
-              >
+              <label key={k} className={chipClass(isActive)}>
                 <input
                   type="radio"
                   name="t-kind"
@@ -224,8 +217,7 @@ export default function TaskEditor({
           </div>
           <div>
             <label htmlFor="t-due-unica" className={labelClass}>
-              Horário-limite{" "}
-              <span className="font-normal text-gunmetal/40">(opcional)</span>
+              Horário-limite <span className={hintClass}>(opcional)</span>
             </label>
             <input
               id="t-due-unica"
@@ -244,14 +236,7 @@ export default function TaskEditor({
               {WEEKDAYS.map((d) => {
                 const checked = weekdays.has(d.value);
                 return (
-                  <label
-                    key={d.value}
-                    className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition ${
-                      checked
-                        ? "border-risd bg-brand-soft text-gunmetal"
-                        : "border-platinum bg-white text-gunmetal/70 hover:border-risd/50"
-                    }`}
-                  >
+                  <label key={d.value} className={chipClass(checked)}>
                     <input
                       type="checkbox"
                       className="accent-risd"
@@ -267,8 +252,7 @@ export default function TaskEditor({
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="t-due-diaria" className={labelClass}>
-                Horário-limite{" "}
-                <span className="font-normal text-gunmetal/40">(opcional)</span>
+                Horário-limite <span className={hintClass}>(opcional)</span>
               </label>
               <input
                 id="t-due-diaria"
@@ -280,8 +264,7 @@ export default function TaskEditor({
             </div>
             <div>
               <label htmlFor="t-end" className={labelClass}>
-                Encerra em{" "}
-                <span className="font-normal text-gunmetal/40">(opcional)</span>
+                Encerra em <span className={hintClass}>(opcional)</span>
               </label>
               <input
                 id="t-end"
@@ -295,7 +278,7 @@ export default function TaskEditor({
         </div>
       )}
 
-      <label className="flex cursor-pointer items-center gap-2 text-sm text-gunmetal">
+      <label className="flex cursor-pointer items-center gap-2 text-sm text-fg">
         <input
           type="checkbox"
           className="accent-risd"
@@ -303,21 +286,17 @@ export default function TaskEditor({
           onChange={(e) => setActive(e.target.checked)}
         />
         Tarefa ativa{" "}
-        <span className="text-gunmetal/40">
+        <span className="text-fg-subtle">
           (desmarque para parar a geração diária)
         </span>
       </label>
 
       {status === "error" && errorMsg && (
-        <p className="text-sm text-red-600">{errorMsg}</p>
+        <p className="text-sm text-red-600 dark:text-red-400">{errorMsg}</p>
       )}
 
       <div className="flex items-center gap-3">
-        <button
-          type="submit"
-          disabled={status === "saving"}
-          className="rounded-lg bg-risd px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-chrysler focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-        >
+        <button type="submit" disabled={status === "saving"} className={btnPrimary}>
           {status === "saving" ? "Salvando…" : "Salvar alterações"}
         </button>
         <span className="text-xs" aria-live="polite">

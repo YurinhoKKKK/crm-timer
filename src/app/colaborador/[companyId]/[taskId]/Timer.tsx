@@ -112,31 +112,41 @@ export default function Timer({
   // --- Tarefa já encerrada -------------------------------------------------
   if (finalized || canceled) {
     return (
-      <section className="rounded-xl border border-platinum bg-white p-6 shadow-sm">
-        <div className="flex items-center gap-2">
+      <section className="rounded-2xl border border-line bg-surface p-6 shadow-card">
+        <div className="flex items-center gap-3">
           <span
-            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
               finalized
-                ? "bg-green-100 text-green-700"
-                : "bg-platinum text-gunmetal/50"
+                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+                : "bg-surface-2 text-fg-subtle"
             }`}
           >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                finalized ? "bg-emerald-500" : "bg-fg-subtle"
+              }`}
+            />
             {finalized ? "Finalizada" : "Cancelada"}
           </span>
-          <span className="text-sm text-gunmetal/60">
-            Tempo total: {formatClock(base)}
+          <span className="text-sm text-fg-muted">
+            Tempo total:{" "}
+            <span className="font-mono tabular-nums text-fg">
+              {formatClock(base)}
+            </span>
           </span>
         </div>
         {finalized && (completionNote || note) && (
-          <div className="mt-4">
-            <p className="text-sm font-medium text-gunmetal">Resumo</p>
-            <p className="mt-1 whitespace-pre-wrap text-sm text-gunmetal/70">
+          <div className="mt-4 rounded-xl border border-line bg-surface-2 p-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-fg-subtle">
+              Resumo
+            </p>
+            <p className="mt-1 whitespace-pre-wrap text-sm text-fg">
               {completionNote || note}
             </p>
           </div>
         )}
         {warning && (
-          <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
             {warning}
           </p>
         )}
@@ -146,115 +156,131 @@ export default function Timer({
 
   // --- Timer ativo ---------------------------------------------------------
   return (
-    <section className="rounded-xl border border-platinum bg-white p-6 shadow-sm">
-      <div className="flex flex-col items-center">
-        <span className="text-xs uppercase tracking-wide text-gunmetal/50">
+    <section className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
+      {/* Mostrador do cronômetro */}
+      <div
+        className={`relative flex flex-col items-center px-6 py-10 transition-colors ${
+          running
+            ? "bg-gradient-to-b from-brand-tint to-surface"
+            : "bg-surface"
+        }`}
+      >
+        <span className="text-xs font-medium uppercase tracking-[0.2em] text-fg-subtle">
           Tempo
         </span>
         <span
-          className="mt-1 font-mono text-5xl font-semibold tabular-nums text-risd"
+          className="mt-2 font-mono text-6xl font-semibold tabular-nums text-risd sm:text-7xl"
           aria-live="off"
         >
           {formatClock(elapsed)}
         </span>
-        {running && (
-          <span className="mt-2 flex items-center gap-1.5 text-xs text-gunmetal/50">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-risd" />
-            Em andamento
-          </span>
-        )}
+        <span
+          className={`mt-3 flex items-center gap-1.5 text-xs font-medium ${
+            running ? "text-risd" : "text-fg-subtle"
+          }`}
+        >
+          <span
+            className={`h-2 w-2 rounded-full ${
+              running ? "animate-pulse bg-risd" : "bg-fg-subtle"
+            }`}
+          />
+          {running ? "Em andamento" : "Pausado"}
+        </span>
       </div>
 
-      {!finishing ? (
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-          {!running ? (
+      <div className="border-t border-line p-6">
+        {!finishing ? (
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            {!running ? (
+              <button
+                type="button"
+                onClick={handleStart}
+                disabled={busy}
+                className="rounded-xl bg-risd px-7 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-chrysler focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {base > 0 ? "Retomar" : "Iniciar"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handlePause}
+                disabled={busy}
+                className="rounded-xl border border-risd bg-surface px-7 py-3 text-sm font-semibold text-risd shadow-sm transition hover:bg-brand-tint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Pausar
+              </button>
+            )}
             <button
               type="button"
-              onClick={handleStart}
+              onClick={() => {
+                setError(null);
+                setFinishing(true);
+              }}
               disabled={busy}
-              className="rounded-lg bg-risd px-6 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-chrysler focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-xl bg-chrysler px-7 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-chrysler/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chrysler focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {base > 0 ? "Retomar" : "Iniciar"}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handlePause}
-              disabled={busy}
-              className="rounded-lg border border-risd bg-white px-6 py-2.5 text-sm font-medium text-risd shadow-sm transition hover:bg-brand-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Pausar
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => {
-              setError(null);
-              setFinishing(true);
-            }}
-            disabled={busy}
-            className="rounded-lg bg-chrysler px-6 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-chrysler/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chrysler focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Finalizar
-          </button>
-        </div>
-      ) : (
-        <div className="mt-6 border-t border-platinum pt-6">
-          <label
-            htmlFor="completion-note"
-            className="mb-1 block text-sm font-medium text-gunmetal"
-          >
-            Resumo do que foi feito{" "}
-            <span className="text-red-500">*</span>
-          </label>
-          <textarea
-            id="completion-note"
-            rows={4}
-            required
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Descreva o que foi realizado nesta tarefa…"
-            className="w-full rounded-lg border border-platinum bg-white px-3 py-2 text-sm text-gunmetal shadow-sm transition focus:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2"
-            autoFocus
-          />
-
-          <div className="mt-4 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => handleFinish(true)}
-              disabled={busy || note.trim().length === 0}
-              className="rounded-lg bg-chrysler px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-chrysler/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chrysler focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Finalizar e enviar ao WhatsApp
-            </button>
-            <button
-              type="button"
-              onClick={() => handleFinish(false)}
-              disabled={busy || note.trim().length === 0}
-              className="rounded-lg border border-platinum bg-white px-4 py-2.5 text-sm font-medium text-gunmetal shadow-sm transition hover:border-risd/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Finalizar e apenas salvar no registro
-            </button>
-            <button
-              type="button"
-              onClick={() => setFinishing(false)}
-              disabled={busy}
-              className="rounded-lg px-4 py-2.5 text-sm text-gunmetal/60 transition hover:text-gunmetal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2"
-            >
-              Cancelar
+              Finalizar
             </button>
           </div>
-          <p className="mt-2 text-xs text-gunmetal/40">
-            &quot;Enviar ao WhatsApp&quot; dispara o resumo ao grupo vinculado à
-            empresa. Se a empresa não tiver grupo, a tarefa é finalizada mesmo
-            assim e um aviso é exibido.
-          </p>
-        </div>
-      )}
+        ) : (
+          <div>
+            <label
+              htmlFor="completion-note"
+              className="mb-1.5 block text-sm font-medium text-fg"
+            >
+              Resumo do que foi feito <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              id="completion-note"
+              rows={4}
+              required
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Descreva o que foi realizado nesta tarefa…"
+              className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-fg shadow-sm transition placeholder:text-fg-subtle focus:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+              autoFocus
+            />
 
-      {error && (
-        <p className="mt-4 text-center text-sm text-red-600">{error}</p>
-      )}
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => handleFinish(true)}
+                disabled={busy || note.trim().length === 0}
+                className="rounded-xl bg-chrysler px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-chrysler/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chrysler focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Finalizar e enviar ao WhatsApp
+              </button>
+              <button
+                type="button"
+                onClick={() => handleFinish(false)}
+                disabled={busy || note.trim().length === 0}
+                className="rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-medium text-fg shadow-sm transition hover:border-risd/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Finalizar e apenas salvar no registro
+              </button>
+              <button
+                type="button"
+                onClick={() => setFinishing(false)}
+                disabled={busy}
+                className="rounded-xl px-4 py-2.5 text-sm text-fg-muted transition hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+              >
+                Cancelar
+              </button>
+            </div>
+            <p className="mt-3 text-xs text-fg-subtle">
+              &quot;Enviar ao WhatsApp&quot; dispara o resumo ao grupo vinculado à
+              empresa. Se a empresa não tiver grupo, a tarefa é finalizada mesmo
+              assim e um aviso é exibido.
+            </p>
+          </div>
+        )}
+
+        {error && (
+          <p className="mt-4 text-center text-sm text-red-600 dark:text-red-400">
+            {error}
+          </p>
+        )}
+      </div>
     </section>
   );
 }

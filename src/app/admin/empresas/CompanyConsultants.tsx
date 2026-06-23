@@ -61,7 +61,7 @@ export default function CompanyConsultants({
 
   if (consultores.length === 0) {
     return (
-      <p className="text-sm text-gunmetal/40">
+      <p className="text-sm text-fg-subtle">
         Cadastre consultores para poder atribuí-los.
       </p>
     );
@@ -69,7 +69,7 @@ export default function CompanyConsultants({
 
   return (
     <div>
-      <p className="mb-2 text-sm font-medium text-gunmetal">
+      <p className="mb-2 text-sm font-medium text-fg">
         Consultores responsáveis
       </p>
       <div className="flex flex-wrap gap-2">
@@ -80,8 +80,8 @@ export default function CompanyConsultants({
               key={c.id}
               className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition ${
                 checked
-                  ? "border-risd bg-brand-soft text-gunmetal"
-                  : "border-platinum bg-white text-gunmetal/70 hover:border-risd/50"
+                  ? "border-risd bg-brand-tint text-fg"
+                  : "border-line bg-surface text-fg-muted hover:border-risd/50"
               }`}
             >
               <input
@@ -101,17 +101,17 @@ export default function CompanyConsultants({
           type="button"
           onClick={save}
           disabled={!dirty || status === "saving"}
-          className="rounded-lg bg-risd px-3 py-1.5 text-sm font-medium text-white shadow-sm transition hover:bg-chrysler focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-lg bg-risd px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-chrysler focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:cursor-not-allowed disabled:opacity-50"
         >
           Salvar atribuição
         </button>
         <span className="text-xs" aria-live="polite">
           {status === "saving" && (
-            <span className="text-gunmetal/60">Salvando…</span>
+            <span className="text-fg-muted">Salvando…</span>
           )}
           {status === "saved" && <span className="text-risd">Salvo</span>}
           {status === "error" && (
-            <span className="text-red-600" title={errorMsg ?? undefined}>
+            <span className="text-red-600 dark:text-red-400" title={errorMsg ?? undefined}>
               Erro ao salvar
             </span>
           )}

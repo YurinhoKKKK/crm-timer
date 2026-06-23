@@ -4,6 +4,14 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { TaskKind } from "@/lib/types";
 import { createTaskTemplate } from "../actions";
+import {
+  inputClass,
+  labelClass,
+  hintClass,
+  btnPrimary,
+  btnSecondary,
+  chipClass,
+} from "@/lib/ui";
 
 type Option = { id: string; name: string };
 type PersonOption = { id: string; full_name: string; email: string };
@@ -17,11 +25,6 @@ const WEEKDAYS = [
   { value: 5, label: "Sex" },
   { value: 6, label: "Sáb" },
 ];
-
-const inputClass =
-  "w-full rounded-lg border border-platinum bg-white px-3 py-2 text-sm text-gunmetal shadow-sm transition focus:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2";
-
-const labelClass = "mb-1 block text-sm font-medium text-gunmetal";
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
@@ -106,11 +109,7 @@ export default function NewTaskForm({
   if (!open) {
     return (
       <div className="mb-6">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="rounded-lg bg-risd px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-chrysler focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2"
-        >
+        <button type="button" onClick={() => setOpen(true)} className={btnPrimary}>
           Nova tarefa
         </button>
       </div>
@@ -120,9 +119,9 @@ export default function NewTaskForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="mb-6 space-y-4 rounded-xl border border-platinum bg-white p-5 shadow-sm"
+      className="mb-6 space-y-4 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6"
     >
-      <h2 className="font-medium text-gunmetal">Nova tarefa</h2>
+      <h2 className="font-semibold text-fg">Nova tarefa</h2>
 
       <div>
         <label htmlFor="task-title" className={labelClass}>
@@ -141,8 +140,7 @@ export default function NewTaskForm({
 
       <div>
         <label htmlFor="task-description" className={labelClass}>
-          Descrição{" "}
-          <span className="font-normal text-gunmetal/40">(opcional)</span>
+          Descrição <span className={hintClass}>(opcional)</span>
         </label>
         <textarea
           id="task-description"
@@ -155,8 +153,7 @@ export default function NewTaskForm({
 
       <div>
         <label htmlFor="task-instructions" className={labelClass}>
-          Instruções{" "}
-          <span className="font-normal text-gunmetal/40">(opcional)</span>
+          Instruções <span className={hintClass}>(opcional)</span>
         </label>
         <textarea
           id="task-instructions"
@@ -175,10 +172,10 @@ export default function NewTaskForm({
           {lockedCompany ? (
             <div
               id="task-company"
-              className={`${inputClass} flex items-center justify-between bg-paper text-gunmetal/70`}
+              className={`${inputClass} flex items-center justify-between bg-surface-2 text-fg-muted`}
             >
               <span className="truncate">{lockedCompany.name}</span>
-              <span className="ml-2 shrink-0 text-xs text-gunmetal/40">
+              <span className="ml-2 shrink-0 text-xs text-fg-subtle">
                 empresa atual
               </span>
             </div>
@@ -226,14 +223,7 @@ export default function NewTaskForm({
           {(["unica", "diaria"] as TaskKind[]).map((k) => {
             const active = kind === k;
             return (
-              <label
-                key={k}
-                className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition ${
-                  active
-                    ? "border-risd bg-brand-soft text-gunmetal"
-                    : "border-platinum bg-white text-gunmetal/70 hover:border-risd/50"
-                }`}
-              >
+              <label key={k} className={chipClass(active)}>
                 <input
                   type="radio"
                   name="kind"
@@ -265,8 +255,7 @@ export default function NewTaskForm({
           </div>
           <div>
             <label htmlFor="task-due-unica" className={labelClass}>
-              Horário-limite{" "}
-              <span className="font-normal text-gunmetal/40">(opcional)</span>
+              Horário-limite <span className={hintClass}>(opcional)</span>
             </label>
             <input
               id="task-due-unica"
@@ -285,14 +274,7 @@ export default function NewTaskForm({
               {WEEKDAYS.map((d) => {
                 const checked = weekdays.has(d.value);
                 return (
-                  <label
-                    key={d.value}
-                    className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition ${
-                      checked
-                        ? "border-risd bg-brand-soft text-gunmetal"
-                        : "border-platinum bg-white text-gunmetal/70 hover:border-risd/50"
-                    }`}
-                  >
+                  <label key={d.value} className={chipClass(checked)}>
                     <input
                       type="checkbox"
                       className="accent-risd"
@@ -308,8 +290,7 @@ export default function NewTaskForm({
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="task-due-diaria" className={labelClass}>
-                Horário-limite{" "}
-                <span className="font-normal text-gunmetal/40">(opcional)</span>
+                Horário-limite <span className={hintClass}>(opcional)</span>
               </label>
               <input
                 id="task-due-diaria"
@@ -321,8 +302,7 @@ export default function NewTaskForm({
             </div>
             <div>
               <label htmlFor="task-end" className={labelClass}>
-                Encerra em{" "}
-                <span className="font-normal text-gunmetal/40">(opcional)</span>
+                Encerra em <span className={hintClass}>(opcional)</span>
               </label>
               <input
                 id="task-end"
@@ -336,14 +316,10 @@ export default function NewTaskForm({
         </div>
       )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       <div className="flex items-center gap-2">
-        <button
-          type="submit"
-          disabled={isPending}
-          className="rounded-lg bg-risd px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-chrysler focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-        >
+        <button type="submit" disabled={isPending} className={btnPrimary}>
           {isPending ? "Salvando…" : "Salvar tarefa"}
         </button>
         <button
@@ -352,7 +328,7 @@ export default function NewTaskForm({
             reset();
             setOpen(false);
           }}
-          className="rounded-lg border border-platinum bg-white px-4 py-2 text-sm text-gunmetal/70 transition hover:border-risd/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2"
+          className={btnSecondary}
         >
           Cancelar
         </button>

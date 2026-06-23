@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import type { TaskStatus } from "@/lib/types";
+import { STATUS_META } from "@/lib/status";
+import { formatDuration, formatDue } from "@/lib/format";
 
 export type TaskItem = {
   id: string;
@@ -15,39 +17,11 @@ export type TaskItem = {
 
 type SortKey = "antiga" | "recente" | "prazo";
 
-const STATUS_META: Record<
-  TaskStatus,
-  { label: string; className: string }
-> = {
-  a_fazer: { label: "A fazer", className: "border border-platinum bg-paper text-gunmetal/70" },
-  iniciada: { label: "Iniciada", className: "bg-brand-soft text-risd" },
-  finalizada: { label: "Finalizada", className: "bg-green-100 text-green-700" },
-  cancelada: { label: "Cancelada", className: "bg-platinum text-gunmetal/50" },
-};
-
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "antiga", label: "Mais antiga" },
   { value: "recente", label: "Mais recente" },
   { value: "prazo", label: "Próximas do prazo" },
 ];
-
-function formatDuration(totalSeconds: number): string {
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  if (hours === 0 && minutes === 0) return "0min";
-  if (hours === 0) return `${minutes}min`;
-  return `${hours}h ${minutes}min`;
-}
-
-function formatDue(due: string | null): string {
-  if (!due) return "Sem prazo";
-  return new Date(due).toLocaleString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 export default function TaskList({
   companyId,
@@ -81,7 +55,7 @@ export default function TaskList({
 
   if (tasks.length === 0) {
     return (
-      <div className="rounded-xl border border-platinum bg-white p-12 text-center text-gunmetal/50 shadow-sm">
+      <div className="rounded-2xl border border-line bg-surface p-12 text-center text-fg-subtle shadow-card">
         Nenhuma tarefa nesta empresa.
       </div>
     );
@@ -90,15 +64,15 @@ export default function TaskList({
   return (
     <div>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="text-sm font-medium text-gunmetal/70">
+        <h2 className="text-sm font-medium text-fg-muted">
           {tasks.length} tarefa{tasks.length === 1 ? "" : "s"}
         </h2>
-        <label className="flex items-center gap-2 text-sm text-gunmetal/60">
+        <label className="flex items-center gap-2 text-sm text-fg-muted">
           Ordenar:
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as SortKey)}
-            className="rounded-lg border border-platinum bg-white px-2 py-1.5 text-sm text-gunmetal shadow-sm transition focus:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2"
+            className="rounded-lg border border-line bg-surface px-2 py-1.5 text-sm text-fg shadow-sm transition focus:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
           >
             {SORT_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -122,27 +96,35 @@ export default function TaskList({
             <li key={t.id}>
               <Link
                 href={`/colaborador/${companyId}/${t.id}`}
-                className="group block rounded-xl border border-platinum bg-white p-4 shadow-sm transition hover:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2"
+                className="group block rounded-xl border border-line bg-surface p-4 shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate font-medium text-gunmetal group-hover:text-risd">
+                  <span className="truncate font-medium text-fg group-hover:text-risd">
                     {t.title}
                   </span>
                   <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${meta.className}`}
+                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${meta.badge}`}
                   >
+                    <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
                     {meta.label}
                   </span>
                 </div>
 
-                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gunmetal/60">
+                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-muted">
                   <span>Prazo: {formatDue(t.due_at)}</span>
-                  <span>Tempo: {formatDuration(t.total_seconds)}</span>
+                  <span>
+                    Tempo:{" "}
+                    <span className="font-mono tabular-nums">
+                      {formatDuration(t.total_seconds)}
+                    </span>
+                  </span>
                   {overdue && (
-                    <span className="font-medium text-red-600">Atrasada</span>
+                    <span className="font-medium text-red-600 dark:text-red-400">
+                      Atrasada
+                    </span>
                   )}
                   {dueSoon && (
-                    <span className="font-medium text-amber-600">
+                    <span className="font-medium text-amber-600 dark:text-amber-400">
                       Vence em breve
                     </span>
                   )}

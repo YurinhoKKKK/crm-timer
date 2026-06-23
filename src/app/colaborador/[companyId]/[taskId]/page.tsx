@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { guardRole } from "@/components/guardRole";
-import LogoutButton from "@/components/LogoutButton";
+import AppShell from "@/components/AppShell";
 import type { TaskStatus } from "@/lib/types";
 import Timer from "./Timer";
 
@@ -68,41 +67,39 @@ export default async function TarefaPage({
   const company = first(task.company);
 
   return (
-    <main className="min-h-screen bg-paper p-4 sm:p-8">
+    <AppShell
+      user={{ name: profile.full_name, role: "colaborador" }}
+      title={task.title}
+      back={{
+        href: `/colaborador/${companyId}`,
+        label: company?.name ?? "Empresa",
+      }}
+    >
       <div className="mx-auto max-w-2xl">
-        <header className="mb-6 flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <Link
-              href={`/colaborador/${companyId}`}
-              className="rounded text-sm text-gunmetal/60 transition hover:text-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2"
-            >
-              ← {company?.name ?? "Empresa"}
-            </Link>
-            <h1 className="mt-1 text-2xl font-semibold text-gunmetal">
-              {task.title}
-            </h1>
-          </div>
-          <LogoutButton />
-        </header>
-
-        <section className="mb-6 rounded-xl border border-platinum bg-white p-5 shadow-sm">
+        <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
           <dl className="space-y-4 text-sm">
             <div>
-              <dt className="font-medium text-gunmetal">Prazo</dt>
-              <dd className="text-gunmetal/70">{formatDue(task.due_at)}</dd>
+              <dt className="text-xs font-medium uppercase tracking-wide text-fg-subtle">
+                Prazo
+              </dt>
+              <dd className="mt-0.5 text-fg">{formatDue(task.due_at)}</dd>
             </div>
             {task.description && (
               <div>
-                <dt className="font-medium text-gunmetal">Descrição</dt>
-                <dd className="whitespace-pre-wrap text-gunmetal/70">
+                <dt className="text-xs font-medium uppercase tracking-wide text-fg-subtle">
+                  Descrição
+                </dt>
+                <dd className="mt-0.5 whitespace-pre-wrap text-fg-muted">
                   {task.description}
                 </dd>
               </div>
             )}
             {task.instructions && (
               <div>
-                <dt className="font-medium text-gunmetal">Instruções</dt>
-                <dd className="whitespace-pre-wrap text-gunmetal/70">
+                <dt className="text-xs font-medium uppercase tracking-wide text-fg-subtle">
+                  Instruções
+                </dt>
+                <dd className="mt-0.5 whitespace-pre-wrap text-fg-muted">
                   {task.instructions}
                 </dd>
               </div>
@@ -119,6 +116,6 @@ export default async function TarefaPage({
           completionNote={task.completion_note}
         />
       </div>
-    </main>
+    </AppShell>
   );
 }

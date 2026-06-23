@@ -26,7 +26,7 @@ export default function PeriodFilter({ value }: { value: Period }) {
     <div
       role="group"
       aria-label="Período"
-      className="inline-flex rounded-lg border border-platinum bg-white p-1 shadow-sm"
+      className="inline-flex rounded-xl border border-line bg-surface p-1 shadow-card"
     >
       {OPTIONS.map((o) => {
         const active = o.value === value;
@@ -36,10 +36,10 @@ export default function PeriodFilter({ value }: { value: Period }) {
             type="button"
             onClick={() => select(o.value)}
             aria-pressed={active}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-1 ${
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-1 focus-visible:ring-offset-surface ${
               active
-                ? "bg-risd text-white"
-                : "text-gunmetal/70 hover:bg-paper hover:text-gunmetal"
+                ? "bg-risd text-white shadow-sm"
+                : "text-fg-muted hover:bg-surface-2 hover:text-fg"
             }`}
           >
             {o.label}

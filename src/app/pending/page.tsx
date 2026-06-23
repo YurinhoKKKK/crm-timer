@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
 import LogoutButton from "@/components/LogoutButton";
+import ThemeToggle from "@/components/ThemeToggle";
 
 export default async function PendingPage() {
   const supabase = await createClient();
@@ -19,15 +20,19 @@ export default async function PendingPage() {
   if (profile && profile.role !== "pending") redirect("/");
 
   return (
-    <main className="min-h-screen grid place-items-center px-4">
-      <div className="max-w-md text-center">
-        <div className="w-12 h-12 rounded-full bg-brand-soft grid place-items-center mx-auto mb-4">
-          <span className="text-brand text-xl">⏳</span>
+    <main className="grid min-h-screen place-items-center bg-canvas px-4">
+      <div className="fixed right-4 top-4">
+        <ThemeToggle />
+      </div>
+
+      <div className="max-w-md rounded-2xl border border-line bg-surface p-8 text-center shadow-card">
+        <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full bg-brand-tint text-xl text-risd">
+          ⏳
         </div>
-        <h1 className="text-xl font-medium text-ink">
+        <h1 className="text-xl font-semibold text-fg">
           Conta aguardando liberação
         </h1>
-        <p className="text-ink/60 mt-2">
+        <p className="mt-2 text-fg-muted">
           Olá, {profile?.full_name}. Sua conta foi criada, mas ainda não tem um
           cargo. Um administrador precisa liberar seu acesso. Tente novamente
           mais tarde.

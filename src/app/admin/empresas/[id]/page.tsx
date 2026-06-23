@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { guardRole } from "@/components/guardRole";
-import LogoutButton from "@/components/LogoutButton";
+import AppShell from "@/components/AppShell";
 import type { Company } from "@/lib/types";
 import CompanyConsultants from "../CompanyConsultants";
 import CompanyEditor from "./CompanyEditor";
@@ -25,7 +24,7 @@ export default async function EmpresaDetailPage({
   params: { id: string };
 }) {
   const { id } = params;
-  const { supabase } = await guardRole(["admin"]);
+  const { supabase, profile } = await guardRole(["admin"]);
 
   const [
     { data: companyData },
@@ -68,29 +67,18 @@ export default async function EmpresaDetailPage({
   }
 
   return (
-    <main className="min-h-screen bg-paper p-4 sm:p-8">
+    <AppShell
+      user={{ name: profile.full_name, role: "admin" }}
+      title={company.name}
+      back={{ href: "/admin/empresas", label: "Empresas" }}
+    >
       <div className="mx-auto max-w-2xl">
-        <header className="mb-8 flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <Link
-              href="/admin/empresas"
-              className="rounded text-sm text-gunmetal/60 transition hover:text-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2"
-            >
-              ← Empresas
-            </Link>
-            <h1 className="mt-1 truncate text-2xl font-semibold text-gunmetal">
-              {company.name}
-            </h1>
-          </div>
-          <LogoutButton />
-        </header>
-
-        <section className="mb-6 rounded-xl border border-platinum bg-white p-5 shadow-sm">
-          <h2 className="mb-4 font-medium text-gunmetal">Dados da empresa</h2>
+        <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
+          <h2 className="mb-4 font-semibold text-fg">Dados da empresa</h2>
           <CompanyEditor company={company} />
         </section>
 
-        <section className="mb-6 rounded-xl border border-platinum bg-white p-5 shadow-sm">
+        <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
           <CompanyConsultants
             companyId={company.id}
             consultores={consultores}
@@ -99,11 +87,11 @@ export default async function EmpresaDetailPage({
         </section>
 
         <section className="mb-6">
-          <h2 className="mb-3 text-sm font-medium text-gunmetal/70">
+          <h2 className="mb-3 text-sm font-medium text-fg-muted">
             Tarefas desta empresa
           </h2>
           {colaboradores.length === 0 ? (
-            <div className="rounded-xl border border-platinum bg-white p-5 text-sm text-gunmetal/50 shadow-sm">
+            <div className="rounded-2xl border border-line bg-surface p-5 text-sm text-fg-subtle shadow-card">
               Cadastre ao menos um colaborador para criar tarefas.
             </div>
           ) : (
@@ -115,18 +103,20 @@ export default async function EmpresaDetailPage({
           )}
         </section>
 
-        <section className="rounded-xl border border-red-200 bg-red-50 p-5">
-          <h2 className="font-medium text-red-800">Excluir empresa</h2>
-          <p className="mt-1 text-sm text-red-700">
-            Remove a empresa e, em cascata, os vínculos de consultores e todas
-            as tarefas (templates e instâncias) ligadas a ela. Esta ação não
-            pode ser desfeita.
+        <section className="rounded-2xl border border-red-300/60 bg-red-50 p-5 dark:border-red-500/30 dark:bg-red-500/10">
+          <h2 className="font-semibold text-red-800 dark:text-red-300">
+            Excluir empresa
+          </h2>
+          <p className="mt-1 text-sm text-red-700 dark:text-red-300/80">
+            Remove a empresa e, em cascata, os vínculos de consultores e todas as
+            tarefas (templates e instâncias) ligadas a ela. Esta ação não pode ser
+            desfeita.
           </p>
           <div className="mt-4">
             <DeleteCompanyButton companyId={company.id} companyName={company.name} />
           </div>
         </section>
       </div>
-    </main>
+    </AppShell>
   );
 }

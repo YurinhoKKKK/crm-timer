@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { guardRole } from "@/components/guardRole";
-import LogoutButton from "@/components/LogoutButton";
+import AppShell from "@/components/AppShell";
 import type { TaskKind } from "@/lib/types";
 import NewTaskForm from "./NewTaskForm";
 
@@ -50,7 +50,7 @@ function describeSchedule(t: TemplateRow): string {
 }
 
 export default async function TarefasPage() {
-  const { supabase } = await guardRole(["admin"]);
+  const { supabase, profile } = await guardRole(["admin"]);
 
   const [{ data: companiesData }, { data: collaboratorsData }, { data: templatesData, error: templatesError }] =
     await Promise.all([
@@ -75,111 +75,95 @@ export default async function TarefasPage() {
   const canCreate = companies.length > 0 && collaborators.length > 0;
 
   return (
-    <main className="min-h-screen bg-paper p-4 sm:p-8">
-      <div className="mx-auto max-w-3xl">
-        <header className="mb-8 flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <Link
-              href="/admin"
-              className="rounded text-sm text-gunmetal/60 transition hover:text-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2"
-            >
-              ← Painel
-            </Link>
-            <h1 className="mt-1 text-2xl font-semibold text-gunmetal">
-              Cadastro de tarefas
-            </h1>
-            <p className="text-sm text-gunmetal/60">
-              Crie tarefas únicas ou diárias para os colaboradores. As tarefas
-              aparecem automaticamente para eles.
-            </p>
-          </div>
-          <LogoutButton />
-        </header>
+    <AppShell
+      user={{ name: profile.full_name, role: "admin" }}
+      title="Cadastro de tarefas"
+      subtitle="Crie tarefas únicas ou diárias. Elas aparecem automaticamente para os colaboradores."
+      back={{ href: "/admin", label: "Dashboard" }}
+    >
+      {!canCreate && (
+        <div className="mb-6 rounded-xl border border-risd/30 bg-brand-tint px-4 py-3 text-sm text-fg">
+          Para criar tarefas você precisa de pelo menos{" "}
+          {companies.length === 0 && (
+            <>
+              uma{" "}
+              <Link href="/admin/empresas" className="text-risd hover:underline">
+                empresa
+              </Link>
+            </>
+          )}
+          {companies.length === 0 && collaborators.length === 0 && " e "}
+          {collaborators.length === 0 && (
+            <>
+              um{" "}
+              <Link href="/admin/usuarios" className="text-risd hover:underline">
+                colaborador
+              </Link>
+            </>
+          )}
+          .
+        </div>
+      )}
 
-        {!canCreate && (
-          <div className="mb-6 rounded-lg border border-risd/30 bg-brand-soft px-4 py-3 text-sm text-gunmetal">
-            Para criar tarefas você precisa de pelo menos{" "}
-            {companies.length === 0 && (
-              <>
-                uma{" "}
-                <Link href="/admin/empresas" className="text-risd hover:underline">
-                  empresa
-                </Link>
-              </>
-            )}
-            {companies.length === 0 && collaborators.length === 0 && " e "}
-            {collaborators.length === 0 && (
-              <>
-                um{" "}
-                <Link href="/admin/usuarios" className="text-risd hover:underline">
-                  colaborador
-                </Link>
-              </>
-            )}
-            .
-          </div>
-        )}
+      {canCreate && (
+        <NewTaskForm companies={companies} collaborators={collaborators} />
+      )}
 
-        {canCreate && (
-          <NewTaskForm companies={companies} collaborators={collaborators} />
-        )}
+      <h2 className="mb-3 mt-2 text-sm font-medium text-fg-muted">
+        Tarefas cadastradas
+      </h2>
 
-        <h2 className="mb-3 mt-2 text-sm font-medium text-gunmetal/70">
-          Tarefas cadastradas
-        </h2>
-
-        {templatesError ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
-            Erro ao carregar tarefas: {templatesError.message}
-          </div>
-        ) : templates.length === 0 ? (
-          <div className="rounded-xl border border-platinum bg-white p-12 text-center text-gunmetal/50 shadow-sm">
-            Nenhuma tarefa cadastrada ainda.
-          </div>
-        ) : (
-          <ul className="space-y-3">
-            {templates.map((t) => {
-              const company = first(t.company);
-              const collaborator = first(t.collaborator);
-              return (
-                <li key={t.id}>
-                  <Link
-                    href={`/admin/tarefas/${t.id}`}
-                    className="group block rounded-xl border border-platinum bg-white p-4 shadow-sm transition hover:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-gunmetal group-hover:text-risd">
-                        {t.title}
+      {templatesError ? (
+        <div className="rounded-xl border border-red-300/60 bg-red-50 p-6 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+          Erro ao carregar tarefas: {templatesError.message}
+        </div>
+      ) : templates.length === 0 ? (
+        <div className="rounded-2xl border border-line bg-surface p-12 text-center text-fg-subtle shadow-card">
+          Nenhuma tarefa cadastrada ainda.
+        </div>
+      ) : (
+        <ul className="space-y-3">
+          {templates.map((t) => {
+            const company = first(t.company);
+            const collaborator = first(t.collaborator);
+            return (
+              <li key={t.id}>
+                <Link
+                  href={`/admin/tarefas/${t.id}`}
+                  className="group block rounded-xl border border-line bg-surface p-4 shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-fg group-hover:text-risd">
+                      {t.title}
+                    </span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        t.kind === "diaria"
+                          ? "bg-brand-tint text-risd"
+                          : "border border-line bg-surface-2 text-fg-muted"
+                      }`}
+                    >
+                      {t.kind === "diaria" ? "Diária" : "Única"}
+                    </span>
+                    {!t.active && (
+                      <span className="rounded-full border border-line bg-surface-2 px-2 py-0.5 text-xs text-fg-subtle">
+                        inativa
                       </span>
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                          t.kind === "diaria"
-                            ? "bg-brand-soft text-risd"
-                            : "border border-platinum bg-paper text-gunmetal/70"
-                        }`}
-                      >
-                        {t.kind === "diaria" ? "Diária" : "Única"}
-                      </span>
-                      {!t.active && (
-                        <span className="rounded-full border border-platinum bg-paper px-2 py-0.5 text-xs text-gunmetal/40">
-                          inativa
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-1 text-sm text-gunmetal/60">
-                      {company?.name ?? "(empresa removida)"} ·{" "}
-                      {collaborator?.full_name || collaborator?.email || "(colaborador removido)"}
-                    </p>
-                    <p className="mt-1 text-xs text-gunmetal/40">
-                      {describeSchedule(t)}
-                    </p>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-    </main>
+                    )}
+                  </div>
+                  <p className="mt-1 text-sm text-fg-muted">
+                    {company?.name ?? "(empresa removida)"} ·{" "}
+                    {collaborator?.full_name || collaborator?.email || "(colaborador removido)"}
+                  </p>
+                  <p className="mt-1 text-xs text-fg-subtle">
+                    {describeSchedule(t)}
+                  </p>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </AppShell>
   );
 }

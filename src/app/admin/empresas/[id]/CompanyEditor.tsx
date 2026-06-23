@@ -5,11 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Company } from "@/lib/types";
 import { updateCompany } from "../../actions";
 import GroupSelect from "../GroupSelect";
-
-const inputClass =
-  "w-full rounded-lg border border-platinum bg-white px-3 py-2 text-sm text-gunmetal shadow-sm transition focus:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2";
-
-const labelClass = "mb-1 block text-sm font-medium text-gunmetal";
+import { inputClass, labelClass, btnPrimary } from "@/lib/ui";
 
 type Status = "idle" | "saving" | "saved" | "error";
 
@@ -70,15 +66,11 @@ export default function CompanyEditor({ company }: { company: Company }) {
       />
 
       {status === "error" && errorMsg && (
-        <p className="text-sm text-red-600">{errorMsg}</p>
+        <p className="text-sm text-red-600 dark:text-red-400">{errorMsg}</p>
       )}
 
       <div className="flex items-center gap-3">
-        <button
-          type="submit"
-          disabled={status === "saving"}
-          className="rounded-lg bg-risd px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-chrysler focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-        >
+        <button type="submit" disabled={status === "saving"} className={btnPrimary}>
           {status === "saving" ? "Salvando…" : "Salvar alterações"}
         </button>
         <span className="text-xs" aria-live="polite">

@@ -137,7 +137,7 @@ Content-Type: application/json
 
 ## 7. Pendências de infraestrutura
 
-- **Agendar `generate_daily_tasks`** com pg_cron. Decidir o horário considerando o fuso (servidor em UTC; 03:05 UTC ≈ 00:05 BRT). Exemplo:
+- ✅ **`generate_daily_tasks` agendada** com pg_cron (migration `0007`). Job `generate-daily-tasks`, schedule `5 3 * * *` (03:05 UTC = 00:05 BRT, UTC-3 fixo). A função é idempotente (`on conflict (template_id, task_date) do nothing`), então re-execuções não duplicam instâncias.
   ```sql
   select cron.schedule('generate-daily-tasks', '5 3 * * *',
     $$ select generate_daily_tasks(current_date); $$);

@@ -283,7 +283,7 @@ os números do dashboard se atualizam corretamente.
 
 ---
 
-## PASSO 10 — Investigação: performance / lentidão
+## PASSO 10 — Investigação: performance / lentidão (Feito)
 
 ```
 O sistema está com lentidão perceptível: ao navegar entre abas, há um 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
 import ThemeToggle from "@/components/ThemeToggle";
+import Logo from "@/components/Logo";
 import { inputClass, labelClass } from "@/lib/ui";
 
 export default function LoginPage() {
@@ -57,13 +58,10 @@ export default function LoginPage() {
 
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
-          <span className="sidebar-rail mb-4 flex h-12 w-12 items-center justify-center rounded-xl text-xl font-bold text-white shadow-card">
-            M
-          </span>
+          <Logo variant="auto" className="mb-4 h-12 w-auto max-w-[220px]" />
           <h1 className="text-2xl font-semibold tracking-tight text-fg">
             CRM/Timer
           </h1>
-          <p className="mt-1 text-sm text-fg-muted">Monvatti</p>
         </div>
 
         <form

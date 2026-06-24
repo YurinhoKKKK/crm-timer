@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase-browser";
 import { useRouter } from "next/navigation";
 import ThemeToggle from "./ThemeToggle";
 import Avatar from "./Avatar";
+import Logo from "./Logo";
 
 type Role = "admin" | "consultor" | "colaborador";
 
@@ -101,16 +102,11 @@ function bestMatch(pathname: string, items: NavItem[]): string | null {
 
 function Brand() {
   return (
-    <div className="flex items-center gap-2.5">
-      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/15 text-base font-bold tracking-tight text-white ring-1 ring-inset ring-white/20">
-        M
-      </span>
-      <div className="leading-tight">
-        <p className="text-sm font-semibold text-white">Monvatti</p>
-        <p className="text-[11px] font-medium uppercase tracking-wider text-white/55">
-          CRM · Timer
-        </p>
-      </div>
+    <div className="flex flex-col items-center gap-2 border-b border-[color:var(--sidebar-border)] px-2 pb-5 pt-1 text-center">
+      <Logo variant="white" className="h-14 w-auto max-w-[200px]" />
+      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/60">
+        CRM · Timer
+      </p>
     </div>
   );
 }
@@ -205,7 +201,7 @@ export default function AppShell({
         }`}
       >
         <Brand />
-        <div className="mt-7 flex-1 overflow-y-auto">
+        <div className="mt-6 flex-1 overflow-y-auto">
           <NavLinks
             items={items}
             activeHref={activeHref}

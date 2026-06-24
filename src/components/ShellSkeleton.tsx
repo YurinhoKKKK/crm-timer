@@ -6,6 +6,8 @@
 // É um Server Component puro (sem hooks): não depende dos dados do usuário,
 // que ainda não foram buscados quando o loading aparece.
 
+import Logo from "@/components/Logo";
+
 type Role = "admin" | "consultor" | "colaborador";
 
 // Quantos itens de navegação cada cargo tem na sidebar (espelha o NAV do
@@ -36,19 +38,14 @@ export default function ShellSkeleton({ role }: { role: Role }) {
     <div className="min-h-screen bg-canvas text-fg" aria-busy="true">
       {/* Sidebar (idêntica em estrutura à do AppShell) */}
       <aside className="sidebar-rail fixed inset-y-0 left-0 z-40 hidden w-64 flex-col px-4 py-5 lg:flex">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/15 text-base font-bold tracking-tight text-white ring-1 ring-inset ring-white/20">
-            M
-          </span>
-          <div className="leading-tight">
-            <p className="text-sm font-semibold text-white">Monvatti</p>
-            <p className="text-[11px] font-medium uppercase tracking-wider text-white/55">
-              CRM · Timer
-            </p>
-          </div>
+        <div className="flex flex-col items-center gap-2 border-b border-[color:var(--sidebar-border)] px-2 pb-5 pt-1 text-center">
+          <Logo variant="white" className="h-14 w-auto max-w-[200px]" />
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/60">
+            CRM · Timer
+          </p>
         </div>
 
-        <div className="mt-7 flex-1 space-y-1">
+        <div className="mt-6 flex-1 space-y-1">
           {Array.from({ length: navCount }).map((_, i) => (
             <div key={i} className="flex items-center gap-3 px-3 py-2.5">
               <Bar className="h-4 w-4 shrink-0" />

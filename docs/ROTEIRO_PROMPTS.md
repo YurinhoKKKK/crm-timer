@@ -208,7 +208,7 @@ Reaproveite ao máximo os componentes já criados para o admin.
 
 ---
 
-## PASSO 7 — Dashboards do admin
+## PASSO 7 — Dashboards do admin (Feito)
 
 ```
 Agora os dashboards do painel admin (a tela principal):
@@ -225,7 +225,7 @@ Agora os dashboards do painel admin (a tela principal):
 
 ---
 
-## PASSO 8 — Recorrência (pg_cron) e finalização
+## PASSO 8 — Recorrência (pg_cron) e finalização (Feito)
 
 ```
 Vamos finalizar a infraestrutura:
@@ -242,6 +242,134 @@ Vamos finalizar a infraestrutura:
 
 ---
 
+# CORREÇÕES E MELHORIAS (pós-construção)
+
+Estes passos vêm depois do sistema funcionando. Os passos 9 e 10 são 
+**correções de bug** — faça-os ANTES das melhorias (11-13), porque não faz 
+sentido construir em cima de algo quebrado. Continue a regra de ouro: um 
+passo por vez, testando no navegador antes de avançar.
+
+---
+
+## PASSO 9 — Correção: exclusão de tarefas (Feito)
+
+```
+Há um bug na exclusão de tarefas: ao apagar uma tarefa no painel admin, 
+ela some da tela do admin mas continua existindo nos painéis do consultor 
+e do colaborador, e os dados do dashboard e do resumo por colaborador 
+continuam contando a tarefa apagada. Ou seja, a exclusão não está 
+removendo o registro de verdade do banco.
+
+Corrija para que a exclusão apague realmente a tarefa do banco (e suas 
+dependências: time_entries e activity_log relacionados), refletindo em 
+TODOS os painéis e em todos os números (dashboard, resumos).
+
+Regras de permissão para excluir:
+- Admin: pode excluir qualquer tarefa.
+- Consultor: pode excluir apenas tarefas que ele mesmo criou.
+- Colaborador: NÃO pode excluir tarefas.
+Confirme que o RLS no banco reforça essas regras, não só a interface 
+(esconder o botão não é segurança real; a política tem que estar no banco).
+
+Proteção contra perda de histórico: antes de excluir uma tarefa que já 
+tenha tempo registrado (total_seconds > 0), mostre uma confirmação que 
+informe o tempo que será perdido, ex: "Esta tarefa tem 8h12 registradas. 
+Apagar removerá esse tempo permanentemente do total da empresa. Confirmar?". 
+Para tarefas sem tempo, uma confirmação simples basta.
+
+Teste: apague uma tarefa e confirme que ela some de todos os painéis e que 
+os números do dashboard se atualizam corretamente.
+```
+
+---
+
+## PASSO 10 — Investigação: performance / lentidão
+
+```
+O sistema está com lentidão perceptível: ao navegar entre abas, há um 
+delay até a nova tela abrir. Investigue e otimize.
+
+Possíveis causas a verificar:
+- Queries pesadas ou repetidas a cada navegação (ex: buscar todos os dados 
+  toda vez em vez de paginar ou cachear).
+- Falta de índices no banco para as consultas mais usadas.
+- Componentes recarregando dados que poderiam ser reaproveitados.
+- Falta de estados de carregamento (loading) que fazem a tela parecer 
+  travada enquanto busca dados.
+
+Faça um diagnóstico, me diga o que encontrou como causa provável, e aplique 
+as otimizações cabíveis. Adicione indicadores de carregamento (skeletons ou 
+spinners) onde a espera for inevitável, para a navegação não parecer travada.
+Meça e me diga se melhorou.
+```
+
+---
+
+## PASSO 11 — Busca e filtros (tarefas, empresas, usuários)
+
+```
+Adicione barra de busca e filtros nas telas de listagem do painel admin:
+
+1. Tela de Tarefas: barra de busca por título; filtros por status 
+   (a fazer, iniciada, finalizada, cancelada), por empresa, por colaborador 
+   e por tipo (única/diária).
+2. Tela de Empresas: barra de busca por nome; filtro por consultor 
+   responsável.
+3. Tela de Usuários: barra de busca por nome/email; filtro por cargo.
+
+A busca deve ser instantânea (filtra conforme digita). Os filtros podem 
+combinar entre si. Mantenha a identidade visual da marca, com os controles 
+de filtro discretos no topo de cada lista.
+Teste cada busca e filtro.
+```
+
+---
+
+## PASSO 12 — Tela de tarefas nos painéis de consultor e colaborador
+
+```
+Hoje só o painel admin tem uma tela com a lista geral de tarefas. Crie uma 
+tela equivalente nos painéis do consultor e do colaborador, sempre 
+respeitando o escopo de cada um (o RLS já garante, mas confirme na query):
+
+- Consultor: vê as tarefas das empresas atribuídas a ele (de todos os 
+  colaboradores dessas empresas).
+- Colaborador: vê apenas as tarefas atribuídas a ele mesmo, nunca as de 
+  outros colaboradores.
+
+Reaproveite o componente de lista de tarefas do admin, incluindo a busca e 
+os filtros do passo 11 (adaptando os filtros ao que faz sentido para cada 
+cargo — ex: o colaborador não precisa filtrar por colaborador).
+Teste nos dois painéis e confirme que o escopo está correto (um consultor 
+não vê tarefa de empresa que não é dele; um colaborador não vê tarefa de 
+outro colaborador).
+```
+
+---
+
+## PASSO 13 — Perfil de usuário com foto
+
+```
+Crie uma tela de perfil acessível por qualquer usuário logado (admin, 
+consultor, colaborador):
+
+- Mostra nome, email e cargo, já preenchidos conforme o usuário logado. 
+  Email e cargo são somente leitura (cargo só o admin muda); o nome pode 
+  ser editável pelo próprio usuário.
+- Permite anexar/trocar uma foto de perfil. Faça o upload usando Supabase 
+  Storage (crie um bucket apropriado, ex: "avatars", com as políticas de 
+  acesso corretas — cada um só altera a própria foto). Salve a URL/caminho 
+  da foto no profile.
+- Onde o sistema já mostra o nome do usuário (ex: rodapé da sidebar, 
+  resumos, listas), passe a mostrar também a foto de perfil ao lado. Onde 
+  não houver foto, mantenha o círculo com as iniciais como fallback.
+
+Mantenha a identidade visual da marca. Teste o upload e confirme que a foto 
+aparece nos lugares onde o nome já aparece.
+```
+
+---
+
 ## Dicas gerais ao usar o Claude Code
 
 - **Teste cada passo no navegador** antes de avançar. Se algo quebrar, 
@@ -250,7 +378,15 @@ Vamos finalizar a infraestrutura:
   secrets das Edge Functions.
 - Se uma tela ficar diferente da identidade visual, peça: "ajuste para 
   seguir a paleta da marca em tailwind.config.ts".
-- Faça commits no Git a cada passo concluído (peça ao Claude Code: 
-  "faça um commit com o que construímos").
+- Faça commits no Git a cada passo concluído E envie ao GitHub: peça ao 
+  Claude Code "faça um commit e push do que construímos". O push é o que 
+  envia de fato para o GitHub — sem ele, o trabalho fica salvo só no seu PC.
+- Se o limite de uso estourar no meio de um passo, não se preocupe: o que 
+  já foi salvo está no projeto. Ao voltar, abra o Claude Code e diga "estou 
+  retomando, leia docs/ESPECIFICACAO.md e docs/ROTEIRO_PROMPTS.md; já 
+  fizemos até o passo X; verifique se algo ficou pela metade e continue".
+- Para correções de bug, descreva o comportamento errado E o esperado. 
+  Quanto mais concreto (o que você fez, o que aconteceu, o que deveria 
+  acontecer), melhor o Claude Code resolve.
 - Lembre de **trocar o token da Digisac** antes de ir para produção.
 ```

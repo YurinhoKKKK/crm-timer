@@ -16,28 +16,38 @@ export default async function TarefaDetailPage({
   const { id } = params;
   const { supabase, profile } = await guardRole(["admin"]);
 
-  const [{ data: templateData }, { data: companiesData }, { data: collaboratorsData }] =
-    await Promise.all([
-      supabase
-        .from("task_templates")
-        .select(
-          "id, title, description, instructions, company_id, collaborator_id, kind, due_time, weekdays, start_date, end_date, active"
-        )
-        .eq("id", id)
-        .maybeSingle(),
-      supabase.from("companies").select("id, name").order("name", { ascending: true }),
-      supabase
-        .from("profiles")
-        .select("id, full_name, email")
-        .eq("role", "colaborador")
-        .order("full_name", { ascending: true }),
-    ]);
+  const [
+    { data: templateData },
+    { data: companiesData },
+    { data: collaboratorsData },
+    { data: instancesData },
+  ] = await Promise.all([
+    supabase
+      .from("task_templates")
+      .select(
+        "id, title, description, instructions, company_id, collaborator_id, kind, due_time, weekdays, start_date, end_date, active"
+      )
+      .eq("id", id)
+      .maybeSingle(),
+    supabase.from("companies").select("id, name").order("name", { ascending: true }),
+    supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      .eq("role", "colaborador")
+      .order("full_name", { ascending: true }),
+    // Tempo já registrado nas ocorrências — para avisar o que será perdido.
+    supabase.from("task_instances").select("total_seconds").eq("template_id", id),
+  ]);
 
   const template = templateData as TaskTemplate | null;
   if (!template) notFound();
 
   const companies = (companiesData as Option[]) ?? [];
   const collaborators = (collaboratorsData as PersonOption[]) ?? [];
+
+  const instances = (instancesData as { total_seconds: number }[]) ?? [];
+  const totalSeconds = instances.reduce((sum, r) => sum + r.total_seconds, 0);
+  const instanceCount = instances.length;
 
   return (
     <AppShell
@@ -64,12 +74,17 @@ export default async function TarefaDetailPage({
             Excluir tarefa
           </h2>
           <p className="mt-1 text-sm text-red-700 dark:text-red-300/80">
-            Remove o molde da tarefa. As instâncias já geradas permanecem para o
-            colaborador, apenas desvinculadas deste molde. Esta ação não pode ser
-            desfeita.
+            Remove a tarefa e todas as suas ocorrências (incluindo tempo
+            registrado e histórico de atividade) de todos os painéis. Esta ação
+            não pode ser desfeita.
           </p>
           <div className="mt-4">
-            <DeleteTaskButton templateId={template.id} title={template.title} />
+            <DeleteTaskButton
+              templateId={template.id}
+              title={template.title}
+              totalSeconds={totalSeconds}
+              instanceCount={instanceCount}
+            />
           </div>
         </section>
       </div>

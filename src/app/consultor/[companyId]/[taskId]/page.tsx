@@ -5,6 +5,7 @@ import type { TaskStatus } from "@/lib/types";
 import { STATUS_META } from "@/lib/status";
 import { formatDuration } from "@/lib/format";
 import TaskInstanceEditor from "./TaskInstanceEditor";
+import DeleteTaskButton from "@/app/admin/tarefas/[id]/DeleteTaskButton";
 
 type PersonOption = { id: string; full_name: string; email: string };
 
@@ -12,6 +13,7 @@ type InstanceRow = {
   id: string;
   company_id: string;
   collaborator_id: string;
+  template_id: string | null;
   title: string;
   description: string | null;
   instructions: string | null;
@@ -19,6 +21,7 @@ type InstanceRow = {
   status: TaskStatus;
   total_seconds: number;
   company: { name: string } | { name: string }[] | null;
+  template: { created_by: string } | { created_by: string }[] | null;
 };
 
 function first<T>(value: T | T[] | null): T | null {
@@ -39,7 +42,7 @@ export default async function ConsultorTarefaPage({
     supabase
       .from("task_instances")
       .select(
-        "id, company_id, collaborator_id, title, description, instructions, due_at, status, total_seconds, company:companies!task_instances_company_id_fkey(name)"
+        "id, company_id, collaborator_id, template_id, title, description, instructions, due_at, status, total_seconds, company:companies!task_instances_company_id_fkey(name), template:task_templates!task_instances_template_id_fkey(created_by)"
       )
       .eq("id", taskId)
       .maybeSingle(),
@@ -56,6 +59,24 @@ export default async function ConsultorTarefaPage({
   const collaborators = (collaboratorsData as PersonOption[]) ?? [];
   const meta = STATUS_META[task.status];
   const companyName = first(task.company)?.name ?? "Empresa";
+
+  // O consultor só pode excluir tarefas (moldes) que ele mesmo criou. Excluir
+  // remove o molde e todas as ocorrências; somamos o tempo de todas para o
+  // aviso. A RLS (tt_delete) reforça a permissão no banco.
+  const template = first(task.template);
+  const canDelete = !!task.template_id && template?.created_by === profile.id;
+
+  let deleteSeconds = 0;
+  let deleteCount = 0;
+  if (canDelete && task.template_id) {
+    const { data: siblings } = await supabase
+      .from("task_instances")
+      .select("total_seconds")
+      .eq("template_id", task.template_id);
+    const rows = (siblings as { total_seconds: number }[]) ?? [];
+    deleteSeconds = rows.reduce((sum, r) => sum + r.total_seconds, 0);
+    deleteCount = rows.length;
+  }
 
   return (
     <AppShell
@@ -97,6 +118,28 @@ export default async function ConsultorTarefaPage({
           collaborators={collaborators}
         />
       </section>
+
+      {canDelete && (
+        <section className="mt-6 rounded-2xl border border-red-300/60 bg-red-50 p-5 dark:border-red-500/30 dark:bg-red-500/10">
+          <h2 className="font-semibold text-red-800 dark:text-red-300">
+            Excluir tarefa
+          </h2>
+          <p className="mt-1 text-sm text-red-700 dark:text-red-300/80">
+            Remove a tarefa e todas as suas ocorrências (incluindo tempo
+            registrado e histórico) de todos os painéis. Esta ação não pode ser
+            desfeita.
+          </p>
+          <div className="mt-4">
+            <DeleteTaskButton
+              templateId={task.template_id!}
+              title={task.title}
+              totalSeconds={deleteSeconds}
+              instanceCount={deleteCount}
+              redirectTo={`/consultor/${companyId}`}
+            />
+          </div>
+        </section>
+      )}
     </AppShell>
   );
 }

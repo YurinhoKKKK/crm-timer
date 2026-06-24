@@ -3,18 +3,29 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { deleteTaskTemplate } from "../../actions";
+import { formatDuration } from "@/lib/format";
 
 export default function DeleteTaskButton({
   templateId,
   title,
+  totalSeconds = 0,
+  instanceCount = 1,
+  redirectTo = "/admin/tarefas",
 }: {
   templateId: string;
   title: string;
+  // Soma do tempo já registrado em todas as instâncias do molde.
+  totalSeconds?: number;
+  // Quantas instâncias (ocorrências) serão removidas junto.
+  instanceCount?: number;
+  redirectTo?: string;
 }) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const hasTime = totalSeconds > 0;
 
   async function handleDelete() {
     setError(null);
@@ -26,7 +37,7 @@ export default function DeleteTaskButton({
     }
 
     startTransition(() => {
-      router.push("/admin/tarefas");
+      router.push(redirectTo);
       router.refresh();
     });
   }
@@ -45,9 +56,18 @@ export default function DeleteTaskButton({
 
   return (
     <div className="space-y-3">
-      <p className="text-sm font-medium text-red-800 dark:text-red-300">
-        Confirma excluir o molde “{title}”?
-      </p>
+      {hasTime ? (
+        <p className="text-sm font-medium text-red-800 dark:text-red-300">
+          Esta tarefa tem {formatDuration(totalSeconds)} registrados
+          {instanceCount > 1 ? ` em ${instanceCount} ocorrências` : ""}. Apagar
+          removerá esse tempo permanentemente do total da empresa. Confirmar a
+          exclusão de “{title}”?
+        </p>
+      ) : (
+        <p className="text-sm font-medium text-red-800 dark:text-red-300">
+          Confirma excluir a tarefa “{title}”? Esta ação não pode ser desfeita.
+        </p>
+      )}
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       <div className="flex items-center gap-2">
         <button

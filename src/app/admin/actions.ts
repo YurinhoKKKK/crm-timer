@@ -369,8 +369,10 @@ export async function updateTaskTemplate(
   return { error: null };
 }
 
-// Exclui um task_template. As instâncias já geradas permanecem (o banco usa
-// ON DELETE SET NULL em task_instances.template_id), apenas desvinculadas.
+// Exclui um task_template e, em cascata (migration 0008), todas as suas
+// task_instances, time_entries e activity_log relacionados — some de todos
+// os painéis e dos números do dashboard/resumo. A RLS (tt_delete) garante
+// que admin exclui qualquer um e consultor só os que ele criou.
 export async function deleteTaskTemplate(
   templateId: string
 ): Promise<{ error: string | null }> {
@@ -392,6 +394,9 @@ export async function deleteTaskTemplate(
     return { error: error.message };
   }
 
+  // Reflete nas listagens e nos números agregados (dashboard, instâncias).
+  revalidatePath("/admin");
   revalidatePath("/admin/tarefas");
+  revalidatePath("/admin/instancias");
   return { error: null };
 }

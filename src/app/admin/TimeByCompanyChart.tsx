@@ -17,12 +17,10 @@ export type CompanyTime = {
   seconds: number;
 };
 
-function formatHours(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  if (hours === 0 && minutes === 0) return "0min";
-  if (hours === 0) return `${minutes}min`;
-  return `${hours}h ${minutes}min`;
+// Tooltip: minutos quando < 1h, horas com 1 casa quando >= 1h.
+function formatSmart(seconds: number): string {
+  if (seconds < 3600) return `${Math.round(seconds / 60)}min`;
+  return `${(seconds / 3600).toFixed(1)}h`;
 }
 
 // Observa a classe `dark` no <html> para recolorir o gráfico ao trocar de tema.
@@ -54,11 +52,22 @@ export default function TimeByCompanyChart({ data }: { data: CompanyTime[] }) {
   const axis = dark ? "#9AA2AC" : "#5B636C";
   const cursor = dark ? "rgba(255,255,255,0.05)" : "#F0F0EE";
 
+  // Escolhe a unidade do eixo conforme o maior valor da série: quando ninguém
+  // passa de 1h, o eixo fica em minutos (evita ticks como 0.03h).
+  const maxSeconds = data.reduce((m, d) => Math.max(m, d.seconds), 0);
+  const useHours = maxSeconds >= 3600;
+  const divisor = useHours ? 3600 : 60;
+
   const chartData = data.map((d) => ({
     name: d.name,
-    hours: Number((d.seconds / 3600).toFixed(2)),
+    value: d.seconds / divisor,
     seconds: d.seconds,
   }));
+
+  const formatTick = (v: number): string => {
+    if (useHours) return v % 1 === 0 ? String(v) : v.toFixed(1);
+    return String(Math.round(v));
+  };
 
   return (
     <div className="h-72 w-full">
@@ -83,8 +92,9 @@ export default function TimeByCompanyChart({ data }: { data: CompanyTime[] }) {
             tickLine={false}
             axisLine={false}
             width={40}
+            tickFormatter={formatTick}
             label={{
-              value: "horas",
+              value: useHours ? "horas" : "minutos",
               angle: -90,
               position: "insideLeft",
               fill: axis,
@@ -104,11 +114,11 @@ export default function TimeByCompanyChart({ data }: { data: CompanyTime[] }) {
             labelStyle={{ color: "var(--fg)", fontWeight: 600 }}
             itemStyle={{ color: "var(--fg-muted)" }}
             formatter={(_value, _name, item) => [
-              formatHours((item?.payload as { seconds: number }).seconds),
+              formatSmart((item?.payload as { seconds: number }).seconds),
               "Tempo",
             ]}
           />
-          <Bar dataKey="hours" radius={[6, 6, 0, 0]} maxBarSize={56}>
+          <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={56}>
             {chartData.map((entry) => (
               <Cell key={entry.name} fill="#3145FF" />
             ))}

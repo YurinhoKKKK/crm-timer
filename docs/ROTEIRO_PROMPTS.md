@@ -325,7 +325,7 @@ Teste cada busca e filtro.
 
 ---
 
-## PASSO 12 — Tela de tarefas nos painéis de consultor e colaborador
+## PASSO 12 — Tela de tarefas nos painéis de consultor e colaborador (Feito)
 
 ```
 Hoje só o painel admin tem uma tela com a lista geral de tarefas. Crie uma 

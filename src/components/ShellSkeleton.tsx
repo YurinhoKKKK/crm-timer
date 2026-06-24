@@ -12,8 +12,8 @@ type Role = "admin" | "consultor" | "colaborador";
 // AppShell), só para o esqueleto ter a altura certa.
 const NAV_COUNT: Record<Role, number> = {
   admin: 4,
-  consultor: 1,
-  colaborador: 1,
+  consultor: 2,
+  colaborador: 2,
 };
 
 function Bar({ className = "" }: { className?: string }) {

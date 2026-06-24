@@ -72,9 +72,11 @@ const NAV: Record<Role, NavItem[]> = {
   ],
   consultor: [
     { href: "/consultor", label: "Painel", icon: <Icon>{ic.briefcase}</Icon> },
+    { href: "/consultor/tarefas", label: "Tarefas", icon: <Icon>{ic.tasks}</Icon> },
   ],
   colaborador: [
     { href: "/colaborador", label: "Minhas empresas", icon: <Icon>{ic.building}</Icon> },
+    { href: "/colaborador/tarefas", label: "Minhas tarefas", icon: <Icon>{ic.tasks}</Icon> },
   ],
 };
 

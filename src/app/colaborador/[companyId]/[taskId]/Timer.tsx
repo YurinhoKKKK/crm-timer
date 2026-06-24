@@ -159,7 +159,7 @@ export default function Timer({
     <section className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
       {/* Mostrador do cronômetro */}
       <div
-        className={`relative flex flex-col items-center px-6 py-10 transition-colors ${
+        className={`relative flex flex-col items-center px-4 py-10 transition-colors sm:px-6 ${
           running
             ? "bg-gradient-to-b from-brand-tint to-surface"
             : "bg-surface"
@@ -169,7 +169,7 @@ export default function Timer({
           Tempo
         </span>
         <span
-          className="mt-2 font-mono text-6xl font-semibold tabular-nums text-risd sm:text-7xl"
+          className="mt-2 font-mono text-5xl font-semibold tabular-nums text-risd sm:text-6xl md:text-7xl"
           aria-live="off"
         >
           {formatClock(elapsed)}
@@ -190,13 +190,13 @@ export default function Timer({
 
       <div className="border-t border-line p-6">
         {!finishing ? (
-          <div className="flex flex-wrap items-center justify-center gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-center">
             {!running ? (
               <button
                 type="button"
                 onClick={handleStart}
                 disabled={busy}
-                className="rounded-xl bg-risd px-7 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-chrysler focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-xl bg-risd px-7 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-chrysler focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
               >
                 {base > 0 ? "Retomar" : "Iniciar"}
               </button>
@@ -205,7 +205,7 @@ export default function Timer({
                 type="button"
                 onClick={handlePause}
                 disabled={busy}
-                className="rounded-xl border border-risd bg-surface px-7 py-3 text-sm font-semibold text-risd shadow-sm transition hover:bg-brand-tint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-xl border border-risd bg-surface px-7 py-3 text-sm font-semibold text-risd shadow-sm transition hover:bg-brand-tint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
               >
                 Pausar
               </button>
@@ -217,7 +217,7 @@ export default function Timer({
                 setFinishing(true);
               }}
               disabled={busy}
-              className="rounded-xl bg-chrysler px-7 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-chrysler/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chrysler focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-xl bg-chrysler px-7 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-chrysler/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chrysler focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
             >
               Finalizar
             </button>
@@ -241,12 +241,12 @@ export default function Timer({
               autoFocus
             />
 
-            <div className="mt-4 flex flex-wrap gap-3">
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3">
               <button
                 type="button"
                 onClick={() => handleFinish(true)}
                 disabled={busy || note.trim().length === 0}
-                className="rounded-xl bg-chrysler px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-chrysler/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chrysler focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-xl bg-chrysler px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-chrysler/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chrysler focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
               >
                 Finalizar e enviar ao WhatsApp
               </button>
@@ -254,7 +254,7 @@ export default function Timer({
                 type="button"
                 onClick={() => handleFinish(false)}
                 disabled={busy || note.trim().length === 0}
-                className="rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-medium text-fg shadow-sm transition hover:border-risd/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm font-medium text-fg shadow-sm transition hover:border-risd/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
               >
                 Finalizar e apenas salvar no registro
               </button>
@@ -262,7 +262,7 @@ export default function Timer({
                 type="button"
                 onClick={() => setFinishing(false)}
                 disabled={busy}
-                className="rounded-xl px-4 py-2.5 text-sm text-fg-muted transition hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+                className="w-full rounded-xl px-4 py-3 text-sm text-fg-muted transition hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface sm:w-auto"
               >
                 Cancelar
               </button>

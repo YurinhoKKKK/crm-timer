@@ -75,7 +75,7 @@ export default async function ColaboradorPage() {
 
   return (
     <AppShell
-      user={{ name: profile.full_name, role: "colaborador" }}
+      user={{ name: profile.full_name, role: "colaborador", avatarUrl: profile.avatarUrl }}
       title="Minhas empresas"
       subtitle={`Bem-vindo, ${profile.full_name}`}
     >

@@ -66,7 +66,7 @@ export default async function ConsultorTarefasPage() {
 
   return (
     <AppShell
-      user={{ name: profile.full_name, role: "consultor" }}
+      user={{ name: profile.full_name, role: "consultor", avatarUrl: profile.avatarUrl }}
       title="Tarefas"
       subtitle="Todas as tarefas das suas empresas."
       back={{ href: "/consultor", label: "Painel" }}

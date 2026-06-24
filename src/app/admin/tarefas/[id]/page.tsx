@@ -51,7 +51,7 @@ export default async function TarefaDetailPage({
 
   return (
     <AppShell
-      user={{ name: profile.full_name, role: "admin" }}
+      user={{ name: profile.full_name, role: "admin", avatarUrl: profile.avatarUrl }}
       title={template.title}
       back={{ href: "/admin/tarefas", label: "Tarefas" }}
     >

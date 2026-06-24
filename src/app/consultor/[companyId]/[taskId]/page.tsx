@@ -80,7 +80,7 @@ export default async function ConsultorTarefaPage({
 
   return (
     <AppShell
-      user={{ name: profile.full_name, role: "consultor" }}
+      user={{ name: profile.full_name, role: "consultor", avatarUrl: profile.avatarUrl }}
       title={task.title}
       back={{ href: `/consultor/${companyId}`, label: companyName }}
     >

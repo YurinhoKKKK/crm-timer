@@ -17,14 +17,14 @@ export default async function UsuariosPage() {
 
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, full_name, email, role, created_at, updated_at");
+    .select("id, full_name, email, role, avatar_path, created_at, updated_at");
 
   const users = sortProfiles((data as Profile[]) ?? []);
   const pendingCount = users.filter((u) => u.role === "pending").length;
 
   return (
     <AppShell
-      user={{ name: profile.full_name, role: "admin" }}
+      user={{ name: profile.full_name, role: "admin", avatarUrl: profile.avatarUrl }}
       title="Gestão de usuários"
       subtitle="Atribua ou altere o cargo de cada pessoa. A mudança vale no próximo acesso dela."
       back={{ href: "/admin", label: "Dashboard" }}

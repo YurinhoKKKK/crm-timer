@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
 import { useRouter } from "next/navigation";
 import ThemeToggle from "./ThemeToggle";
+import Avatar from "./Avatar";
 
 type Role = "admin" | "consultor" | "colaborador";
 
@@ -151,26 +152,20 @@ function SidebarFooter({ user }: { user: ShellUser }) {
     router.refresh();
   }
 
-  const initials = (user.name || "?")
-    .split(" ")
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-
   return (
     <div className="border-t border-[color:var(--sidebar-border)] pt-4">
-      <div className="flex items-center gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15 text-xs font-semibold text-white ring-1 ring-inset ring-white/20">
-          {initials}
-        </span>
+      <Link
+        href="/perfil"
+        className="flex items-center gap-3 rounded-lg p-1.5 transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+      >
+        <Avatar name={user.name} url={user.avatarUrl} variant="onDark" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-white">{user.name}</p>
           <p className="text-[11px] uppercase tracking-wide text-white/55">
             {ROLE_LABEL[user.role]}
           </p>
         </div>
-      </div>
+      </Link>
       <button
         onClick={logout}
         className="mt-3 w-full rounded-lg border border-[color:var(--sidebar-border)] px-3 py-2 text-sm font-medium text-white/80 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
@@ -181,7 +176,7 @@ function SidebarFooter({ user }: { user: ShellUser }) {
   );
 }
 
-export type ShellUser = { name: string; role: Role };
+export type ShellUser = { name: string; role: Role; avatarUrl?: string | null };
 
 export default function AppShell({
   user,

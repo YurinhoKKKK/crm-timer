@@ -72,7 +72,7 @@ export default async function ConsultorPage() {
 
   return (
     <AppShell
-      user={{ name: profile.full_name, role: "consultor" }}
+      user={{ name: profile.full_name, role: "consultor", avatarUrl: profile.avatarUrl }}
       title="Painel do Consultor"
       subtitle={`Bem-vindo, ${profile.full_name}`}
     >

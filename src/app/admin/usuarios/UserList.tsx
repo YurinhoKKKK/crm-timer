@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import type { Profile, Role } from "@/lib/types";
 import RoleSelect from "./RoleSelect";
+import Avatar from "@/components/Avatar";
+import { avatarUrl } from "@/lib/avatar";
 import {
   FilterBar,
   SearchBox,
@@ -77,25 +79,32 @@ export default function UserList({
                     : "border-line bg-surface"
                 }`}
               >
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-fg">
-                      {u.full_name || "(sem nome)"}
-                    </span>
-                    {isPending ? (
-                      <span className="rounded-full bg-risd px-2 py-0.5 text-xs font-medium text-white">
-                        Aguardando liberação
+                <div className="flex min-w-0 items-center gap-3">
+                  <Avatar
+                    name={u.full_name || u.email}
+                    url={avatarUrl(u.avatar_path)}
+                    size={40}
+                  />
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium text-fg">
+                        {u.full_name || "(sem nome)"}
                       </span>
-                    ) : (
-                      <span className="rounded-full border border-line bg-surface-2 px-2 py-0.5 text-xs text-fg-muted">
-                        {ROLE_LABEL[u.role]}
-                      </span>
-                    )}
-                    {isSelf && (
-                      <span className="text-xs text-fg-subtle">(você)</span>
-                    )}
+                      {isPending ? (
+                        <span className="rounded-full bg-risd px-2 py-0.5 text-xs font-medium text-white">
+                          Aguardando liberação
+                        </span>
+                      ) : (
+                        <span className="rounded-full border border-line bg-surface-2 px-2 py-0.5 text-xs text-fg-muted">
+                          {ROLE_LABEL[u.role]}
+                        </span>
+                      )}
+                      {isSelf && (
+                        <span className="text-xs text-fg-subtle">(você)</span>
+                      )}
+                    </div>
+                    <p className="truncate text-sm text-fg-muted">{u.email}</p>
                   </div>
-                  <p className="truncate text-sm text-fg-muted">{u.email}</p>
                 </div>
 
                 <RoleSelect userId={u.id} current={u.role} />

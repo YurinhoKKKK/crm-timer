@@ -77,7 +77,7 @@ export default async function TarefasPage() {
 
   return (
     <AppShell
-      user={{ name: profile.full_name, role: "admin" }}
+      user={{ name: profile.full_name, role: "admin", avatarUrl: profile.avatarUrl }}
       title="Cadastro de tarefas"
       subtitle="Crie tarefas únicas ou diárias. Elas aparecem automaticamente para os colaboradores."
       back={{ href: "/admin", label: "Dashboard" }}

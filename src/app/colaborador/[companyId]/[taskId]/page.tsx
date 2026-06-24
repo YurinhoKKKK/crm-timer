@@ -68,7 +68,7 @@ export default async function TarefaPage({
 
   return (
     <AppShell
-      user={{ name: profile.full_name, role: "colaborador" }}
+      user={{ name: profile.full_name, role: "colaborador", avatarUrl: profile.avatarUrl }}
       title={task.title}
       back={{
         href: `/colaborador/${companyId}`,

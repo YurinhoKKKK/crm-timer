@@ -33,7 +33,7 @@ export default async function ColaboradorEmpresaPage({
 
   return (
     <AppShell
-      user={{ name: profile.full_name, role: "colaborador" }}
+      user={{ name: profile.full_name, role: "colaborador", avatarUrl: profile.avatarUrl }}
       title={company.name}
       back={{ href: "/colaborador", label: "Minhas empresas" }}
     >

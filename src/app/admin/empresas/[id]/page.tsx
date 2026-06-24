@@ -68,7 +68,7 @@ export default async function EmpresaDetailPage({
 
   return (
     <AppShell
-      user={{ name: profile.full_name, role: "admin" }}
+      user={{ name: profile.full_name, role: "admin", avatarUrl: profile.avatarUrl }}
       title={company.name}
       back={{ href: "/admin/empresas", label: "Empresas" }}
     >

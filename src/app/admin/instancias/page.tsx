@@ -90,7 +90,7 @@ export default async function InstanciasPage({
 
   return (
     <AppShell
-      user={{ name: profile.full_name, role: "admin" }}
+      user={{ name: profile.full_name, role: "admin", avatarUrl: profile.avatarUrl }}
       title={title}
       subtitle={`${rows.length} tarefa${rows.length === 1 ? "" : "s"}`}
       back={{ href: `/admin?periodo=${period}`, label: "Dashboard" }}

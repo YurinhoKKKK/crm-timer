@@ -79,7 +79,7 @@ export default async function ConsultorEmpresaPage({
 
   return (
     <AppShell
-      user={{ name: profile.full_name, role: "consultor" }}
+      user={{ name: profile.full_name, role: "consultor", avatarUrl: profile.avatarUrl }}
       title={company.name}
       back={{ href: "/consultor", label: "Painel" }}
     >

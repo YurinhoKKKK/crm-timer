@@ -347,7 +347,7 @@ outro colaborador).
 
 ---
 
-## PASSO 13 — Perfil de usuário com foto
+## PASSO 13 — Perfil de usuário com foto (Feito)
 
 ```
 Crie uma tela de perfil acessível por qualquer usuário logado (admin, 

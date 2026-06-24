@@ -62,7 +62,7 @@ export default async function EmpresasPage() {
 
   return (
     <AppShell
-      user={{ name: profile.full_name, role: "admin" }}
+      user={{ name: profile.full_name, role: "admin", avatarUrl: profile.avatarUrl }}
       title="Gestão de empresas"
       subtitle="Cadastre clientes, vincule o grupo de WhatsApp e atribua os consultores responsáveis."
       back={{ href: "/admin", label: "Dashboard" }}

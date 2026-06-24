@@ -2,6 +2,8 @@ import Link from "next/link";
 import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import type { TaskStatus } from "@/lib/types";
+import Avatar from "@/components/Avatar";
+import { avatarUrl } from "@/lib/avatar";
 import PeriodFilter, { type Period } from "./PeriodFilter";
 import TimeByCompanyChart, { type CompanyTime } from "./TimeByCompanyChart";
 
@@ -14,7 +16,12 @@ type InstanceRow = {
 };
 
 type Named = { id: string; name: string };
-type Person = { id: string; full_name: string; email: string };
+type Person = {
+  id: string;
+  full_name: string;
+  email: string;
+  avatar_path: string | null;
+};
 
 const PERIODS: Period[] = ["hoje", "7d", "30d", "tudo"];
 
@@ -93,7 +100,7 @@ export default async function AdminPage({
     supabase.from("companies").select("id, name"),
     supabase
       .from("profiles")
-      .select("id, full_name, email")
+      .select("id, full_name, email, avatar_path")
       .eq("role", "colaborador"),
   ]);
 
@@ -168,6 +175,7 @@ export default async function AdminPage({
       return {
         id: p.id,
         name: p.full_name || p.email,
+        avatarPath: p.avatar_path,
         seconds: stats.seconds,
         total: stats.total,
         done: stats.done,
@@ -179,7 +187,7 @@ export default async function AdminPage({
 
   return (
     <AppShell
-      user={{ name: profile.full_name, role: "admin" }}
+      user={{ name: profile.full_name, role: "admin", avatarUrl: profile.avatarUrl }}
       title="Dashboard"
       subtitle={`Bem-vindo, ${profile.full_name}`}
     >
@@ -290,7 +298,14 @@ export default async function AdminPage({
                         className="border-b border-line/60 last:border-0"
                       >
                         <td className="py-3 pr-4 font-medium text-fg">
-                          {r.name}
+                          <div className="flex items-center gap-2.5">
+                            <Avatar
+                              name={r.name}
+                              url={avatarUrl(r.avatarPath)}
+                              size={28}
+                            />
+                            <span>{r.name}</span>
+                          </div>
                         </td>
                         <td className="py-3 text-right font-mono tabular-nums text-fg-muted">
                           {formatDuration(r.seconds)}

@@ -60,7 +60,7 @@ export default async function ColaboradorTarefasPage() {
 
   return (
     <AppShell
-      user={{ name: profile.full_name, role: "colaborador" }}
+      user={{ name: profile.full_name, role: "colaborador", avatarUrl: profile.avatarUrl }}
       title="Minhas tarefas"
       subtitle="Todas as suas tarefas, de todas as empresas."
       back={{ href: "/colaborador", label: "Minhas empresas" }}

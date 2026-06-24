@@ -305,7 +305,7 @@ Meça e me diga se melhorou.
 
 ---
 
-## PASSO 11 — Busca e filtros (tarefas, empresas, usuários)
+## PASSO 11 — Busca e filtros (tarefas, empresas, usuários) (Feito)
 
 ```
 Adicione barra de busca e filtros nas telas de listagem do painel admin:

@@ -3,6 +3,7 @@ import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import type { Company } from "@/lib/types";
 import NewCompanyForm from "./NewCompanyForm";
+import CompanyList, { type CompanyItem } from "./CompanyList";
 
 type ConsultantOption = { id: string; full_name: string; email: string };
 
@@ -48,6 +49,17 @@ export default async function EmpresasPage() {
     consultantsByCompany.set(link.company_id, list);
   }
 
+  const companyItems: CompanyItem[] = companies.map((c) => ({
+    id: c.id,
+    name: c.name,
+    whatsappGroupName: c.whatsapp_group_name,
+    whatsappContactId: c.whatsapp_contact_id,
+    consultants: (consultantsByCompany.get(c.id) ?? []).map((x) => ({
+      id: x.id,
+      name: x.full_name || x.email,
+    })),
+  }));
+
   return (
     <AppShell
       user={{ name: profile.full_name, role: "admin" }}
@@ -72,54 +84,14 @@ export default async function EmpresasPage() {
         <div className="rounded-xl border border-red-300/60 bg-red-50 p-6 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
           Erro ao carregar empresas: {companiesError.message}
         </div>
-      ) : companies.length === 0 ? (
-        <div className="rounded-2xl border border-line bg-surface p-12 text-center text-fg-subtle shadow-card">
-          Nenhuma empresa cadastrada ainda.
-        </div>
       ) : (
-        <ul className="space-y-3">
-          {companies.map((company) => {
-            const linked = consultantsByCompany.get(company.id) ?? [];
-            return (
-              <li key={company.id}>
-                <Link
-                  href={`/admin/empresas/${company.id}`}
-                  className="group block rounded-xl border border-line bg-surface p-4 shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium text-fg group-hover:text-risd">
-                      {company.name}
-                    </span>
-                    <span className="text-fg-subtle transition group-hover:translate-x-0.5 group-hover:text-risd">
-                      →
-                    </span>
-                  </div>
-                  {company.whatsapp_group_name || company.whatsapp_contact_id ? (
-                    <span className="mt-1 block text-sm text-fg-muted">
-                      WhatsApp: {company.whatsapp_group_name ?? "(sem nome)"}
-                    </span>
-                  ) : (
-                    <span className="mt-1 block text-sm text-fg-subtle">
-                      Sem grupo de WhatsApp vinculado.
-                    </span>
-                  )}
-                  {linked.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {linked.map((c) => (
-                        <span
-                          key={c.id}
-                          className="rounded-full border border-line bg-surface-2 px-2 py-0.5 text-xs text-fg-muted"
-                        >
-                          {c.full_name || c.email}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+        <CompanyList
+          companies={companyItems}
+          consultores={consultores.map((c) => ({
+            value: c.id,
+            label: c.full_name || c.email,
+          }))}
+        />
       )}
     </AppShell>
   );

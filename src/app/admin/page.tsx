@@ -295,17 +295,28 @@ export default async function AdminPage({
                     {collaboratorRows.map((r) => (
                       <tr
                         key={r.id}
-                        className="border-b border-line/60 last:border-0"
+                        className="group border-b border-line/60 transition last:border-0 hover:bg-surface-2/50"
                       >
                         <td className="py-3 pr-4 font-medium text-fg">
-                          <div className="flex items-center gap-2.5">
+                          <Link
+                            href={`/admin/colaboradores/${r.id}?periodo=${period}`}
+                            className="flex items-center gap-2.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+                          >
                             <Avatar
                               name={r.name}
                               url={avatarUrl(r.avatarPath)}
                               size={28}
                             />
-                            <span>{r.name}</span>
-                          </div>
+                            <span className="group-hover:text-risd">
+                              {r.name}
+                            </span>
+                            <span
+                              aria-hidden="true"
+                              className="text-fg-subtle transition group-hover:translate-x-0.5 group-hover:text-risd"
+                            >
+                              →
+                            </span>
+                          </Link>
                         </td>
                         <td className="py-3 text-right font-mono tabular-nums text-fg-muted">
                           {formatDuration(r.seconds)}

@@ -35,6 +35,7 @@ const STATUS_OPTIONS: SelectOption[] = (
 // painéis. O escopo dos dados é garantido pela query/RLS de cada página; aqui
 // só filtramos em memória (instantâneo). `panel` define a rota ao clicar e se
 // o nome do colaborador aparece (no painel do colaborador é sempre ele mesmo).
+// No painel "admin" (detalhe do colaborador) os itens não são clicáveis.
 export default function TaskInstanceList({
   items,
   panel,
@@ -42,7 +43,7 @@ export default function TaskInstanceList({
   collaborators,
 }: {
   items: TaskInstanceItem[];
-  panel: "consultor" | "colaborador";
+  panel: "consultor" | "colaborador" | "admin";
   companies: SelectOption[];
   collaborators?: SelectOption[];
 }) {
@@ -120,37 +121,52 @@ export default function TaskInstanceList({
         <ul className="space-y-3">
           {filtered.map((t) => {
             const meta = STATUS_META[t.status];
+            const inner = (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`font-medium text-fg ${
+                      panel === "admin" ? "" : "group-hover:text-risd"
+                    }`}
+                  >
+                    {t.title}
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${meta.badge}`}
+                  >
+                    <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
+                    {meta.label}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-fg-muted">
+                  {t.companyName}
+                  {panel === "consultor" ? ` · ${t.collaboratorName}` : ""}
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-fg-subtle">
+                  <span>Prazo: {formatDue(t.due_at)}</span>
+                  <span>
+                    Tempo:{" "}
+                    <span className="font-mono tabular-nums">
+                      {formatDuration(t.total_seconds)}
+                    </span>
+                  </span>
+                </div>
+              </>
+            );
             return (
               <li key={t.id}>
-                <Link
-                  href={`/${panel}/${t.companyId}/${t.id}`}
-                  className="group block rounded-xl border border-line bg-surface p-4 shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-fg group-hover:text-risd">
-                      {t.title}
-                    </span>
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${meta.badge}`}
-                    >
-                      <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
-                      {meta.label}
-                    </span>
+                {panel === "admin" ? (
+                  <div className="block rounded-xl border border-line bg-surface p-4 shadow-card">
+                    {inner}
                   </div>
-                  <p className="mt-1 text-sm text-fg-muted">
-                    {t.companyName}
-                    {panel === "consultor" ? ` · ${t.collaboratorName}` : ""}
-                  </p>
-                  <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-fg-subtle">
-                    <span>Prazo: {formatDue(t.due_at)}</span>
-                    <span>
-                      Tempo:{" "}
-                      <span className="font-mono tabular-nums">
-                        {formatDuration(t.total_seconds)}
-                      </span>
-                    </span>
-                  </div>
-                </Link>
+                ) : (
+                  <Link
+                    href={`/${panel}/${t.companyId}/${t.id}`}
+                    className="group block rounded-xl border border-line bg-surface p-4 shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+                  >
+                    {inner}
+                  </Link>
+                )}
               </li>
             );
           })}

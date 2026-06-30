@@ -39,7 +39,11 @@ export default async function TarefaPage({
   params: { companyId: string; taskId: string };
 }) {
   const { companyId, taskId } = params;
-  const { supabase, profile } = await guardRole(["colaborador"]);
+  const { supabase, profile } = await guardRole([
+    "colaborador",
+    "admin",
+    "consultor",
+  ]);
 
   const { data: taskData } = await supabase
     .from("task_instances")
@@ -68,7 +72,11 @@ export default async function TarefaPage({
 
   return (
     <AppShell
-      user={{ name: profile.full_name, role: "colaborador", avatarUrl: profile.avatarUrl }}
+      user={{
+        name: profile.full_name,
+        role: profile.role as "admin" | "consultor" | "colaborador",
+        avatarUrl: profile.avatarUrl,
+      }}
       title={task.title}
       back={{
         href: `/colaborador/${companyId}`,

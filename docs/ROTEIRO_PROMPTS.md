@@ -370,6 +370,73 @@ aparece nos lugares onde o nome já aparece.
 
 ---
 
+## PASSO 14 — Autoatribuição: admin e consultor como responsáveis (Feito)
+
+Contexto: hoje o sistema assume papéis separados (admin gerencia, consultor
+atende clientes, colaborador executa). Este passo permite que admin e
+consultor também ASSUMAM trabalho operacional, sem perder suas funções de
+gestão. É uma mudança que toca a fundação (RLS), então exige cuidado e
+testes mais rigorosos que o normal.
+
+```
+Quero permitir que admin e consultor também assumam trabalho operacional,
+mantendo suas funções de gestão. Implemente com cuidado, pois isso altera
+suposições da fundação (RLS).
+
+REGRAS:
+- Admin pode se atribuir como responsável de empresas (igual a um consultor,
+  gravando em company_consultants) E como responsável de tarefas (igual a um
+  colaborador, no collaborator_id da task).
+- Consultor pode se atribuir como responsável de TAREFAS apenas (não de
+  empresas — ele já recebe empresas do admin).
+- Quando admin ou consultor executa uma tarefa, ele usa o TIMER exatamente
+  como um colaborador (iniciar/pausar/finalizar, resumo, envio ao WhatsApp,
+  registro de tempo) — reaproveite integralmente a tela e a lógica do timer
+  que já existem, sem duplicar.
+
+INTERFACE — crie uma área "Meu Trabalho" no painel do admin (e a equivalente
+no consultor):
+- Uma seção separada das telas de gestão, mostrando:
+  (a) as empresas atribuídas diretamente a ele (no caso do admin), e
+  (b) as tarefas atribuídas diretamente a ele para executar.
+- Reaproveite os componentes do painel do colaborador (cards de empresa com
+  progressão, lista de tarefas, tela da tarefa com timer) para essa área —
+  o comportamento de execução é idêntico ao do colaborador.
+- Nas telas de cadastro de tarefa, o admin/consultor deve poder selecionar
+  a si mesmo no campo de responsável/colaborador. No cadastro/edição de
+  empresa, o admin deve poder se incluir como consultor responsável.
+
+SEGURANÇA (RLS) — atenção redobrada:
+- Hoje as políticas assumem que admin não é colaborador de nada. Ajuste as
+  políticas para que admin/consultor enxerguem e operem as tarefas/empresas
+  atribuídas a eles como executores, SEM quebrar o que já veem como gestores
+  e SEM abrir acesso indevido a dados de outros.
+- Garanta que um consultor que se autoatribui uma tarefa só veja a própria
+  tarefa, não as de outros colaboradores da mesma empresa (a regra de
+  isolamento por colaborador continua valendo).
+- Teste explicitamente: admin executando uma tarefa, consultor executando
+  uma tarefa, e confirme que o tempo registrado aparece corretamente nos
+  dashboards e resumos (o admin/consultor executor deve contar como quem
+  gastou o tempo).
+
+Mantenha a identidade visual da marca e a responsividade.
+Ao terminar, me mostre a área "Meu Trabalho" do admin e confirme, item a
+item, que as regras de permissão acima foram respeitadas.
+```
+
+### Checklist de validação (faça você mesmo, com rigor extra)
+- Abra o painel admin e confirme que "Meu Trabalho" aparece separado das
+  telas de gestão (Usuários, Empresas, Tarefas, Dashboard).
+- Autoatribua uma empresa e uma tarefa a si mesmo e veja se aparecem lá.
+- Execute uma tarefa pelo timer como admin e confirme que o tempo conta nos
+  dashboards.
+- Logue como consultor e confirme que ele consegue se autoatribuir tarefa,
+  mas NÃO empresa.
+- Confirme que um colaborador comum NÃO vê as tarefas que o admin atribuiu
+  a si mesmo (isolamento preservado — este é o teste mais importante).
+
+---
+
 ## Dicas gerais ao usar o Claude Code
 
 - **Teste cada passo no navegador** antes de avançar. Se algo quebrar, 

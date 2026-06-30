@@ -22,6 +22,8 @@ Sistema de gestão de tarefas e tempo, com três cargos e três painéis. O flux
 
 Novos usuários nascem como `pending` e só acessam após o admin atribuir um cargo.
 
+**Autoatribuição (Passo 14):** além da gestão, admin e consultor podem assumir trabalho operacional. O admin pode se atribuir como responsável de empresas (em `company_consultants`) e de tarefas (no `collaborator_id`); o consultor pode se atribuir como responsável de tarefas apenas. Quando executam, usam o mesmo timer do colaborador, via a área **"Meu Trabalho"** (reaproveita as telas `/colaborador/*`). Não exigiu migration: o RLS já permitia executor de qualquer cargo, e o isolamento por colaborador (`ti_select`: `collaborator_id = auth.uid()`) continua impedindo que um colaborador veja a tarefa que o admin/consultor atribuiu a si.
+
 ---
 
 ## 3. Modelo de dados (já aplicado no Supabase)

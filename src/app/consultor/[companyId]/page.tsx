@@ -3,6 +3,7 @@ import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import type { TaskStatus } from "@/lib/types";
 import NewTaskForm from "@/app/admin/tarefas/NewTaskForm";
+import { withSelf } from "@/lib/people";
 import ConsultorTaskList, {
   type ConsultorTaskItem,
 } from "./ConsultorTaskList";
@@ -56,7 +57,11 @@ export default async function ConsultorEmpresaPage({
   const company = companyData as CompanyRow | null;
   if (!company) notFound();
 
-  const collaborators = (collaboratorsData as PersonOption[]) ?? [];
+  // O consultor pode se atribuir como responsável nesta empresa (Passo 14).
+  const collaborators = withSelf(
+    (collaboratorsData as PersonOption[]) ?? [],
+    profile
+  );
 
   const rows = (tasksData as InstanceRow[]) ?? [];
   const tasks: ConsultorTaskItem[] = rows.map((r) => {

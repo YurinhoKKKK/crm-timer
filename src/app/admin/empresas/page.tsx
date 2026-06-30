@@ -4,6 +4,7 @@ import AppShell from "@/components/AppShell";
 import type { Company } from "@/lib/types";
 import NewCompanyForm from "./NewCompanyForm";
 import CompanyList, { type CompanyItem } from "./CompanyList";
+import { withSelf } from "@/lib/people";
 
 type ConsultantOption = { id: string; full_name: string; email: string };
 
@@ -35,7 +36,8 @@ export default async function EmpresasPage() {
     ]);
 
   const companies = (companiesData as Company[]) ?? [];
-  const consultores = (consultoresData as ConsultantOption[]) ?? [];
+  // O admin pode se incluir como consultor responsável de uma empresa (Passo 14).
+  const consultores = withSelf((consultoresData as ConsultantOption[]) ?? [], profile);
 
   // Mapa empresa → consultores vinculados.
   const consultantsByCompany = new Map<string, ConsultantOption[]>();

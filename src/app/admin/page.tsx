@@ -98,10 +98,10 @@ export default async function AdminPage({
   ] = await Promise.all([
     instancesQuery,
     supabase.from("companies").select("id, name"),
-    supabase
-      .from("profiles")
-      .select("id, full_name, email, avatar_path")
-      .eq("role", "colaborador"),
+    // Todos os perfis (não só role=colaborador): admin/consultor que executam
+    // tarefas também contam como responsáveis pelo tempo (Passo 14). Os que não
+    // executaram nada são filtrados adiante por `total > 0`.
+    supabase.from("profiles").select("id, full_name, email, avatar_path"),
   ]);
 
   const instances = (instancesData as InstanceRow[]) ?? [];
@@ -274,18 +274,18 @@ export default async function AdminPage({
           {/* Resumo por colaborador */}
           <section className="mb-2 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
             <h3 className="mb-4 text-sm font-semibold text-fg">
-              Resumo por colaborador
+              Resumo por responsável
             </h3>
             {collaboratorRows.length === 0 ? (
               <p className="py-6 text-center text-sm text-fg-subtle">
-                Nenhuma atividade de colaborador no período.
+                Nenhuma atividade registrada no período.
               </p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-fg-subtle">
-                      <th className="pb-3 font-medium">Colaborador</th>
+                      <th className="pb-3 font-medium">Responsável</th>
                       <th className="pb-3 text-right font-medium">Tempo</th>
                       <th className="pb-3 text-right font-medium">Tarefas</th>
                       <th className="pb-3 pl-4 font-medium">Concluídas</th>

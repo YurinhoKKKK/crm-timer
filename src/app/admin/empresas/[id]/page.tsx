@@ -6,6 +6,7 @@ import CompanyConsultants from "../CompanyConsultants";
 import CompanyEditor from "./CompanyEditor";
 import DeleteCompanyButton from "./DeleteCompanyButton";
 import NewTaskForm from "@/app/admin/tarefas/NewTaskForm";
+import { withSelf } from "@/lib/people";
 
 type ConsultantOption = { id: string; full_name: string; email: string };
 type CollaboratorOption = { id: string; full_name: string; email: string };
@@ -58,8 +59,13 @@ export default async function EmpresaDetailPage({
   const company = companyData as Company | null;
   if (!company) notFound();
 
-  const consultores = (consultoresData as ConsultantOption[]) ?? [];
-  const colaboradores = (colaboradoresData as CollaboratorOption[]) ?? [];
+  // O admin pode se incluir como consultor responsável e como responsável de
+  // tarefa desta empresa (Passo 14).
+  const consultores = withSelf((consultoresData as ConsultantOption[]) ?? [], profile);
+  const colaboradores = withSelf(
+    (colaboradoresData as CollaboratorOption[]) ?? [],
+    profile
+  );
   const selectedIds: string[] = [];
   for (const link of (linksData as CompanyLink[]) ?? []) {
     const c = first(link.consultant);

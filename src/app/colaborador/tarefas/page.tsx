@@ -26,7 +26,11 @@ function first<T>(value: Joined<T>): T | null {
 }
 
 export default async function ColaboradorTarefasPage() {
-  const { supabase, profile } = await guardRole(["colaborador"]);
+  const { supabase, profile } = await guardRole([
+    "colaborador",
+    "admin",
+    "consultor",
+  ]);
 
   // Escopo explícito ao próprio colaborador (a RLS ti_select já garante, mas
   // deixamos a query clara). Nunca vê tarefas de outros colaboradores.
@@ -60,7 +64,11 @@ export default async function ColaboradorTarefasPage() {
 
   return (
     <AppShell
-      user={{ name: profile.full_name, role: "colaborador", avatarUrl: profile.avatarUrl }}
+      user={{
+        name: profile.full_name,
+        role: profile.role as "admin" | "consultor" | "colaborador",
+        avatarUrl: profile.avatarUrl,
+      }}
       title="Minhas tarefas"
       subtitle="Todas as suas tarefas, de todas as empresas."
       back={{ href: "/colaborador", label: "Minhas empresas" }}

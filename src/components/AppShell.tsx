@@ -45,6 +45,12 @@ const ic = {
       <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
     </>
   ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </>
+  ),
 };
 
 function Icon({ children }: { children: ReactNode }) {
@@ -71,10 +77,12 @@ const NAV: Record<Role, NavItem[]> = {
     { href: "/admin/usuarios", label: "Usuários", icon: <Icon>{ic.users}</Icon> },
     { href: "/admin/empresas", label: "Empresas", icon: <Icon>{ic.building}</Icon> },
     { href: "/admin/tarefas", label: "Tarefas", icon: <Icon>{ic.tasks}</Icon> },
+    { href: "/colaborador", label: "Meu Trabalho", icon: <Icon>{ic.clock}</Icon> },
   ],
   consultor: [
     { href: "/consultor", label: "Painel", icon: <Icon>{ic.briefcase}</Icon> },
     { href: "/consultor/tarefas", label: "Tarefas", icon: <Icon>{ic.tasks}</Icon> },
+    { href: "/colaborador", label: "Meu Trabalho", icon: <Icon>{ic.clock}</Icon> },
   ],
   colaborador: [
     { href: "/colaborador", label: "Minhas empresas", icon: <Icon>{ic.building}</Icon> },

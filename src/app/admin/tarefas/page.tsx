@@ -4,6 +4,7 @@ import AppShell from "@/components/AppShell";
 import type { TaskKind } from "@/lib/types";
 import NewTaskForm from "./NewTaskForm";
 import TaskTemplateList, { type TemplateItem } from "./TaskTemplateList";
+import { withSelf } from "@/lib/people";
 
 type Option = { id: string; name: string };
 type PersonOption = { id: string; full_name: string; email: string };
@@ -51,7 +52,11 @@ export default async function TarefasPage() {
     ]);
 
   const companies = (companiesData as Option[]) ?? [];
-  const collaborators = (collaboratorsData as PersonOption[]) ?? [];
+  // O admin também pode se atribuir como responsável (Passo 14).
+  const collaborators = withSelf(
+    (collaboratorsData as PersonOption[]) ?? [],
+    profile
+  );
   const templateRows = (templatesData as TemplateRow[]) ?? [];
 
   const templates: TemplateItem[] = templateRows.map((t) => {

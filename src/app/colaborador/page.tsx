@@ -27,7 +27,11 @@ function first<T>(value: T | T[] | null): T | null {
 }
 
 export default async function ColaboradorPage() {
-  const { supabase, profile } = await guardRole(["colaborador"]);
+  const { supabase, profile } = await guardRole([
+    "colaborador",
+    "admin",
+    "consultor",
+  ]);
 
   const { data, error } = await supabase
     .from("task_instances")
@@ -75,7 +79,11 @@ export default async function ColaboradorPage() {
 
   return (
     <AppShell
-      user={{ name: profile.full_name, role: "colaborador", avatarUrl: profile.avatarUrl }}
+      user={{
+        name: profile.full_name,
+        role: profile.role as "admin" | "consultor" | "colaborador",
+        avatarUrl: profile.avatarUrl,
+      }}
       title="Minhas empresas"
       subtitle={`Bem-vindo, ${profile.full_name}`}
     >

@@ -12,7 +12,11 @@ export default async function ColaboradorEmpresaPage({
   params: { companyId: string };
 }) {
   const { companyId } = params;
-  const { supabase, profile } = await guardRole(["colaborador"]);
+  const { supabase, profile } = await guardRole([
+    "colaborador",
+    "admin",
+    "consultor",
+  ]);
 
   const [{ data: companyData }, { data: tasksData, error }] = await Promise.all([
     supabase.from("companies").select("id, name").eq("id", companyId).maybeSingle(),
@@ -33,7 +37,11 @@ export default async function ColaboradorEmpresaPage({
 
   return (
     <AppShell
-      user={{ name: profile.full_name, role: "colaborador", avatarUrl: profile.avatarUrl }}
+      user={{
+        name: profile.full_name,
+        role: profile.role as "admin" | "consultor" | "colaborador",
+        avatarUrl: profile.avatarUrl,
+      }}
       title={company.name}
       back={{ href: "/colaborador", label: "Minhas empresas" }}
     >

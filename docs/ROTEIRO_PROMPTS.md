@@ -437,6 +437,131 @@ item, que as regras de permissão acima foram respeitadas.
 
 ---
 
+## PASSO 15 — Tarefas padrão (catálogo reutilizável) (Feito)
+
+Mecânica: um catálogo de tarefas "padrão" que pode ser atribuído a empresas
+sem recadastrar manualmente em cada uma.
+
+```
+Implemente um sistema de "tarefas padrão" — um catálogo de tarefas
+reutilizáveis que agiliza a atribuição a empresas.
+
+CATÁLOGO (subtela dedicada):
+- Na tela de Tarefas, crie uma sub-área/aba "Tarefas Padrão" para
+  criar/editar/excluir tarefas padrão.
+- Cada tarefa padrão tem os mesmos campos de uma tarefa normal (título,
+  descrição, instruções, tipo único OU diário com dias da semana e
+  horário-limite). O que muda é que ela é um MOLDE reutilizável, não ligada
+  a uma empresa específica ainda.
+- Modele isso no banco de forma limpa (ex: uma flag is_standard ou uma
+  tabela própria de templates padrão). Escolha a abordagem mais coerente
+  com o schema atual de task_templates.
+
+ATRIBUIÇÃO NA EMPRESA:
+- No cadastro/edição de empresa, adicione uma seção "Tarefas padrão desta
+  empresa" onde o admin/consultor seleciona quais tarefas padrão a empresa
+  usa (algumas específicas ou todas) e, para cada uma, define o colaborador
+  responsável (que pode ser trocado depois).
+- Ao atribuir, o sistema gera as tarefas para aquela empresa (respeitando o
+  tipo: única gera a instância; diária entra na recorrência existente via
+  generate_daily_tasks).
+
+VÍNCULO VIVO (com congelamento do histórico):
+- As tarefas geradas a partir de uma tarefa padrão ficam VINCULADAS a ela.
+- Editar a tarefa padrão (título, descrição, instruções, prazo) atualiza
+  automaticamente as instâncias/derivadas que ainda NÃO foram finalizadas,
+  em todas as empresas que a usam.
+- Instâncias já FINALIZADAS ficam CONGELADAS: a edição da padrão não altera
+  o texto delas (são histórico do que foi realmente feito). Garanta isso.
+- Se uma empresa deixar de usar uma tarefa padrão, as instâncias futuras/em
+  aberto param de ser geradas/atualizadas; as finalizadas permanecem no
+  histórico.
+
+Respeite o RLS existente (admin e consultor no escopo deles). Mantenha a
+identidade visual. Teste: criar uma padrão, atribuir a 2 empresas com
+responsáveis diferentes, editar a padrão e confirmar que as em aberto
+mudaram e as finalizadas não.
+```
+
+Se tiver QUALQUER dúvida de modelagem antes de codar (como ligar as
+instâncias à padrão, como tratar a recorrência), PERGUNTE antes de assumir.
+
+---
+
+## PASSO 16 — Correção de tempo pelo admin (com auditoria)
+
+Mecânica: admin pode corrigir o tempo de tarefas (casos de esquecer de
+pausar/finalizar o timer), com registro de quem alterou.
+
+```
+Permita que administradores corrijam o tempo de execução das tarefas dos
+usuários (para casos em que alguém esqueceu de pausar/finalizar o timer).
+
+ONDE:
+- No dashboard, na tabela "Resumo por responsável/colaborador", ao acessar
+  um responsável, mostrar as tarefas dele. Em cada tarefa, permitir ao admin
+  ajustar o tempo total (total_seconds) — editar o valor, ou ajustar os
+  intervalos (time_entries) se fizer sentido.
+- Apenas ADMIN pode fazer esse ajuste. Confirme no RLS, não só na interface.
+
+AUDITORIA (obrigatório):
+- Toda alteração manual de tempo deve ser REGISTRADA: quem alterou, quando,
+  o valor anterior e o novo. Crie uma tabela de log para isso (ex:
+  time_adjustments) ou registre no activity_log de forma clara.
+- Mostre, na própria tarefa, uma indicação de que o tempo foi ajustado
+  manualmente (ex: um selo "tempo ajustado" com o histórico ao passar o
+  mouse), para transparência.
+
+Após o ajuste, os dashboards e resumos devem refletir o novo tempo. Teste
+um ajuste e confirme que o registro de auditoria foi criado e que os totais
+se atualizaram.
+```
+
+---
+
+## PASSO 17 — Detalhamento do gráfico de tempo por empresa
+
+Mecânica: clicar numa barra do gráfico abre o detalhe das tarefas que
+compõem aquele tempo.
+
+```
+No gráfico de barras "tempo por empresa" do dashboard, torne as barras
+clicáveis. Ao clicar na barra de uma empresa, abra um detalhamento (painel
+lateral ou modal) mostrando quais tarefas somaram aquele tempo total:
+- Lista das tarefas daquela empresa com o tempo gasto em cada uma,
+  ordenadas da que mais consumiu tempo para a que menos consumiu.
+- Para cada tarefa: título, responsável, status e o tempo.
+- O total do detalhamento deve bater exatamente com a altura da barra.
+- Respeite o filtro de período ativo no dashboard (se está vendo "30 dias",
+  o detalhe é dos 30 dias).
+
+Mantenha a identidade visual. Teste clicando numa barra e conferindo que a
+soma dos tempos das tarefas é igual ao total da barra.
+```
+
+---
+
+## PASSO 18 — Preparar para escala (fazer por último)
+
+Mecânica: garantir que o sistema se comporte bem visualmente com muitas
+empresas (40+) e usuários (20+). Deixado por último conforme prioridade
+definida.
+
+```
+Quero preparar o sistema para escala (40+ empresas, 20+ usuários). Faça uma
+auditoria de todas as telas e gráficos pensando em volume real:
+- Listas (empresas, tarefas, usuários): adicione paginação e/ou rolagem
+  eficiente; nunca carregue centenas de registros de uma vez.
+- Dropdowns de seleção (ex: escolher empresa/colaborador): adicione busca
+  interna, para não virar uma lista gigante de rolar.
+- Gráfico "tempo por empresa" e similares: com 40+ empresas fica ilegível.
+  Mostre um Top N (ex: top 10) com opção de ver o resto, ou agrupe a cauda.
+- Resumo por colaborador e demais tabelas: pagine ou limite com "ver mais".
+Me diga o que encontrou como risco de escala e aplique as correções.
+```
+
+---
+
 ## Dicas gerais ao usar o Claude Code
 
 - **Teste cada passo no navegador** antes de avançar. Se algo quebrar, 

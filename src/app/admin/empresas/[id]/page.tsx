@@ -2,14 +2,17 @@ import { notFound } from "next/navigation";
 import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import type { Company } from "@/lib/types";
+import type { TaskKind } from "@/lib/types";
 import CompanyConsultants from "../CompanyConsultants";
 import CompanyEditor from "./CompanyEditor";
 import DeleteCompanyButton from "./DeleteCompanyButton";
 import NewTaskForm from "@/app/admin/tarefas/NewTaskForm";
+import CompanyStandardTasks from "@/components/CompanyStandardTasks";
 import { withSelf } from "@/lib/people";
 
 type ConsultantOption = { id: string; full_name: string; email: string };
 type CollaboratorOption = { id: string; full_name: string; email: string };
+type StandardOption = { id: string; title: string; kind: TaskKind };
 type CompanyLink = {
   consultant: ConsultantOption | ConsultantOption[] | null;
 };
@@ -32,6 +35,8 @@ export default async function EmpresaDetailPage({
     { data: linksData },
     { data: consultoresData },
     { data: colaboradoresData },
+    { data: standardData },
+    { data: assignedData },
   ] = await Promise.all([
     supabase
       .from("companies")
@@ -54,6 +59,18 @@ export default async function EmpresaDetailPage({
       .select("id, full_name, email")
       .eq("role", "colaborador")
       .order("full_name", { ascending: true }),
+    // Catálogo de tarefas padrão (Passo 15).
+    supabase
+      .from("standard_tasks")
+      .select("id, title, kind")
+      .order("title", { ascending: true }),
+    // Padrões já atribuídas a esta empresa (templates ativos ligados).
+    supabase
+      .from("task_templates")
+      .select("standard_task_id, collaborator_id")
+      .eq("company_id", id)
+      .eq("active", true)
+      .not("standard_task_id", "is", null),
   ]);
 
   const company = companyData as Company | null;
@@ -72,6 +89,17 @@ export default async function EmpresaDetailPage({
     if (c) selectedIds.push(c.id);
   }
 
+  const standards = (standardData as StandardOption[]) ?? [];
+  const currentStandardTasks = (
+    (assignedData as { standard_task_id: string | null; collaborator_id: string }[]) ??
+    []
+  )
+    .filter((a) => a.standard_task_id)
+    .map((a) => ({
+      standardId: a.standard_task_id as string,
+      collaboratorId: a.collaborator_id,
+    }));
+
   return (
     <AppShell
       user={{ name: profile.full_name, role: "admin", avatarUrl: profile.avatarUrl }}
@@ -89,6 +117,23 @@ export default async function EmpresaDetailPage({
             companyId={company.id}
             consultores={consultores}
             selectedIds={selectedIds}
+          />
+        </section>
+
+        <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
+          <h2 className="mb-1 font-semibold text-fg">
+            Tarefas padrão desta empresa
+          </h2>
+          <p className="mb-4 text-sm text-fg-muted">
+            Selecione as tarefas do catálogo que esta empresa usa e o
+            responsável de cada uma. Editar a padrão no catálogo atualiza as
+            tarefas em aberto aqui.
+          </p>
+          <CompanyStandardTasks
+            companyId={company.id}
+            standards={standards}
+            collaborators={colaboradores}
+            current={currentStandardTasks}
           />
         </section>
 

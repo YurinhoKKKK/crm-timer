@@ -159,6 +159,56 @@ export type Database = {
         }
         Relationships: []
       }
+      standard_tasks: {
+        Row: {
+          active: boolean
+          created_at: string
+          created_by: string
+          description: string | null
+          due_time: string | null
+          id: string
+          instructions: string | null
+          kind: Database["public"]["Enums"]["task_kind"]
+          title: string
+          updated_at: string
+          weekdays: number[] | null
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          created_by: string
+          description?: string | null
+          due_time?: string | null
+          id?: string
+          instructions?: string | null
+          kind: Database["public"]["Enums"]["task_kind"]
+          title: string
+          updated_at?: string
+          weekdays?: number[] | null
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          due_time?: string | null
+          id?: string
+          instructions?: string | null
+          kind?: Database["public"]["Enums"]["task_kind"]
+          title?: string
+          updated_at?: string
+          weekdays?: number[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "standard_tasks_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_instances: {
         Row: {
           collaborator_id: string
@@ -251,6 +301,7 @@ export type Database = {
           id: string
           instructions: string | null
           kind: Database["public"]["Enums"]["task_kind"]
+          standard_task_id: string | null
           start_date: string
           title: string
           weekdays: number[] | null
@@ -267,6 +318,7 @@ export type Database = {
           id?: string
           instructions?: string | null
           kind: Database["public"]["Enums"]["task_kind"]
+          standard_task_id?: string | null
           start_date?: string
           title: string
           weekdays?: number[] | null
@@ -283,6 +335,7 @@ export type Database = {
           id?: string
           instructions?: string | null
           kind?: Database["public"]["Enums"]["task_kind"]
+          standard_task_id?: string | null
           start_date?: string
           title?: string
           weekdays?: number[] | null
@@ -307,6 +360,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_templates_standard_task_id_fkey"
+            columns: ["standard_task_id"]
+            isOneToOne: false
+            referencedRelation: "standard_tasks"
             referencedColumns: ["id"]
           },
         ]
@@ -369,13 +429,14 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
       my_collaborator_companies: { Args: never; Returns: string[] }
       my_consultant_companies: { Args: never; Returns: string[] }
+      sync_standard_task: { Args: { p_standard: string }; Returns: number }
       sync_template_instances: { Args: { p_template: string }; Returns: number }
-      timer_start: { Args: { p_task: string }; Returns: string }
-      timer_pause: { Args: { p_task: string }; Returns: number }
       timer_finish: {
-        Args: { p_task: string; p_note: string; p_send: boolean }
+        Args: { p_note: string; p_send: boolean; p_task: string }
         Returns: number
       }
+      timer_pause: { Args: { p_task: string }; Returns: number }
+      timer_start: { Args: { p_task: string }; Returns: string }
     }
     Enums: {
       task_kind: "unica" | "diaria"
@@ -531,3 +592,4 @@ export type TaskTemplate = Tables<"task_templates">
 export type TaskInstance = Tables<"task_instances">
 export type TimeEntry = Tables<"time_entries">
 export type ActivityLog = Tables<"activity_log">
+export type StandardTask = Tables<"standard_tasks">

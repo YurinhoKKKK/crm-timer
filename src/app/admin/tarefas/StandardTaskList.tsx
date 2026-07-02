@@ -1,0 +1,273 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import type { TaskKind } from "@/lib/types";
+import {
+  updateStandardTask,
+  deleteStandardTask,
+} from "./standard-actions";
+import StandardFields, { type StandardFormValue } from "./StandardFields";
+import {
+  FilterBar,
+  SearchBox,
+  SelectFilter,
+  EmptyState,
+  norm,
+} from "@/components/ListControls";
+import { btnPrimary, btnSecondary } from "@/lib/ui";
+
+const WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+export type StandardItem = {
+  id: string;
+  title: string;
+  description: string | null;
+  instructions: string | null;
+  kind: TaskKind;
+  due_time: string | null;
+  weekdays: number[] | null;
+  usageCount: number; // em quantas empresas está atribuída (templates ativos)
+};
+
+function formatTime(time: string | null): string | null {
+  return time ? time.slice(0, 5) : null;
+}
+
+function describe(t: StandardItem): string {
+  const time = formatTime(t.due_time);
+  if (t.kind === "diaria") {
+    const days = (t.weekdays ?? [])
+      .slice()
+      .sort((a, b) => a - b)
+      .map((d) => WEEKDAY_LABELS[d])
+      .join(", ");
+    return `Diária · ${days || "sem dias"}${time ? ` · até ${time}` : ""}`;
+  }
+  return `Única${time ? ` · até ${time}` : ""}`;
+}
+
+function toForm(t: StandardItem): StandardFormValue {
+  return {
+    title: t.title,
+    description: t.description ?? "",
+    instructions: t.instructions ?? "",
+    kind: t.kind,
+    dueTime: t.due_time ? t.due_time.slice(0, 5) : "",
+    weekdays: new Set(t.weekdays ?? []),
+  };
+}
+
+function StandardRow({ item }: { item: StandardItem }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState<StandardFormValue>(toForm(item));
+  const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  function patch(p: Partial<StandardFormValue>) {
+    setForm((prev) => ({ ...prev, ...p }));
+  }
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const { error: actionError } = await updateStandardTask(item.id, {
+      title: form.title,
+      description: form.description,
+      instructions: form.instructions,
+      kind: form.kind,
+      dueTime: form.dueTime,
+      weekdays: Array.from(form.weekdays),
+    });
+    if (actionError) {
+      setError(actionError);
+      return;
+    }
+    setEditing(false);
+    startTransition(() => router.refresh());
+  }
+
+  async function remove() {
+    setError(null);
+    const { error: actionError } = await deleteStandardTask(item.id);
+    if (actionError) {
+      setError(actionError);
+      setConfirming(false);
+      return;
+    }
+    startTransition(() => router.refresh());
+  }
+
+  if (editing) {
+    return (
+      <li>
+        <form
+          onSubmit={save}
+          className="space-y-4 rounded-xl border border-risd/40 bg-surface p-4 shadow-card"
+        >
+          <StandardFields
+            idPrefix={`edit-${item.id}`}
+            value={form}
+            onChange={patch}
+          />
+          {error && (
+            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          )}
+          <div className="flex items-center gap-2">
+            <button type="submit" disabled={isPending} className={btnPrimary}>
+              {isPending ? "Salvando…" : "Salvar alterações"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setForm(toForm(item));
+                setError(null);
+                setEditing(false);
+              }}
+              className={btnSecondary}
+            >
+              Cancelar
+            </button>
+          </div>
+          {item.usageCount > 0 && (
+            <p className="text-xs text-fg-subtle">
+              Ao salvar, as alterações valem para as {item.usageCount} empresa
+              {item.usageCount === 1 ? "" : "s"} que usam esta padrão — nas
+              tarefas ainda não finalizadas. As já finalizadas ficam intactas.
+            </p>
+          )}
+        </form>
+      </li>
+    );
+  }
+
+  return (
+    <li className="rounded-xl border border-line bg-surface p-4 shadow-card">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium text-fg">{item.title}</span>
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                item.kind === "diaria"
+                  ? "bg-brand-tint text-risd"
+                  : "border border-line bg-surface-2 text-fg-muted"
+              }`}
+            >
+              {item.kind === "diaria" ? "Diária" : "Única"}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-fg-subtle">{describe(item)}</p>
+          <p className="mt-1 text-xs text-fg-subtle">
+            {item.usageCount === 0
+              ? "Não atribuída a nenhuma empresa"
+              : `Em uso em ${item.usageCount} empresa${
+                  item.usageCount === 1 ? "" : "s"
+                }`}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-fg shadow-sm transition hover:border-risd/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+          >
+            Editar
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirming(true)}
+            className="rounded-lg border border-red-300/60 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 transition hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300"
+          >
+            Excluir
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>
+      )}
+
+      {confirming && (
+        <div className="mt-3 rounded-lg border border-red-300/60 bg-red-50 p-3 text-sm dark:border-red-500/30 dark:bg-red-500/10">
+          <p className="text-red-800 dark:text-red-200">
+            Excluir a tarefa padrão &quot;{item.title}&quot; do catálogo?
+            {item.usageCount > 0 && (
+              <>
+                {" "}
+                As tarefas já atribuídas às {item.usageCount} empresa
+                {item.usageCount === 1 ? "" : "s"} permanecem, mas deixam de
+                receber atualizações desta padrão.
+              </>
+            )}
+          </p>
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={remove}
+              disabled={isPending}
+              className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:opacity-60"
+            >
+              {isPending ? "Excluindo…" : "Confirmar exclusão"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirming(false)}
+              className={btnSecondary}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+    </li>
+  );
+}
+
+export default function StandardTaskList({ items }: { items: StandardItem[] }) {
+  const [query, setQuery] = useState("");
+  const [kind, setKind] = useState("");
+
+  const q = norm(query.trim());
+  const filtered = items.filter((t) => {
+    if (q && !norm(t.title).includes(q)) return false;
+    if (kind && t.kind !== kind) return false;
+    return true;
+  });
+
+  return (
+    <>
+      <FilterBar>
+        <SearchBox
+          value={query}
+          onChange={setQuery}
+          placeholder="Buscar por título…"
+        />
+        <SelectFilter
+          value={kind}
+          onChange={setKind}
+          allLabel="Todos os tipos"
+          ariaLabel="Filtrar por tipo"
+          options={[
+            { value: "unica", label: "Única" },
+            { value: "diaria", label: "Diária" },
+          ]}
+        />
+      </FilterBar>
+
+      {items.length === 0 ? (
+        <EmptyState>Nenhuma tarefa padrão cadastrada ainda.</EmptyState>
+      ) : filtered.length === 0 ? (
+        <EmptyState>Nenhuma tarefa padrão corresponde aos filtros.</EmptyState>
+      ) : (
+        <ul className="space-y-3">
+          {filtered.map((t) => (
+            <StandardRow key={t.id} item={t} />
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}

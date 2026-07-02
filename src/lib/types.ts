@@ -371,6 +371,51 @@ export type Database = {
           },
         ]
       }
+      time_adjustments: {
+        Row: {
+          adjusted_by: string
+          created_at: string
+          id: string
+          new_seconds: number
+          old_seconds: number
+          reason: string | null
+          task_id: string
+        }
+        Insert: {
+          adjusted_by: string
+          created_at?: string
+          id?: string
+          new_seconds: number
+          old_seconds: number
+          reason?: string | null
+          task_id: string
+        }
+        Update: {
+          adjusted_by?: string
+          created_at?: string
+          id?: string
+          new_seconds?: number
+          old_seconds?: number
+          reason?: string | null
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "time_adjustments_adjusted_by_fkey"
+            columns: ["adjusted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "time_adjustments_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "task_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       time_entries: {
         Row: {
           collaborator_id: string
@@ -421,6 +466,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_adjust_time: {
+        Args: { p_task: string; p_new_seconds: number; p_reason?: string }
+        Returns: number
+      }
       auth_role: {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
@@ -593,3 +642,4 @@ export type TaskInstance = Tables<"task_instances">
 export type TimeEntry = Tables<"time_entries">
 export type ActivityLog = Tables<"activity_log">
 export type StandardTask = Tables<"standard_tasks">
+export type TimeAdjustment = Tables<"time_adjustments">

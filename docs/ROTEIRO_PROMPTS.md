@@ -488,7 +488,7 @@ instâncias à padrão, como tratar a recorrência), PERGUNTE antes de assumir.
 
 ---
 
-## PASSO 16 — Correção de tempo pelo admin (com auditoria)
+## PASSO 16 — Correção de tempo pelo admin (com auditoria) (Feito)
 
 Mecânica: admin pode corrigir o tempo de tarefas (casos de esquecer de
 pausar/finalizar o timer), com registro de quem alterou.

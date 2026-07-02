@@ -5,11 +5,12 @@ import Avatar from "@/components/Avatar";
 import { avatarUrl } from "@/lib/avatar";
 import { formatDuration, formatDue } from "@/lib/format";
 import { STATUS_META } from "@/lib/status";
-import type { TaskStatus, TaskKind } from "@/lib/types";
-import TaskInstanceList, {
-  type TaskInstanceItem,
-} from "@/components/TaskInstanceList";
+import type { TaskStatus } from "@/lib/types";
 import type { SelectOption } from "@/components/ListControls";
+import AdjustableTaskList, {
+  type AdjustItem,
+  type Adjustment,
+} from "./AdjustableTaskList";
 import TimeByCompanyChart, { type CompanyTime } from "../../TimeByCompanyChart";
 import PeriodFilter, { type Period } from "../../PeriodFilter";
 
@@ -23,7 +24,6 @@ type InstanceRow = {
   total_seconds: number;
   company_id: string;
   company: Joined<{ name: string }>;
-  template: Joined<{ kind: TaskKind }>;
 };
 
 type ActivityRow = {
@@ -124,7 +124,7 @@ export default async function CollaboratorDetailPage({
   let instancesQuery = supabase
     .from("task_instances")
     .select(
-      "id, title, status, due_at, total_seconds, company_id, company:companies!task_instances_company_id_fkey(name), template:task_templates!task_instances_template_id_fkey(kind)"
+      "id, title, status, due_at, total_seconds, company_id, company:companies!task_instances_company_id_fkey(name)"
     )
     .eq("collaborator_id", params.id)
     .order("due_at", { ascending: true, nullsFirst: false });
@@ -146,6 +146,43 @@ export default async function CollaboratorDetailPage({
 
   const instances = (instancesData as InstanceRow[]) ?? [];
   const activities = (activityData as ActivityRow[]) ?? [];
+
+  // Ajustes manuais de tempo (Passo 16) das tarefas listadas, para o selo
+  // "tempo ajustado" e o histórico. RLS ta_select libera para o admin.
+  const instanceIds = instances.map((r) => r.id);
+  const { data: adjustmentsData } =
+    instanceIds.length > 0
+      ? await supabase
+          .from("time_adjustments")
+          .select(
+            "task_id, old_seconds, new_seconds, reason, created_at, adjuster:profiles!time_adjustments_adjusted_by_fkey(full_name, email)"
+          )
+          .in("task_id", instanceIds)
+          .order("created_at", { ascending: false })
+      : { data: [] };
+
+  type AdjustmentRow = {
+    task_id: string;
+    old_seconds: number;
+    new_seconds: number;
+    reason: string | null;
+    created_at: string;
+    adjuster: Joined<{ full_name: string | null; email: string }>;
+  };
+
+  const adjustmentsByTask = new Map<string, Adjustment[]>();
+  for (const a of (adjustmentsData as AdjustmentRow[]) ?? []) {
+    const adjuster = first(a.adjuster);
+    const list = adjustmentsByTask.get(a.task_id) ?? [];
+    list.push({
+      oldSeconds: a.old_seconds,
+      newSeconds: a.new_seconds,
+      reason: a.reason,
+      at: a.created_at,
+      by: adjuster?.full_name || adjuster?.email || "admin",
+    });
+    adjustmentsByTask.set(a.task_id, list);
+  }
 
   // --- Métricas do cabeçalho ---
   let totalSeconds = 0;
@@ -174,18 +211,15 @@ export default async function CollaboratorDetailPage({
     .sort((a, b) => b.seconds - a.seconds)
     .slice(0, 8);
 
-  // --- Itens para a lista com busca/filtros ---
-  const items: TaskInstanceItem[] = instances.map((r) => ({
+  // --- Itens para a lista com busca/filtros + ajuste de tempo ---
+  const items: AdjustItem[] = instances.map((r) => ({
     id: r.id,
     title: r.title,
     status: r.status,
-    due_at: r.due_at,
     total_seconds: r.total_seconds,
-    kind: first(r.template)?.kind ?? null,
     companyId: r.company_id,
     companyName: first(r.company)?.name ?? "(empresa removida)",
-    collaboratorId: person.id,
-    collaboratorName: personName,
+    adjustments: adjustmentsByTask.get(r.id) ?? [],
   }));
   const companyOptions = dedupe(items.map((i) => [i.companyId, i.companyName]));
 
@@ -341,14 +375,18 @@ export default async function CollaboratorDetailPage({
             <TimeByCompanyChart data={chartData} />
           </section>
 
-          {/* Lista de tarefas com busca/filtros */}
+          {/* Lista de tarefas com busca/filtros + ajuste de tempo (Passo 16) */}
           <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
-            <h3 className="mb-4 text-sm font-semibold text-fg">
+            <h3 className="mb-1 text-sm font-semibold text-fg">
               Tarefas ({total})
             </h3>
-            <TaskInstanceList
+            <p className="mb-4 text-xs text-fg-subtle">
+              Como admin, você pode corrigir o tempo de uma tarefa (ex.: alguém
+              esqueceu de pausar). Toda correção fica registrada.
+            </p>
+            <AdjustableTaskList
               items={items}
-              panel="admin"
+              collaboratorId={person.id}
               companies={companyOptions}
             />
           </section>

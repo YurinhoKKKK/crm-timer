@@ -519,7 +519,7 @@ se atualizaram.
 
 ---
 
-## PASSO 17 — Detalhamento do gráfico de tempo por empresa
+## PASSO 17 — Detalhamento do gráfico de tempo por empresa (Feito)
 
 Mecânica: clicar numa barra do gráfico abre o detalhe das tarefas que
 compõem aquele tempo.

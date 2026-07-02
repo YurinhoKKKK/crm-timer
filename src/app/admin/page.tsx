@@ -158,6 +158,7 @@ export default async function AdminPage({
 
   const chartData: CompanyTime[] = Array.from(companyTime.entries())
     .map(([id, seconds]) => ({
+      id,
       name: companyName.get(id) ?? "(empresa removida)",
       seconds,
     }))
@@ -268,7 +269,7 @@ export default async function AdminPage({
             <h3 className="mb-4 text-sm font-semibold text-fg">
               Tempo por empresa
             </h3>
-            <TimeByCompanyChart data={chartData} />
+            <TimeByCompanyChart data={chartData} drilldownPeriod={period} />
           </section>
 
           {/* Resumo por colaborador */}

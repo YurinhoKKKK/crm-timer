@@ -38,9 +38,13 @@ type Row = {
 
 // Passo 17 — tarefas que compõem o tempo de uma empresa no período, ordenadas
 // da que mais consumiu para a que menos. A RLS (ti_select / is_admin) protege.
+// `collaboratorId` opcional escopa o detalhamento a um único responsável: usado
+// no gráfico da página do colaborador, cuja barra já é só o tempo dele naquela
+// empresa — assim a soma do painel bate exatamente com a altura da barra.
 export async function getCompanyTimeBreakdown(
   companyId: string,
-  period: Period
+  period: Period,
+  collaboratorId?: string
 ): Promise<{
   error: string | null;
   tasks?: BreakdownTask[];
@@ -59,6 +63,7 @@ export async function getCompanyTimeBreakdown(
       "id, title, status, total_seconds, collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email)"
     )
     .eq("company_id", companyId);
+  if (collaboratorId) query = query.eq("collaborator_id", collaboratorId);
   if (start) query = query.gte("task_date", start);
 
   const { data, error } = await query;

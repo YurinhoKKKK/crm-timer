@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Bar,
   BarChart,
@@ -55,10 +56,12 @@ type Selected = {
 function BreakdownPanel({
   selected,
   period,
+  collaboratorId,
   onClose,
 }: {
   selected: Selected;
   period: Period;
+  collaboratorId?: string;
   onClose: () => void;
 }) {
   const [loading, setLoading] = useState(true);
@@ -70,7 +73,7 @@ function BreakdownPanel({
     let active = true;
     setLoading(true);
     setError(null);
-    getCompanyTimeBreakdown(selected.id, period).then((res) => {
+    getCompanyTimeBreakdown(selected.id, period, collaboratorId).then((res) => {
       if (!active) return;
       if (res.error) {
         setError(res.error);
@@ -83,7 +86,7 @@ function BreakdownPanel({
     return () => {
       active = false;
     };
-  }, [selected.id, period]);
+  }, [selected.id, period, collaboratorId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -93,7 +96,11 @@ function BreakdownPanel({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  return (
+  // Portal para o <body>: o <main> tem `transform` (animate-fade-in), o que o
+  // tornaria o containing block deste painel `fixed` e o ancoraria ao topo do
+  // conteúdo (cortado quando a página está rolada). No body, o `fixed` ancora
+  // na viewport e o painel abre inteiro, com rolagem interna própria.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex justify-end">
       <div
         className="absolute inset-0 bg-black/40"
@@ -186,18 +193,23 @@ function BreakdownPanel({
           )}
         </div>
       </aside>
-    </div>
+    </div>,
+    document.body
   );
 }
 
 export default function TimeByCompanyChart({
   data,
   drilldownPeriod,
+  drilldownCollaboratorId,
 }: {
   data: CompanyTime[];
   // Quando definido, as barras ficam clicáveis e abrem o detalhamento por
-  // empresa (usado só no dashboard; a página do colaborador não passa isto).
+  // empresa. Usado no dashboard e na página do colaborador.
   drilldownPeriod?: Period;
+  // Escopa o detalhamento a um responsável (página do colaborador), para o
+  // painel refletir só o tempo dele naquela empresa.
+  drilldownCollaboratorId?: string;
 }) {
   const dark = useIsDark();
   const [selected, setSelected] = useState<Selected | null>(null);
@@ -241,7 +253,10 @@ export default function TimeByCompanyChart({
 
   return (
     <>
-      <div className="h-72 w-full">
+      {/* outline-none nos descendentes: ao clicar, os <rect>/<path> do recharts
+          recebem :focus e o navegador desenha um contorno (os "quadriculados
+          brancos" em posições estranhas). Suprimimos esse foco visual. */}
+      <div className="h-72 w-full [&_*:focus]:outline-none [&_svg]:outline-none">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}
@@ -293,6 +308,8 @@ export default function TimeByCompanyChart({
               dataKey="value"
               radius={[6, 6, 0, 0]}
               maxBarSize={56}
+              // Evita a barra "ativa" que o recharts sobrepõe ao clicar/focar.
+              activeBar={false}
               cursor={clickable ? "pointer" : undefined}
               onClick={(entry) => {
                 const payload = (
@@ -321,6 +338,7 @@ export default function TimeByCompanyChart({
         <BreakdownPanel
           selected={selected}
           period={drilldownPeriod}
+          collaboratorId={drilldownCollaboratorId}
           onClose={() => setSelected(null)}
         />
       )}

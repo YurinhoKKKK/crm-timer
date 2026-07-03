@@ -49,7 +49,8 @@ export default async function ConsultorTarefaPage({
     supabase
       .from("profiles")
       .select("id, full_name, email")
-      .eq("role", "colaborador")
+      // Admins também podem ser responsáveis de tarefas.
+      .in("role", ["colaborador", "admin"])
       .order("full_name", { ascending: true }),
   ]);
 

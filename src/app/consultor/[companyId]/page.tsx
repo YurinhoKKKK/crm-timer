@@ -57,7 +57,8 @@ export default async function ConsultorEmpresaPage({
     supabase
       .from("profiles")
       .select("id, full_name, email")
-      .eq("role", "colaborador")
+      // Admins também podem ser responsáveis de tarefas.
+      .in("role", ["colaborador", "admin"])
       .order("full_name", { ascending: true }),
     // Catálogo de tarefas padrão — a RLS (st_select) permite ao consultor ler.
     supabase

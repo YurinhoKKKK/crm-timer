@@ -5,13 +5,28 @@ import { useRouter } from "next/navigation";
 import { createCompany } from "../actions";
 import GroupSelect from "./GroupSelect";
 import { inputClass, labelClass, btnPrimary, btnSecondary } from "@/lib/ui";
+import type { TaskKind } from "@/lib/types";
+import AssignmentPicker, {
+  KindBadge,
+  collectAssignments,
+  emptyRows,
+  type PickerItem,
+  type PickerRow,
+} from "@/components/AssignmentPicker";
 
 type ConsultantOption = { id: string; full_name: string; email: string };
+type PersonOption = { id: string; full_name: string; email: string };
+type StandardOption = { id: string; title: string; kind: TaskKind };
 
 export default function NewCompanyForm({
   consultores,
+  standards,
+  collaborators,
 }: {
   consultores: ConsultantOption[];
+  // Direção 2 — escolher tarefas padrão (com responsável) já na criação.
+  standards: StandardOption[];
+  collaborators: PersonOption[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -19,14 +34,22 @@ export default function NewCompanyForm({
   const [contactId, setContactId] = useState("");
   const [groupName, setGroupName] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [stdRows, setStdRows] = useState<Map<string, PickerRow>>(emptyRows());
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const stdItems: PickerItem[] = standards.map((s) => ({
+    id: s.id,
+    label: s.title,
+    badge: <KindBadge kind={s.kind} />,
+  }));
 
   function reset() {
     setName("");
     setContactId("");
     setGroupName("");
     setSelected(new Set());
+    setStdRows(emptyRows());
     setError(null);
   }
 
@@ -43,12 +66,24 @@ export default function NewCompanyForm({
     e.preventDefault();
     setError(null);
 
-    const { error: actionError } = await createCompany({
-      name,
-      whatsappContactId: contactId,
-      whatsappGroupName: groupName,
-      consultantIds: Array.from(selected),
-    });
+    const { assignments, missing } = collectAssignments(stdItems, stdRows);
+    if (missing) {
+      setError(`Escolha o responsável da tarefa padrão "${missing.label}".`);
+      return;
+    }
+
+    const { error: actionError } = await createCompany(
+      {
+        name,
+        whatsappContactId: contactId,
+        whatsappGroupName: groupName,
+        consultantIds: Array.from(selected),
+      },
+      assignments.map((a) => ({
+        standardId: a.id,
+        collaboratorId: a.collaboratorId,
+      }))
+    );
 
     if (actionError) {
       setError(actionError);
@@ -129,6 +164,27 @@ export default function NewCompanyForm({
               );
             })}
           </div>
+        </fieldset>
+      )}
+
+      {standards.length > 0 && collaborators.length > 0 && (
+        <fieldset>
+          <legend className="mb-1 text-sm font-medium text-fg">
+            Tarefas padrão desta empresa{" "}
+            <span className="font-normal text-fg-subtle">(opcional)</span>
+          </legend>
+          <p className="mb-3 text-xs text-fg-subtle">
+            Marque as tarefas do catálogo que esta empresa usa e escolha o
+            responsável de cada uma. Elas são atribuídas junto ao salvar.
+          </p>
+          <AssignmentPicker
+            items={stdItems}
+            collaborators={collaborators}
+            rows={stdRows}
+            onChange={setStdRows}
+            searchPlaceholder="Buscar tarefa padrão…"
+            idPrefix="new-co-std"
+          />
         </fieldset>
       )}
 

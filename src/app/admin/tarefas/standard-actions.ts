@@ -2,7 +2,26 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase-server";
-import type { TaskKind, TablesInsert } from "@/lib/types";
+import type { TaskKind } from "@/lib/types";
+import {
+  applyCompanyStandards,
+  applyStandardCompanies,
+  type CompanyStandardAssignment,
+  type StandardCompanyAssignment,
+} from "@/lib/standard-link";
+
+// Revalida todas as telas afetadas por uma mudança de vínculo empresa↔padrão.
+function revalidateLinkPaths(companyId?: string) {
+  revalidatePath("/admin");
+  revalidatePath("/admin/tarefas");
+  revalidatePath("/admin/instancias");
+  revalidatePath("/admin/empresas");
+  revalidatePath("/consultor");
+  if (companyId) {
+    revalidatePath(`/admin/empresas/${companyId}`);
+    revalidatePath(`/consultor/${companyId}`);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Passo 15 — Tarefas padrão (catálogo reutilizável)
@@ -16,10 +35,6 @@ import type { TaskKind, TablesInsert } from "@/lib/types";
 function normalize(value: string): string | null {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
-}
-
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 // ---------------------------------------------------------------------------
@@ -75,7 +90,9 @@ function validateStandardInput(
 }
 
 export async function createStandardTask(
-  input: StandardTaskInput
+  input: StandardTaskInput,
+  // Direção 1 — já atribuir a padrão recém-criada às empresas escolhidas.
+  companyAssignments: StandardCompanyAssignment[] = []
 ): Promise<{ error: string | null; id?: string }> {
   const result = validateStandardInput(input);
   if ("error" in result) return { error: result.error };
@@ -96,8 +113,48 @@ export async function createStandardTask(
     return { error: error?.message ?? "Não foi possível criar a tarefa padrão." };
   }
 
+  if (companyAssignments.length > 0) {
+    const linkErr = await applyStandardCompanies(
+      supabase,
+      user.id,
+      data.id,
+      companyAssignments
+    );
+    if (linkErr) {
+      return {
+        error: `Padrão criada, mas falhou ao atribuir às empresas: ${linkErr}`,
+        id: data.id,
+      };
+    }
+    revalidateLinkPaths();
+  }
+
   revalidatePath("/admin/tarefas");
   return { error: null, id: data.id };
+}
+
+// Direção 1 — sincroniza em quais empresas uma tarefa padrão está atribuída
+// (usado na edição da padrão). Reusa o mesmo núcleo do vínculo vivo.
+export async function setStandardTaskCompanies(
+  standardId: string,
+  assignments: StandardCompanyAssignment[]
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Sessão expirada. Faça login novamente." };
+
+  const linkErr = await applyStandardCompanies(
+    supabase,
+    user.id,
+    standardId,
+    assignments
+  );
+  if (linkErr) return { error: linkErr };
+
+  revalidateLinkPaths();
+  return { error: null };
 }
 
 // Atualiza a padrão e propaga (sync_standard_task) para os templates ligados e
@@ -165,20 +222,11 @@ export async function deleteStandardTask(
 // 2. Atribuição a uma empresa (admin + consultor)
 // ---------------------------------------------------------------------------
 
-export type StandardAssignment = {
-  standardId: string;
-  collaboratorId: string;
-  startDate?: string; // YYYY-MM-DD, só relevante para padrões "unica"
-};
+export type StandardAssignment = CompanyStandardAssignment;
 
-// Sincroniza quais tarefas padrão a empresa usa:
-//  - Padrão nova na lista  -> cria um task_template ligado (o trigger gera a
-//    instância "unica"; a "diaria" entra na recorrência do generate_daily_tasks).
-//  - Padrão que saiu da lista -> desativa o template (active=false, para de
-//    gerar/atualizar) e remove as instâncias ainda a_fazer. As finalizadas
-//    permanecem no histórico, ligadas ao template desativado.
-//  - Padrão que continua, com responsável trocado -> atualiza o collaborator_id
-//    do template e propaga (sync_template_instances) para as instâncias a_fazer.
+// Direção 2 — sincroniza quais tarefas padrão a empresa usa. Toda a lógica
+// (criar vínculo, trocar responsável, desativar quem saiu — respeitando o
+// vínculo vivo e a regra de aparição no dia) mora no núcleo compartilhado.
 // A RLS de task_templates garante que consultor só mexe nas empresas dele.
 export async function setCompanyStandardTasks(
   companyId: string,
@@ -190,129 +238,14 @@ export async function setCompanyStandardTasks(
   } = await supabase.auth.getUser();
   if (!user) return { error: "Sessão expirada. Faça login novamente." };
 
-  // Templates já ligados a padrões nesta empresa (ativos e inativos).
-  const { data: existingData, error: existingError } = await supabase
-    .from("task_templates")
-    .select("id, standard_task_id, active, collaborator_id")
-    .eq("company_id", companyId)
-    .not("standard_task_id", "is", null);
-  if (existingError) return { error: existingError.message };
-
-  // Considera "atual" apenas o template ATIVO de cada padrão (pode haver
-  // inativos antigos guardando histórico finalizado).
-  const activeByStandard = new Map<
-    string,
-    { id: string; collaborator_id: string }
-  >();
-  for (const t of existingData ?? []) {
-    if (t.active && t.standard_task_id) {
-      activeByStandard.set(t.standard_task_id, {
-        id: t.id,
-        collaborator_id: t.collaborator_id,
-      });
-    }
-  }
-
-  const desired = new Map<string, StandardAssignment>();
-  for (const a of assignments) {
-    if (a.standardId && a.collaboratorId) desired.set(a.standardId, a);
-  }
-
-  // (a) Desativar os que saíram da lista + remover instâncias a_fazer.
-  for (const [standardId, tmpl] of Array.from(activeByStandard.entries())) {
-    if (desired.has(standardId)) continue;
-    const { error: deactErr } = await supabase
-      .from("task_templates")
-      .update({ active: false })
-      .eq("id", tmpl.id);
-    if (deactErr) return { error: deactErr.message };
-
-    const { error: delErr } = await supabase
-      .from("task_instances")
-      .delete()
-      .eq("template_id", tmpl.id)
-      .eq("status", "a_fazer");
-    if (delErr) return { error: delErr.message };
-  }
-
-  // Campos-molde das padrões que precisamos criar do zero.
-  const toCreate = Array.from(desired.values()).filter(
-    (a) => !activeByStandard.has(a.standardId)
+  const linkErr = await applyCompanyStandards(
+    supabase,
+    user.id,
+    companyId,
+    assignments
   );
-  let standards: Record<string, {
-    title: string;
-    description: string | null;
-    instructions: string | null;
-    kind: TaskKind;
-    weekdays: number[] | null;
-    due_time: string | null;
-  }> = {};
-  if (toCreate.length > 0) {
-    const { data: stdData, error: stdError } = await supabase
-      .from("standard_tasks")
-      .select("id, title, description, instructions, kind, weekdays, due_time")
-      .in(
-        "id",
-        toCreate.map((a) => a.standardId)
-      );
-    if (stdError) return { error: stdError.message };
-    standards = Object.fromEntries(
-      (stdData ?? []).map((s) => [s.id, s])
-    ) as typeof standards;
-  }
+  if (linkErr) return { error: linkErr };
 
-  // (b) Criar / (c) atualizar responsável dos que continuam.
-  for (const [standardId, assignment] of Array.from(desired.entries())) {
-    const active = activeByStandard.get(standardId);
-
-    if (active) {
-      // Continua: só age se trocou o responsável.
-      if (active.collaborator_id !== assignment.collaboratorId) {
-        const { error: updErr } = await supabase
-          .from("task_templates")
-          .update({ collaborator_id: assignment.collaboratorId })
-          .eq("id", active.id);
-        if (updErr) return { error: updErr.message };
-        // Propaga o novo responsável às instâncias a_fazer.
-        const { error: syncErr } = await supabase.rpc(
-          "sync_template_instances",
-          { p_template: active.id }
-        );
-        if (syncErr) return { error: syncErr.message };
-      }
-      continue;
-    }
-
-    // Novo vínculo: cria o task_template a partir da padrão.
-    const std = standards[standardId];
-    if (!std) return { error: "Tarefa padrão não encontrada." };
-
-    const row: TablesInsert<"task_templates"> = {
-      company_id: companyId,
-      collaborator_id: assignment.collaboratorId,
-      created_by: user.id,
-      standard_task_id: standardId,
-      title: std.title,
-      description: std.description,
-      instructions: std.instructions,
-      kind: std.kind,
-      weekdays: std.kind === "diaria" ? std.weekdays ?? [] : [],
-      due_time: std.due_time,
-      start_date:
-        std.kind === "unica" ? assignment.startDate || todayISO() : todayISO(),
-    };
-
-    const { error: insErr } = await supabase
-      .from("task_templates")
-      .insert(row);
-    if (insErr) return { error: insErr.message };
-  }
-
-  revalidatePath(`/admin/empresas/${companyId}`);
-  revalidatePath(`/consultor/${companyId}`);
-  revalidatePath("/admin");
-  revalidatePath("/admin/tarefas");
-  revalidatePath("/admin/instancias");
-  revalidatePath("/consultor");
+  revalidateLinkPaths(companyId);
   return { error: null };
 }

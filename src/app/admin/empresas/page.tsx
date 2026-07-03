@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
-import type { Company } from "@/lib/types";
+import type { Company, TaskKind } from "@/lib/types";
 import NewCompanyForm from "./NewCompanyForm";
 import CompanyList, { type CompanyItem } from "./CompanyList";
 import { withSelf } from "@/lib/people";
 
 type ConsultantOption = { id: string; full_name: string; email: string };
+type PersonOption = { id: string; full_name: string; email: string };
+type StandardOption = { id: string; title: string; kind: TaskKind };
 
 // O embed do Supabase tipa o recurso relacionado como array; normalizamos abaixo.
 type CompanyLink = {
@@ -17,27 +19,50 @@ type CompanyLink = {
 export default async function EmpresasPage() {
   const { supabase, profile } = await guardRole(["admin"]);
 
-  const [{ data: companiesData, error: companiesError }, { data: linksData }, { data: consultoresData }] =
-    await Promise.all([
-      supabase
-        .from("companies")
-        .select("id, name, whatsapp_contact_id, whatsapp_group_name, created_at, updated_at")
-        .order("name", { ascending: true }),
-      supabase
-        .from("company_consultants")
-        .select(
-          "company_id, consultant:profiles!company_consultants_consultant_id_fkey(id, full_name, email)"
-        ),
-      supabase
-        .from("profiles")
-        .select("id, full_name, email")
-        .eq("role", "consultor")
-        .order("full_name", { ascending: true }),
-    ]);
+  const [
+    { data: companiesData, error: companiesError },
+    { data: linksData },
+    { data: consultoresData },
+    { data: colaboradoresData },
+    { data: standardData },
+  ] = await Promise.all([
+    supabase
+      .from("companies")
+      .select("id, name, whatsapp_contact_id, whatsapp_group_name, created_at, updated_at")
+      .order("name", { ascending: true }),
+    supabase
+      .from("company_consultants")
+      .select(
+        "company_id, consultant:profiles!company_consultants_consultant_id_fkey(id, full_name, email)"
+      ),
+    supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      // Admins também podem ser responsáveis (consultores) de uma empresa.
+      .in("role", ["consultor", "admin"])
+      .order("full_name", { ascending: true }),
+    // Responsáveis possíveis das tarefas padrão atribuídas na criação (Direção 2).
+    supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("role", ["colaborador", "admin"])
+      .order("full_name", { ascending: true }),
+    // Catálogo de tarefas padrão, para escolher já na criação da empresa.
+    supabase
+      .from("standard_tasks")
+      .select("id, title, kind")
+      .order("title", { ascending: true }),
+  ]);
 
   const companies = (companiesData as Company[]) ?? [];
   // O admin pode se incluir como consultor responsável de uma empresa (Passo 14).
   const consultores = withSelf((consultoresData as ConsultantOption[]) ?? [], profile);
+  // ...e também como responsável de uma tarefa padrão da empresa.
+  const colaboradores = withSelf(
+    (colaboradoresData as PersonOption[]) ?? [],
+    profile
+  );
+  const standards = (standardData as StandardOption[]) ?? [];
 
   // Mapa empresa → consultores vinculados.
   const consultantsByCompany = new Map<string, ConsultantOption[]>();
@@ -69,7 +94,11 @@ export default async function EmpresasPage() {
       subtitle="Cadastre clientes, vincule o grupo de WhatsApp e atribua os consultores responsáveis."
       back={{ href: "/admin", label: "Dashboard" }}
     >
-      <NewCompanyForm consultores={consultores} />
+      <NewCompanyForm
+        consultores={consultores}
+        standards={standards}
+        collaborators={colaboradores}
+      />
 
       {consultores.length === 0 && (
         <p className="mb-6 text-sm text-fg-subtle">

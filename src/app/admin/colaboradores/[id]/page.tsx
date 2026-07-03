@@ -205,8 +205,10 @@ export default async function CollaboratorDetailPage({
   const percent = total > 0 ? Math.round((done / total) * 100) : 0;
 
   // --- Tempo por empresa (mesmo gráfico da dashboard) ---
-  const chartData: CompanyTime[] = Array.from(companyTime.values())
-    .map((c) => ({ name: c.name, seconds: c.seconds }))
+  // Mantém o id da empresa (chave do mapa) para habilitar o detalhamento por
+  // clique, escopado a este colaborador.
+  const chartData: CompanyTime[] = Array.from(companyTime.entries())
+    .map(([id, c]) => ({ id, name: c.name, seconds: c.seconds }))
     .filter((d) => d.seconds > 0)
     .sort((a, b) => b.seconds - a.seconds)
     .slice(0, 8);
@@ -372,7 +374,11 @@ export default async function CollaboratorDetailPage({
             <h3 className="mb-4 text-sm font-semibold text-fg">
               Tempo por empresa
             </h3>
-            <TimeByCompanyChart data={chartData} />
+            <TimeByCompanyChart
+              data={chartData}
+              drilldownPeriod={period}
+              drilldownCollaboratorId={person.id}
+            />
           </section>
 
           {/* Lista de tarefas com busca/filtros + ajuste de tempo (Passo 16) */}

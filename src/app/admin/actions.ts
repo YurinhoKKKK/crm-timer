@@ -3,6 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase-server";
 import type { Role, TaskKind, TablesInsert } from "@/lib/types";
+import {
+  applyCompanyStandards,
+  type CompanyStandardAssignment,
+} from "@/lib/standard-link";
 
 const VALID_ROLES: Role[] = ["pending", "colaborador", "consultor", "admin"];
 
@@ -57,8 +61,11 @@ function normalize(value: string): string | null {
 
 // Cria uma empresa e (opcionalmente) já vincula consultores. A RLS
 // (companies_admin_all / cc_admin_all) garante que só o admin escreve aqui.
+// `standardAssignments` (Direção 2) já atribui tarefas padrão à empresa nova,
+// pelo mesmo núcleo do vínculo vivo (regra de aparição no dia incluída).
 export async function createCompany(
-  input: CompanyInput
+  input: CompanyInput,
+  standardAssignments: CompanyStandardAssignment[] = []
 ): Promise<{ error: string | null; id?: string }> {
   const name = input.name.trim();
   if (!name) {
@@ -102,6 +109,24 @@ export async function createCompany(
     if (linkError) {
       return { error: linkError.message, id: company.id };
     }
+  }
+
+  if (standardAssignments.length > 0) {
+    const linkErr = await applyCompanyStandards(
+      supabase,
+      user.id,
+      company.id,
+      standardAssignments
+    );
+    if (linkErr) {
+      return {
+        error: `Empresa criada, mas falhou ao atribuir tarefas padrão: ${linkErr}`,
+        id: company.id,
+      };
+    }
+    revalidatePath("/admin");
+    revalidatePath("/admin/tarefas");
+    revalidatePath("/admin/instancias");
   }
 
   revalidatePath("/admin/empresas");

@@ -1,0 +1,6 @@
+{
+  "//": "As Edge Functions em supabase/functions rodam em Deno, não em Node. Ative o Deno LSP APENAS nessa pasta; o resto do projeto (Next/Node) continua no TS padrão. Requer a extensao denoland.vscode-deno instalada.",
+  "deno.enablePaths": ["supabase/functions"],
+  "deno.lint": true,
+  "deno.unstable": false
+}

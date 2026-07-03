@@ -49,7 +49,8 @@ export default async function TarefasPage() {
     supabase
       .from("profiles")
       .select("id, full_name, email")
-      .eq("role", "colaborador")
+      // Admins também podem ser responsáveis de tarefas.
+      .in("role", ["colaborador", "admin"])
       .order("full_name", { ascending: true }),
     supabase
       .from("task_templates")
@@ -62,11 +63,11 @@ export default async function TarefasPage() {
       .from("standard_tasks")
       .select("id, title, description, instructions, kind, due_time, weekdays")
       .order("created_at", { ascending: false }),
-    // Templates ativos ligados a padrões, para contar em quantas empresas
-    // cada padrão está em uso.
+    // Templates ativos ligados a padrões: contam o uso e, agora, dizem em quais
+    // empresas (com qual responsável) cada padrão está atribuída (Direção 1).
     supabase
       .from("task_templates")
-      .select("standard_task_id")
+      .select("standard_task_id, company_id, collaborator_id")
       .eq("active", true)
       .not("standard_task_id", "is", null),
   ]);
@@ -100,22 +101,37 @@ export default async function TarefasPage() {
 
   const canCreate = companies.length > 0 && collaborators.length > 0;
 
-  // Contagem de uso por padrão (templates ativos ligados a ela).
+  // Uso por padrão: contagem + em quais empresas está atribuída e com quem
+  // (para o seletor de empresas na edição da padrão — Direção 1).
   const usageByStandard = new Map<string, number>();
-  for (const row of (usageData as { standard_task_id: string | null }[]) ?? []) {
+  const linksByStandard = new Map<
+    string,
+    { companyId: string; collaboratorId: string }[]
+  >();
+  for (const row of (usageData as {
+    standard_task_id: string | null;
+    company_id: string;
+    collaborator_id: string;
+  }[]) ?? []) {
     if (!row.standard_task_id) continue;
     usageByStandard.set(
       row.standard_task_id,
       (usageByStandard.get(row.standard_task_id) ?? 0) + 1
     );
+    const list = linksByStandard.get(row.standard_task_id) ?? [];
+    list.push({ companyId: row.company_id, collaboratorId: row.collaborator_id });
+    linksByStandard.set(row.standard_task_id, list);
   }
 
   const standardItems: StandardItem[] = (
-    (standardData as Omit<StandardItem, "usageCount">[]) ?? []
+    (standardData as Omit<StandardItem, "usageCount" | "assignments">[]) ?? []
   ).map((s) => ({
     ...s,
     usageCount: usageByStandard.get(s.id) ?? 0,
+    assignments: linksByStandard.get(s.id) ?? [],
   }));
+
+  const companyOptions = companies.map((c) => ({ id: c.id, name: c.name }));
 
   return (
     <AppShell
@@ -178,12 +194,15 @@ export default async function TarefasPage() {
         standard={
           <>
             <p className="mb-4 text-sm text-fg-muted">
-              Moldes reutilizáveis. Crie aqui e atribua a empresas no cadastro de
-              cada empresa — editar a padrão atualiza as tarefas em aberto de
-              todas as empresas que a usam.
+              Moldes reutilizáveis. Escolha as empresas que usam a padrão aqui ou
+              no cadastro de cada empresa — editar a padrão atualiza as tarefas em
+              aberto de todas as empresas que a usam.
             </p>
 
-            <NewStandardTaskForm />
+            <NewStandardTaskForm
+              companies={companyOptions}
+              collaborators={collaborators}
+            />
 
             <h2 className="mb-3 mt-2 text-sm font-medium text-fg-muted">
               Catálogo de tarefas padrão
@@ -194,7 +213,11 @@ export default async function TarefasPage() {
                 Erro ao carregar tarefas padrão: {standardError.message}
               </div>
             ) : (
-              <StandardTaskList items={standardItems} />
+              <StandardTaskList
+                items={standardItems}
+                companies={companyOptions}
+                collaborators={collaborators}
+              />
             )}
           </>
         }

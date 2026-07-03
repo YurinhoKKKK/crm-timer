@@ -6,6 +6,7 @@ import type { TaskKind } from "@/lib/types";
 import {
   updateStandardTask,
   deleteStandardTask,
+  setStandardTaskCompanies,
 } from "./standard-actions";
 import StandardFields, { type StandardFormValue } from "./StandardFields";
 import {
@@ -16,8 +17,16 @@ import {
   norm,
 } from "@/components/ListControls";
 import { btnPrimary, btnSecondary } from "@/lib/ui";
+import AssignmentPicker, {
+  collectAssignments,
+  type PickerItem,
+  type PickerRow,
+} from "@/components/AssignmentPicker";
 
 const WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+type CompanyOption = { id: string; name: string };
+type PersonOption = { id: string; full_name: string; email: string };
 
 export type StandardItem = {
   id: string;
@@ -28,6 +37,8 @@ export type StandardItem = {
   due_time: string | null;
   weekdays: number[] | null;
   usageCount: number; // em quantas empresas está atribuída (templates ativos)
+  // Empresas onde está atribuída, com o responsável — para o seletor na edição.
+  assignments: { companyId: string; collaboratorId: string }[];
 };
 
 function formatTime(time: string | null): string | null {
@@ -58,13 +69,38 @@ function toForm(t: StandardItem): StandardFormValue {
   };
 }
 
-function StandardRow({ item }: { item: StandardItem }) {
+// Linhas do seletor de empresas pré-marcadas conforme onde a padrão já está.
+function initCompanyRows(t: StandardItem): Map<string, PickerRow> {
+  const map = new Map<string, PickerRow>();
+  for (const a of t.assignments) {
+    map.set(a.companyId, { enabled: true, collaboratorId: a.collaboratorId });
+  }
+  return map;
+}
+
+function StandardRow({
+  item,
+  companies,
+  collaborators,
+}: {
+  item: StandardItem;
+  companies: CompanyOption[];
+  collaborators: PersonOption[];
+}) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<StandardFormValue>(toForm(item));
+  const [companyRows, setCompanyRows] = useState<Map<string, PickerRow>>(() =>
+    initCompanyRows(item)
+  );
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  const companyItems: PickerItem[] = companies.map((c) => ({
+    id: c.id,
+    label: c.name,
+  }));
 
   function patch(p: Partial<StandardFormValue>) {
     setForm((prev) => ({ ...prev, ...p }));
@@ -73,6 +109,18 @@ function StandardRow({ item }: { item: StandardItem }) {
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    const { assignments, missing } = collectAssignments(
+      companyItems,
+      companyRows
+    );
+    if (missing) {
+      setError(`Escolha o responsável da empresa "${missing.label}".`);
+      return;
+    }
+
+    // Primeiro o molde (propaga às instâncias a_fazer das empresas atuais),
+    // depois os vínculos de empresa (cria/atualiza/desativa).
     const { error: actionError } = await updateStandardTask(item.id, {
       title: form.title,
       description: form.description,
@@ -85,6 +133,19 @@ function StandardRow({ item }: { item: StandardItem }) {
       setError(actionError);
       return;
     }
+
+    const { error: linkError } = await setStandardTaskCompanies(
+      item.id,
+      assignments.map((a) => ({
+        companyId: a.id,
+        collaboratorId: a.collaboratorId,
+      }))
+    );
+    if (linkError) {
+      setError(linkError);
+      return;
+    }
+
     setEditing(false);
     startTransition(() => router.refresh());
   }
@@ -112,6 +173,29 @@ function StandardRow({ item }: { item: StandardItem }) {
             value={form}
             onChange={patch}
           />
+
+          {companies.length > 0 && collaborators.length > 0 && (
+            <fieldset className="border-t border-line pt-4">
+              <legend className="mb-1 text-sm font-medium text-fg">
+                Empresas que usam esta tarefa
+              </legend>
+              <p className="mb-3 text-xs text-fg-subtle">
+                Marque as empresas e o responsável de cada uma. Desmarcar remove a
+                tarefa das em aberto daquela empresa; as finalizadas ficam
+                intactas.
+              </p>
+              <AssignmentPicker
+                items={companyItems}
+                collaborators={collaborators}
+                rows={companyRows}
+                onChange={setCompanyRows}
+                searchPlaceholder="Buscar empresa…"
+                showDefaultResponsible
+                idPrefix={`edit-std-co-${item.id}`}
+              />
+            </fieldset>
+          )}
+
           {error && (
             <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
           )}
@@ -123,6 +207,7 @@ function StandardRow({ item }: { item: StandardItem }) {
               type="button"
               onClick={() => {
                 setForm(toForm(item));
+                setCompanyRows(initCompanyRows(item));
                 setError(null);
                 setEditing(false);
               }}
@@ -226,7 +311,15 @@ function StandardRow({ item }: { item: StandardItem }) {
   );
 }
 
-export default function StandardTaskList({ items }: { items: StandardItem[] }) {
+export default function StandardTaskList({
+  items,
+  companies,
+  collaborators,
+}: {
+  items: StandardItem[];
+  companies: CompanyOption[];
+  collaborators: PersonOption[];
+}) {
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState("");
 
@@ -264,7 +357,12 @@ export default function StandardTaskList({ items }: { items: StandardItem[] }) {
       ) : (
         <ul className="space-y-3">
           {filtered.map((t) => (
-            <StandardRow key={t.id} item={t} />
+            <StandardRow
+              key={t.id}
+              item={t}
+              companies={companies}
+              collaborators={collaborators}
+            />
           ))}
         </ul>
       )}

@@ -33,7 +33,8 @@ export default async function ConsultorPage() {
       supabase
         .from("profiles")
         .select("id, full_name, email")
-        .eq("role", "colaborador")
+        // Admins também podem ser responsáveis de tarefas.
+        .in("role", ["colaborador", "admin"])
         .order("full_name", { ascending: true }),
       // RLS (ti_select) limita às instâncias das empresas dele.
       supabase.from("task_instances").select("company_id, status, due_at"),

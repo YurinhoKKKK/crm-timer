@@ -33,7 +33,8 @@ export default async function TarefaDetailPage({
     supabase
       .from("profiles")
       .select("id, full_name, email")
-      .eq("role", "colaborador")
+      // Admins também podem ser responsáveis de tarefas.
+      .in("role", ["colaborador", "admin"])
       .order("full_name", { ascending: true }),
     // Tempo já registrado nas ocorrências — para avisar o que será perdido.
     supabase.from("task_instances").select("total_seconds").eq("template_id", id),

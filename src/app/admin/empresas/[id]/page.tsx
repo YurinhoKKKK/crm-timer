@@ -52,12 +52,14 @@ export default async function EmpresaDetailPage({
     supabase
       .from("profiles")
       .select("id, full_name, email")
-      .eq("role", "consultor")
+      // Admins também podem ser responsáveis (consultores) de uma empresa.
+      .in("role", ["consultor", "admin"])
       .order("full_name", { ascending: true }),
     supabase
       .from("profiles")
       .select("id, full_name, email")
-      .eq("role", "colaborador")
+      // Admins também podem ser responsáveis de tarefas.
+      .in("role", ["colaborador", "admin"])
       .order("full_name", { ascending: true }),
     // Catálogo de tarefas padrão (Passo 15).
     supabase

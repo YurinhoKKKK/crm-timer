@@ -10,6 +10,8 @@ import {
   SearchBox,
   SelectFilter,
   EmptyState,
+  ShowMore,
+  usePaged,
   norm,
 } from "@/components/ListControls";
 
@@ -39,6 +41,8 @@ export default function UserList({
     });
   }, [users, query, role]);
 
+  const { visible, hasMore, remaining, showMore } = usePaged(filtered);
+
   return (
     <>
       <FilterBar>
@@ -67,7 +71,7 @@ export default function UserList({
         <EmptyState>Nenhum usuário corresponde aos filtros.</EmptyState>
       ) : (
         <ul className="space-y-3">
-          {filtered.map((u) => {
+          {visible.map((u) => {
             const isPending = u.role === "pending";
             const isSelf = u.id === selfId;
             return (
@@ -113,6 +117,8 @@ export default function UserList({
           })}
         </ul>
       )}
+
+      {hasMore && <ShowMore remaining={remaining} onClick={showMore} />}
     </>
   );
 }

@@ -8,6 +8,8 @@ import {
   SearchBox,
   SelectFilter,
   EmptyState,
+  ShowMore,
+  usePaged,
   norm,
   type SelectOption,
 } from "@/components/ListControls";
@@ -71,6 +73,8 @@ export default function TaskTemplateList({
     });
   }, [templates, query, companyId, collaboratorId, kind]);
 
+  const { visible, hasMore, remaining, showMore } = usePaged(filtered);
+
   return (
     <>
       <FilterBar>
@@ -111,7 +115,7 @@ export default function TaskTemplateList({
         <EmptyState>Nenhuma tarefa corresponde aos filtros.</EmptyState>
       ) : (
         <ul className="space-y-3">
-          {filtered.map((t) => (
+          {visible.map((t) => (
             <li key={t.id}>
               <Link
                 href={`/admin/tarefas/${t.id}`}
@@ -147,6 +151,8 @@ export default function TaskTemplateList({
           ))}
         </ul>
       )}
+
+      {hasMore && <ShowMore remaining={remaining} onClick={showMore} />}
     </>
   );
 }

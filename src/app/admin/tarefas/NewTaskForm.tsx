@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { TaskKind } from "@/lib/types";
 import { createTaskTemplate } from "../actions";
+import Combobox from "@/components/Combobox";
 import {
   inputClass,
   labelClass,
@@ -180,40 +181,31 @@ export default function NewTaskForm({
               </span>
             </div>
           ) : (
-            <select
+            <Combobox
               id="task-company"
-              required
               value={companyId}
-              onChange={(e) => setCompanyId(e.target.value)}
-              className={inputClass}
-            >
-              <option value="">Selecione…</option>
-              {companies.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+              onChange={setCompanyId}
+              options={companies.map((c) => ({ value: c.id, label: c.name }))}
+              ariaLabel="Empresa"
+              searchPlaceholder="Buscar empresa…"
+            />
           )}
         </div>
         <div>
           <label htmlFor="task-collaborator" className={labelClass}>
             Colaborador
           </label>
-          <select
+          <Combobox
             id="task-collaborator"
-            required
             value={collaboratorId}
-            onChange={(e) => setCollaboratorId(e.target.value)}
-            className={inputClass}
-          >
-            <option value="">Selecione…</option>
-            {collaborators.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.full_name || p.email}
-              </option>
-            ))}
-          </select>
+            onChange={setCollaboratorId}
+            options={collaborators.map((p) => ({
+              value: p.id,
+              label: p.full_name || p.email,
+            }))}
+            ariaLabel="Colaborador"
+            searchPlaceholder="Buscar colaborador…"
+          />
         </div>
       </div>
 

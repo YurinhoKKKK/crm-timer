@@ -2,12 +2,16 @@ import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import type { TaskStatus } from "@/lib/types";
 import { STATUS_META } from "@/lib/status";
-import { formatDuration, formatDue } from "@/lib/format";
+import InstanceStatusList, { type InstanceItem } from "./InstanceStatusList";
 
 type Period = "hoje" | "7d" | "30d" | "tudo";
 type Filter = TaskStatus | "atrasadas";
 
 const PERIODS: Period[] = ["hoje", "7d", "30d", "tudo"];
+
+// Teto de itens carregados do banco por vez (Passo 18 — escala). A lista de
+// instâncias cresce sem limite; buscamos CAP+1 para saber se há mais.
+const CAP = 300;
 
 const FILTER_TITLE: Record<Filter, string> = {
   a_fazer: "Tarefas a fazer",
@@ -71,7 +75,8 @@ export default async function InstanciasPage({
     .select(
       "id, title, status, due_at, task_date, total_seconds, company:companies!task_instances_company_id_fkey(name), collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email)"
     )
-    .order("due_at", { ascending: true, nullsFirst: false });
+    .order("due_at", { ascending: true, nullsFirst: false })
+    .limit(CAP + 1);
 
   if (start) query = query.gte("task_date", start);
 
@@ -84,7 +89,22 @@ export default async function InstanciasPage({
   }
 
   const { data, error } = await query;
-  const rows = (data as InstanceRow[]) ?? [];
+  const allRows = (data as InstanceRow[]) ?? [];
+  const truncated = allRows.length > CAP;
+  const rows = truncated ? allRows.slice(0, CAP) : allRows;
+
+  const items: InstanceItem[] = rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    status: r.status,
+    due_at: r.due_at,
+    total_seconds: r.total_seconds,
+    companyName: first(r.company)?.name ?? "(empresa removida)",
+    collaboratorName:
+      first(r.collaborator)?.full_name ||
+      first(r.collaborator)?.email ||
+      "(colaborador removido)",
+  }));
 
   const title = filter ? FILTER_TITLE[filter] : "Tarefas";
 
@@ -92,7 +112,9 @@ export default async function InstanciasPage({
     <AppShell
       user={{ name: profile.full_name, role: "admin", avatarUrl: profile.avatarUrl }}
       title={title}
-      subtitle={`${rows.length} tarefa${rows.length === 1 ? "" : "s"}`}
+      subtitle={`${truncated ? `${CAP}+` : rows.length} tarefa${
+        rows.length === 1 ? "" : "s"
+      }`}
       back={{ href: `/admin?periodo=${period}`, label: "Dashboard" }}
     >
       {!filter ? (
@@ -108,44 +130,7 @@ export default async function InstanciasPage({
           Nenhuma tarefa neste status no período selecionado.
         </div>
       ) : (
-        <ul className="space-y-3">
-          {rows.map((r) => {
-            const company = first(r.company);
-            const collaborator = first(r.collaborator);
-            const meta = STATUS_META[r.status];
-            return (
-              <li
-                key={r.id}
-                className="rounded-xl border border-line bg-surface p-4 shadow-card"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium text-fg">{r.title}</span>
-                  <span
-                    className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${meta.badge}`}
-                  >
-                    <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
-                    {meta.label}
-                  </span>
-                </div>
-                <p className="mt-1 text-sm text-fg-muted">
-                  {company?.name ?? "(empresa removida)"} ·{" "}
-                  {collaborator?.full_name ||
-                    collaborator?.email ||
-                    "(colaborador removido)"}
-                </p>
-                <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-fg-subtle">
-                  <span>Prazo: {formatDue(r.due_at)}</span>
-                  <span>
-                    Tempo:{" "}
-                    <span className="font-mono tabular-nums">
-                      {formatDuration(r.total_seconds)}
-                    </span>
-                  </span>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+        <InstanceStatusList items={items} truncated={truncated} />
       )}
     </AppShell>
   );

@@ -7,6 +7,8 @@ import {
   SearchBox,
   SelectFilter,
   EmptyState,
+  ShowMore,
+  usePaged,
   norm,
   type SelectOption,
 } from "@/components/ListControls";
@@ -39,6 +41,8 @@ export default function CompanyList({
     });
   }, [companies, query, consultantId]);
 
+  const { visible, hasMore, remaining, showMore } = usePaged(filtered);
+
   return (
     <>
       <FilterBar>
@@ -62,7 +66,7 @@ export default function CompanyList({
         <EmptyState>Nenhuma empresa corresponde aos filtros.</EmptyState>
       ) : (
         <ul className="space-y-3">
-          {filtered.map((company) => (
+          {visible.map((company) => (
             <li key={company.id}>
               <Link
                 href={`/admin/empresas/${company.id}`}
@@ -102,6 +106,8 @@ export default function CompanyList({
           ))}
         </ul>
       )}
+
+      {hasMore && <ShowMore remaining={remaining} onClick={showMore} />}
     </>
   );
 }

@@ -2,10 +2,11 @@ import Link from "next/link";
 import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import type { TaskStatus } from "@/lib/types";
-import Avatar from "@/components/Avatar";
-import { avatarUrl } from "@/lib/avatar";
 import PeriodFilter, { type Period } from "./PeriodFilter";
 import TimeByCompanyChart, { type CompanyTime } from "./TimeByCompanyChart";
+import CollaboratorSummary, {
+  type CollaboratorRow,
+} from "./CollaboratorSummary";
 
 type InstanceRow = {
   company_id: string;
@@ -156,6 +157,7 @@ export default async function AdminPage({
     perCollaborator.set(r.collaborator_id, c);
   }
 
+  // Lista completa; o gráfico faz Top N + agrupamento da cauda (Passo 18).
   const chartData: CompanyTime[] = Array.from(companyTime.entries())
     .map(([id, seconds]) => ({
       id,
@@ -163,10 +165,9 @@ export default async function AdminPage({
       seconds,
     }))
     .filter((d) => d.seconds > 0)
-    .sort((a, b) => b.seconds - a.seconds)
-    .slice(0, 8);
+    .sort((a, b) => b.seconds - a.seconds);
 
-  const collaboratorRows = collaborators
+  const collaboratorRows: CollaboratorRow[] = collaborators
     .map((p) => {
       const stats = perCollaborator.get(p.id) ?? {
         seconds: 0,
@@ -184,7 +185,11 @@ export default async function AdminPage({
       };
     })
     .filter((r) => r.total > 0)
-    .sort((a, b) => b.seconds - a.seconds);
+    .sort((a, b) => b.seconds - a.seconds)
+    .map(({ seconds, ...r }) => ({
+      ...r,
+      timeLabel: formatDuration(seconds),
+    }));
 
   return (
     <AppShell
@@ -277,79 +282,7 @@ export default async function AdminPage({
             <h3 className="mb-4 text-sm font-semibold text-fg">
               Resumo por responsável
             </h3>
-            {collaboratorRows.length === 0 ? (
-              <p className="py-6 text-center text-sm text-fg-subtle">
-                Nenhuma atividade registrada no período.
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-fg-subtle">
-                      <th className="pb-3 font-medium">Responsável</th>
-                      <th className="pb-3 text-right font-medium">Tempo</th>
-                      <th className="pb-3 text-right font-medium">Tarefas</th>
-                      <th className="pb-3 pl-4 font-medium">Concluídas</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {collaboratorRows.map((r) => (
-                      <tr
-                        key={r.id}
-                        className="group border-b border-line/60 transition last:border-0 hover:bg-surface-2/50"
-                      >
-                        <td className="py-3 pr-4 font-medium text-fg">
-                          <Link
-                            href={`/admin/colaboradores/${r.id}?periodo=${period}`}
-                            className="flex items-center gap-2.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
-                          >
-                            <Avatar
-                              name={r.name}
-                              url={avatarUrl(r.avatarPath)}
-                              size={28}
-                            />
-                            <span className="group-hover:text-risd">
-                              {r.name}
-                            </span>
-                            <span
-                              aria-hidden="true"
-                              className="text-fg-subtle transition group-hover:translate-x-0.5 group-hover:text-risd"
-                            >
-                              →
-                            </span>
-                          </Link>
-                        </td>
-                        <td className="py-3 text-right font-mono tabular-nums text-fg-muted">
-                          {formatDuration(r.seconds)}
-                        </td>
-                        <td className="py-3 text-right font-mono tabular-nums text-fg-muted">
-                          {r.done}/{r.total}
-                        </td>
-                        <td className="py-3 pl-4">
-                          <div className="flex items-center gap-2">
-                            <div
-                              className="h-2 w-24 overflow-hidden rounded-full bg-surface-2"
-                              role="progressbar"
-                              aria-valuenow={r.percent}
-                              aria-valuemin={0}
-                              aria-valuemax={100}
-                            >
-                              <div
-                                className="h-full rounded-full bg-risd"
-                                style={{ width: `${r.percent}%` }}
-                              />
-                            </div>
-                            <span className="font-mono text-xs tabular-nums text-fg-muted">
-                              {r.percent}%
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <CollaboratorSummary rows={collaboratorRows} period={period} />
           </section>
         </>
       )}

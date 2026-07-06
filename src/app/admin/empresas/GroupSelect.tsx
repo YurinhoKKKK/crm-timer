@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase-browser";
+import Combobox, { type ComboOption } from "@/components/Combobox";
 import { inputClass, labelClass, hintClass } from "@/lib/ui";
 
 type Group = { id: string; name: string; number: string | null };
@@ -52,10 +53,14 @@ export default function GroupSelect({
     };
   }, []);
 
-  function handleSelect(e: React.ChangeEvent<HTMLSelectElement>) {
-    const id = e.target.value;
+  function handleSelect(id: string) {
     if (!id) {
       onChange("", "");
+      return;
+    }
+    // Mantém o nome atual se for o "órfão" (salvo manualmente antes).
+    if (id === contactId) {
+      onChange(id, groupName);
       return;
     }
     const group = groups.find((g) => g.id === id);
@@ -77,30 +82,32 @@ export default function GroupSelect({
     const knownIds = new Set(groups.map((g) => g.id));
     const orphan = contactId && !knownIds.has(contactId);
 
+    const options: ComboOption[] = [
+      { value: "", label: "— Nenhum —" },
+      ...(orphan
+        ? [{ value: contactId, label: `${groupName || "(grupo atual)"} (atual)` }]
+        : []),
+      ...groups.map((g) => ({
+        value: g.id,
+        label: g.name,
+        hint: g.number ?? undefined,
+      })),
+    ];
+
     return (
       <div>
         <label htmlFor="group-select" className={labelClass}>
           Grupo de WhatsApp <span className={hintClass}>(opcional)</span>
         </label>
-        <select
+        <Combobox
           id="group-select"
           value={contactId}
           onChange={handleSelect}
-          className={inputClass}
-        >
-          <option value="">— Nenhum —</option>
-          {orphan && (
-            <option value={contactId}>
-              {groupName || "(grupo atual)"} (atual)
-            </option>
-          )}
-          {groups.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.name}
-              {g.number ? ` · ${g.number}` : ""}
-            </option>
-          ))}
-        </select>
+          options={options}
+          ariaLabel="Grupo de WhatsApp"
+          placeholder="— Nenhum —"
+          searchPlaceholder="Buscar grupo…"
+        />
         <button
           type="button"
           onClick={() => setMode("manual")}

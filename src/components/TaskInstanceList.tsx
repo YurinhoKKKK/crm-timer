@@ -10,6 +10,9 @@ import {
   SearchBox,
   SelectFilter,
   EmptyState,
+  ShowMore,
+  TruncationNotice,
+  usePaged,
   norm,
   type SelectOption,
 } from "@/components/ListControls";
@@ -41,11 +44,14 @@ export default function TaskInstanceList({
   panel,
   companies,
   collaborators,
+  truncated = false,
 }: {
   items: TaskInstanceItem[];
   panel: "consultor" | "colaborador" | "admin";
   companies: SelectOption[];
   collaborators?: SelectOption[];
+  // Quando true, a query limitou a lista à janela mais recente (Passo 18).
+  truncated?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
@@ -68,8 +74,11 @@ export default function TaskInstanceList({
     });
   }, [items, query, status, companyId, collaboratorId, kind]);
 
+  const { visible, hasMore, remaining, showMore } = usePaged(filtered);
+
   return (
     <>
+      {truncated && <TruncationNotice count={items.length} />}
       <FilterBar>
         <SearchBox
           value={query}
@@ -119,7 +128,7 @@ export default function TaskInstanceList({
         <EmptyState>Nenhuma tarefa corresponde aos filtros.</EmptyState>
       ) : (
         <ul className="space-y-3">
-          {filtered.map((t) => {
+          {visible.map((t) => {
             const meta = STATUS_META[t.status];
             const inner = (
               <>
@@ -172,6 +181,8 @@ export default function TaskInstanceList({
           })}
         </ul>
       )}
+
+      {hasMore && <ShowMore remaining={remaining} onClick={showMore} />}
     </>
   );
 }

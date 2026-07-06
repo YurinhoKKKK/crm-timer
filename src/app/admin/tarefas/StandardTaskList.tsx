@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { TaskKind } from "@/lib/types";
 import {
@@ -14,6 +14,8 @@ import {
   SearchBox,
   SelectFilter,
   EmptyState,
+  ShowMore,
+  usePaged,
   norm,
 } from "@/components/ListControls";
 import { btnPrimary, btnSecondary } from "@/lib/ui";
@@ -323,12 +325,16 @@ export default function StandardTaskList({
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState("");
 
-  const q = norm(query.trim());
-  const filtered = items.filter((t) => {
-    if (q && !norm(t.title).includes(q)) return false;
-    if (kind && t.kind !== kind) return false;
-    return true;
-  });
+  const filtered = useMemo(() => {
+    const q = norm(query.trim());
+    return items.filter((t) => {
+      if (q && !norm(t.title).includes(q)) return false;
+      if (kind && t.kind !== kind) return false;
+      return true;
+    });
+  }, [items, query, kind]);
+
+  const { visible, hasMore, remaining, showMore } = usePaged(filtered);
 
   return (
     <>
@@ -356,7 +362,7 @@ export default function StandardTaskList({
         <EmptyState>Nenhuma tarefa padrão corresponde aos filtros.</EmptyState>
       ) : (
         <ul className="space-y-3">
-          {filtered.map((t) => (
+          {visible.map((t) => (
             <StandardRow
               key={t.id}
               item={t}
@@ -366,6 +372,8 @@ export default function StandardTaskList({
           ))}
         </ul>
       )}
+
+      {hasMore && <ShowMore remaining={remaining} onClick={showMore} />}
     </>
   );
 }

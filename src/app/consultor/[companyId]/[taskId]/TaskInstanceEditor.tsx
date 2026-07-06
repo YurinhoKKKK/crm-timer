@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateTaskInstance } from "../../actions";
+import Combobox from "@/components/Combobox";
 import { inputClass, labelClass, hintClass, btnPrimary } from "@/lib/ui";
 
 type PersonOption = { id: string; full_name: string; email: string };
@@ -137,20 +138,17 @@ export default function TaskInstanceEditor({
           <label htmlFor="ti-collaborator" className={labelClass}>
             Colaborador
           </label>
-          <select
+          <Combobox
             id="ti-collaborator"
-            required
             value={collaboratorId}
-            onChange={(e) => setCollaboratorId(e.target.value)}
-            className={inputClass}
-          >
-            <option value="">Selecione…</option>
-            {collaborators.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.full_name || p.email}
-              </option>
-            ))}
-          </select>
+            onChange={setCollaboratorId}
+            options={collaborators.map((p) => ({
+              value: p.id,
+              label: p.full_name || p.email,
+            }))}
+            ariaLabel="Colaborador"
+            searchPlaceholder="Buscar colaborador…"
+          />
         </div>
       </div>
 

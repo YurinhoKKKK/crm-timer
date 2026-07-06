@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { TaskStatus } from "@/lib/types";
 import { STATUS_META } from "@/lib/status";
 import { formatDuration, formatDue } from "@/lib/format";
+import { ShowMore, usePaged } from "@/components/ListControls";
 
 export type TaskItem = {
   id: string;
@@ -53,6 +54,8 @@ export default function TaskList({
     return copy;
   }, [tasks, sort]);
 
+  const { visible, hasMore, remaining, showMore } = usePaged(sorted);
+
   if (tasks.length === 0) {
     return (
       <div className="rounded-2xl border border-line bg-surface p-12 text-center text-fg-subtle shadow-card">
@@ -84,7 +87,7 @@ export default function TaskList({
       </div>
 
       <ul className="space-y-3">
-        {sorted.map((t) => {
+        {visible.map((t) => {
           const meta = STATUS_META[t.status];
           const open = t.status !== "finalizada" && t.status !== "cancelada";
           const dueMs = t.due_at ? new Date(t.due_at).getTime() : null;
@@ -134,6 +137,8 @@ export default function TaskList({
           );
         })}
       </ul>
+
+      {hasMore && <ShowMore remaining={remaining} onClick={showMore} />}
     </div>
   );
 }

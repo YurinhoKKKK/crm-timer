@@ -210,8 +210,7 @@ export default async function CollaboratorDetailPage({
   const chartData: CompanyTime[] = Array.from(companyTime.entries())
     .map(([id, c]) => ({ id, name: c.name, seconds: c.seconds }))
     .filter((d) => d.seconds > 0)
-    .sort((a, b) => b.seconds - a.seconds)
-    .slice(0, 8);
+    .sort((a, b) => b.seconds - a.seconds);
 
   // --- Itens para a lista com busca/filtros + ajuste de tempo ---
   const items: AdjustItem[] = instances.map((r) => ({

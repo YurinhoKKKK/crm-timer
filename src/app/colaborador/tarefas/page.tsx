@@ -25,6 +25,10 @@ function first<T>(value: Joined<T>): T | null {
   return value;
 }
 
+// Teto de itens carregados por vez (Passo 18). Lista sem filtro de período,
+// cresce sem limite; buscamos CAP+1 para saber se há mais.
+const CAP = 300;
+
 export default async function ColaboradorTarefasPage() {
   const { supabase, profile } = await guardRole([
     "colaborador",
@@ -40,9 +44,12 @@ export default async function ColaboradorTarefasPage() {
       "id, title, status, due_at, total_seconds, company_id, collaborator_id, company:companies!task_instances_company_id_fkey(name), template:task_templates!task_instances_template_id_fkey(kind)"
     )
     .eq("collaborator_id", profile.id)
-    .order("due_at", { ascending: true, nullsFirst: false });
+    .order("due_at", { ascending: true, nullsFirst: false })
+    .limit(CAP + 1);
 
-  const rows = (data as InstanceRow[]) ?? [];
+  const allRows = (data as InstanceRow[]) ?? [];
+  const truncated = allRows.length > CAP;
+  const rows = truncated ? allRows.slice(0, CAP) : allRows;
 
   const items: TaskInstanceItem[] = rows.map((r) => {
     const company = first(r.company);
@@ -78,7 +85,12 @@ export default async function ColaboradorTarefasPage() {
           Erro ao carregar tarefas: {error.message}
         </div>
       ) : (
-        <TaskInstanceList items={items} panel="colaborador" companies={companies} />
+        <TaskInstanceList
+          items={items}
+          panel="colaborador"
+          companies={companies}
+          truncated={truncated}
+        />
       )}
     </AppShell>
   );

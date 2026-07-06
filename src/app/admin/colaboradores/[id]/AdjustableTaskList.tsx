@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { STATUS_META } from "@/lib/status";
 import { formatDuration } from "@/lib/format";
@@ -10,6 +10,8 @@ import {
   SearchBox,
   SelectFilter,
   EmptyState,
+  ShowMore,
+  usePaged,
   norm,
   type SelectOption,
 } from "@/components/ListControls";
@@ -240,13 +242,17 @@ export default function AdjustableTaskList({
   const [companyId, setCompanyId] = useState("");
   const [status, setStatus] = useState("");
 
-  const q = norm(query.trim());
-  const filtered = items.filter((t) => {
-    if (q && !norm(t.title).includes(q)) return false;
-    if (companyId && t.companyId !== companyId) return false;
-    if (status && t.status !== status) return false;
-    return true;
-  });
+  const filtered = useMemo(() => {
+    const q = norm(query.trim());
+    return items.filter((t) => {
+      if (q && !norm(t.title).includes(q)) return false;
+      if (companyId && t.companyId !== companyId) return false;
+      if (status && t.status !== status) return false;
+      return true;
+    });
+  }, [items, query, companyId, status]);
+
+  const { visible, hasMore, remaining, showMore } = usePaged(filtered);
 
   return (
     <>
@@ -283,11 +289,13 @@ export default function AdjustableTaskList({
         <EmptyState>Nenhuma tarefa corresponde aos filtros.</EmptyState>
       ) : (
         <ul className="space-y-3">
-          {filtered.map((t) => (
+          {visible.map((t) => (
             <AdjustRow key={t.id} item={t} collaboratorId={collaboratorId} />
           ))}
         </ul>
       )}
+
+      {hasMore && <ShowMore remaining={remaining} onClick={showMore} />}
     </>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Bar,
@@ -30,6 +30,30 @@ export type CompanyTime = {
 function formatSmart(seconds: number): string {
   if (seconds < 3600) return `${Math.round(seconds / 60)}min`;
   return `${(seconds / 3600).toFixed(1)}h`;
+}
+
+// Encurta um rótulo com reticências (o nome completo fica no tooltip / no
+// <title> do próprio rótulo).
+function truncate(value: string, max: number): string {
+  if (value.length <= max) return value;
+  return `${value.slice(0, Math.max(1, max - 1)).trimEnd()}…`;
+}
+
+// Largura real do contêiner (via ResizeObserver), para calcular quantos rótulos
+// cabem e o tamanho de cada um sem colisão — inclusive no celular.
+function useWidth<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => setWidth(el.clientWidth);
+    update();
+    const obs = new ResizeObserver(update);
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  return [ref, width] as const;
 }
 
 // Observa a classe `dark` no <html> para recolorir o gráfico ao trocar de tema.
@@ -202,6 +226,7 @@ export default function TimeByCompanyChart({
   data,
   drilldownPeriod,
   drilldownCollaboratorId,
+  topN = 8,
 }: {
   data: CompanyTime[];
   // Quando definido, as barras ficam clicáveis e abrem o detalhamento por
@@ -210,9 +235,14 @@ export default function TimeByCompanyChart({
   // Escopa o detalhamento a um responsável (página do colaborador), para o
   // painel refletir só o tempo dele naquela empresa.
   drilldownCollaboratorId?: string;
+  // Quantas empresas exibir como barras próprias antes de agrupar a cauda em
+  // "Outras" (Passo 18 — escala). Recebe a lista COMPLETA e agrupa aqui.
+  topN?: number;
 }) {
   const dark = useIsDark();
+  const [wrapRef, width] = useWidth<HTMLDivElement>();
   const [selected, setSelected] = useState<Selected | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   const clickable = !!drilldownPeriod && data.some((d) => d.id);
 
@@ -227,18 +257,40 @@ export default function TimeByCompanyChart({
   const grid = dark ? "#2A313A" : "#E4E2DF";
   const axis = dark ? "#9AA2AC" : "#5B636C";
   const cursor = dark ? "rgba(255,255,255,0.05)" : "#F0F0EE";
+  const othersFill = dark ? "#4B535C" : "#B8BEC5";
+
+  // Ordena por tempo (desc) e, com muitas empresas, agrupa a cauda numa barra
+  // "Outras" para o gráfico ficar legível — sem esconder tempo (a soma bate).
+  // A alternância "ver todas" reexpande; a barra "Outras" também expande ao ser
+  // clicada. "Outras" não tem id → não abre o detalhamento por empresa.
+  const sorted = [...data].sort((a, b) => b.seconds - a.seconds);
+  const overflow = sorted.length > topN;
+  const source =
+    overflow && !showAll
+      ? [
+          ...sorted.slice(0, topN),
+          {
+            name: `Outras (${sorted.length - topN})`,
+            seconds: sorted
+              .slice(topN)
+              .reduce((s, d) => s + d.seconds, 0),
+            isOthers: true as const,
+          },
+        ]
+      : sorted;
 
   // Escolhe a unidade do eixo conforme o maior valor da série: quando ninguém
   // passa de 1h, o eixo fica em minutos (evita ticks como 0.03h).
-  const maxSeconds = data.reduce((m, d) => Math.max(m, d.seconds), 0);
+  const maxSeconds = source.reduce((m, d) => Math.max(m, d.seconds), 0);
   const useHours = maxSeconds >= 3600;
   const divisor = useHours ? 3600 : 60;
 
-  const chartData = data.map((d) => ({
+  const chartData = source.map((d) => ({
     name: d.name,
     value: d.seconds / divisor,
     seconds: d.seconds,
-    id: d.id,
+    id: "id" in d ? d.id : undefined,
+    isOthers: "isOthers" in d,
   }));
 
   const formatTick = (v: number): string => {
@@ -247,8 +299,59 @@ export default function TimeByCompanyChart({
   };
 
   function handleSelect(entry: (typeof chartData)[number]) {
+    // Clicar em "Outras" reexpande a lista completa em vez de detalhar.
+    if (entry.isOthers) {
+      setShowAll(true);
+      return;
+    }
     if (!clickable || !entry.id) return;
     setSelected({ id: entry.id, name: entry.name, barSeconds: entry.seconds });
+  }
+
+  // Layout dos rótulos do eixo X, a partir da largura REAL medida: (1) trunca
+  // cada nome ao que cabe numa "faixa" e (2) pula rótulos quando há barras
+  // demais para caberem sem colidir. As barras continuam todas; só os rótulos
+  // são ralados. O nome completo fica no tooltip e no <title> do rótulo.
+  const count = chartData.length;
+  const effWidth = width || 640; // fallback antes da 1ª medição
+  const MIN_LABEL_PX = 58; // espaço horizontal mínimo por rótulo inclinado
+  const maxLabels = Math.max(1, Math.floor(effWidth / MIN_LABEL_PX));
+  const labelInterval = count <= maxLabels ? 0 : Math.ceil(count / maxLabels) - 1;
+  const shownLabels = Math.ceil(count / (labelInterval + 1));
+  const bandPx = effWidth / shownLabels;
+  const LABEL_ANGLE = -35;
+  const maxChars = Math.min(26, Math.max(6, Math.floor(bandPx / 6.2)));
+  // Reserva vertical na base, proporcional ao maior rótulo inclinado.
+  const axisHeight = Math.min(
+    116,
+    Math.max(
+      40,
+      Math.round(maxChars * 6.2 * Math.sin((-LABEL_ANGLE * Math.PI) / 180)) + 20
+    )
+  );
+
+  function renderAxisTick(props: {
+    x?: number | string;
+    y?: number | string;
+    payload?: { value?: string | number };
+  }) {
+    const x = Number(props.x ?? 0);
+    const y = Number(props.y ?? 0);
+    const full = String(props.payload?.value ?? "");
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text
+          dy={12}
+          textAnchor="end"
+          transform={`rotate(${LABEL_ANGLE})`}
+          fill={axis}
+          fontSize={12}
+        >
+          <title>{full}</title>
+          {truncate(full, maxChars)}
+        </text>
+      </g>
+    );
   }
 
   return (
@@ -256,22 +359,24 @@ export default function TimeByCompanyChart({
       {/* outline-none nos descendentes: ao clicar, os <rect>/<path> do recharts
           recebem :focus e o navegador desenha um contorno (os "quadriculados
           brancos" em posições estranhas). Suprimimos esse foco visual. */}
-      <div className="h-72 w-full [&_*:focus]:outline-none [&_svg]:outline-none">
+      <div
+        ref={wrapRef}
+        style={{ height: 220 + axisHeight }}
+        className="w-full [&_*:focus]:outline-none [&_svg]:outline-none"
+      >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}
-            margin={{ top: 8, right: 8, left: 0, bottom: 8 }}
+            margin={{ top: 8, right: 8, left: 0, bottom: 4 }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke={grid} vertical={false} />
             <XAxis
               dataKey="name"
-              tick={{ fill: axis, fontSize: 12 }}
+              tick={renderAxisTick}
               tickLine={false}
               axisLine={{ stroke: grid }}
-              interval={0}
-              angle={chartData.length > 4 ? -20 : 0}
-              textAnchor={chartData.length > 4 ? "end" : "middle"}
-              height={chartData.length > 4 ? 56 : 32}
+              interval={labelInterval}
+              height={axisHeight}
             />
             <YAxis
               tick={{ fill: axis, fontSize: 12 }}
@@ -310,7 +415,7 @@ export default function TimeByCompanyChart({
               maxBarSize={56}
               // Evita a barra "ativa" que o recharts sobrepõe ao clicar/focar.
               activeBar={false}
-              cursor={clickable ? "pointer" : undefined}
+              cursor={clickable || overflow ? "pointer" : undefined}
               onClick={(entry) => {
                 const payload = (
                   entry as unknown as {
@@ -321,18 +426,34 @@ export default function TimeByCompanyChart({
               }}
             >
               {chartData.map((entry) => (
-                <Cell key={entry.name} fill="#3145FF" />
+                <Cell
+                  key={entry.name}
+                  fill={entry.isOthers ? othersFill : "#3145FF"}
+                />
               ))}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
 
-      {clickable && (
-        <p className="mt-2 text-center text-xs text-fg-subtle">
-          Clique numa barra para ver as tarefas que compõem o tempo.
-        </p>
-      )}
+      <div className="mt-2 flex flex-col items-center gap-1">
+        {clickable && (
+          <p className="text-center text-xs text-fg-subtle">
+            Clique numa barra para ver as tarefas que compõem o tempo.
+          </p>
+        )}
+        {overflow && (
+          <button
+            type="button"
+            onClick={() => setShowAll((s) => !s)}
+            className="rounded-lg px-2 py-1 text-xs font-medium text-risd transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
+          >
+            {showAll
+              ? `Agrupar as menores (Top ${topN})`
+              : `Ver todas as ${sorted.length} empresas`}
+          </button>
+        )}
+      </div>
 
       {selected && drilldownPeriod && (
         <BreakdownPanel

@@ -26,6 +26,10 @@ function first<T>(value: Joined<T>): T | null {
   return value;
 }
 
+// Teto de itens carregados por vez (Passo 18). Esta lista não tem filtro de
+// período, então cresce sem limite; buscamos CAP+1 para saber se há mais.
+const CAP = 300;
+
 export default async function ConsultorTarefasPage() {
   const { supabase, profile } = await guardRole(["consultor"]);
 
@@ -36,9 +40,12 @@ export default async function ConsultorTarefasPage() {
     .select(
       "id, title, status, due_at, total_seconds, company_id, collaborator_id, company:companies!task_instances_company_id_fkey(name), collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email), template:task_templates!task_instances_template_id_fkey(kind)"
     )
-    .order("due_at", { ascending: true, nullsFirst: false });
+    .order("due_at", { ascending: true, nullsFirst: false })
+    .limit(CAP + 1);
 
-  const rows = (data as InstanceRow[]) ?? [];
+  const allRows = (data as InstanceRow[]) ?? [];
+  const truncated = allRows.length > CAP;
+  const rows = truncated ? allRows.slice(0, CAP) : allRows;
 
   const items: TaskInstanceItem[] = rows.map((r) => {
     const company = first(r.company);
@@ -81,6 +88,7 @@ export default async function ConsultorTarefasPage() {
           panel="consultor"
           companies={companies}
           collaborators={collaborators}
+          truncated={truncated}
         />
       )}
     </AppShell>

@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { SearchBox, norm } from "@/components/ListControls";
-import { inputClass } from "@/lib/ui";
+import Combobox from "@/components/Combobox";
 
 // Seletor genérico "lista com checkbox + responsável por item", reutilizado nas
 // duas direções do vínculo empresa↔tarefa padrão (Passo 20):
@@ -45,6 +45,11 @@ export default function AssignmentPicker({
 }) {
   const [query, setQuery] = useState("");
   const [defaultResp, setDefaultResp] = useState("");
+
+  const collabOptions = collaborators.map((p) => ({
+    value: p.id,
+    label: p.full_name || p.email,
+  }));
 
   const q = norm(query.trim());
   const filtered = q ? items.filter((it) => norm(it.label).includes(q)) : items;
@@ -118,19 +123,14 @@ export default function AssignmentPicker({
               (aplica a todas as marcadas)
             </span>
           </label>
-          <select
+          <Combobox
             id={`${idPrefix}-default`}
             value={defaultResp}
-            onChange={(e) => applyDefault(e.target.value)}
-            className={inputClass}
-          >
-            <option value="">Selecione…</option>
-            {collaborators.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.full_name || p.email}
-              </option>
-            ))}
-          </select>
+            onChange={applyDefault}
+            options={collabOptions}
+            ariaLabel="Responsável padrão"
+            searchPlaceholder="Buscar responsável…"
+          />
         </div>
       )}
 
@@ -201,21 +201,15 @@ export default function AssignmentPicker({
                     >
                       {responsibleLabel}
                     </label>
-                    <select
+                    <Combobox
                       id={`${idPrefix}-collab-${it.id}`}
                       value={row.collaboratorId}
-                      onChange={(e) =>
-                        mutate(it.id, { collaboratorId: e.target.value })
-                      }
-                      className={inputClass}
-                    >
-                      <option value="">Selecione…</option>
-                      {collaborators.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.full_name || p.email}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(v) => mutate(it.id, { collaboratorId: v })}
+                      options={collabOptions}
+                      ariaLabel={responsibleLabel}
+                      searchPlaceholder="Buscar responsável…"
+                    />
+
                   </div>
                 )}
               </li>

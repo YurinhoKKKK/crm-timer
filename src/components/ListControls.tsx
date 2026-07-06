@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 // Controles de filtro compartilhados pelas listagens (tarefas, empresas,
 // usuários). Visual discreto, alinhado à identidade da marca. A filtragem em
@@ -102,5 +102,62 @@ export function EmptyState({ children }: { children: ReactNode }) {
     <div className="rounded-2xl border border-line bg-surface p-12 text-center text-fg-subtle shadow-card">
       {children}
     </div>
+  );
+}
+
+// Revelação incremental "ver mais" (Passo 18 — escala). Mantém a busca
+// instantânea (o filtro continua em memória sobre a lista toda), mas só renderiza
+// uma janela de itens por vez, para não montar centenas de nós no DOM. O limite
+// volta ao início sempre que a lista filtrada muda (nova busca/filtro).
+export function usePaged<T>(
+  items: T[],
+  step = 20
+): { visible: T[]; hasMore: boolean; remaining: number; showMore: () => void } {
+  const [limit, setLimit] = useState(step);
+
+  useEffect(() => {
+    setLimit(step);
+  }, [items, step]);
+
+  return {
+    visible: items.slice(0, limit),
+    hasMore: items.length > limit,
+    remaining: Math.max(0, items.length - limit),
+    showMore: () => setLimit((l) => l + step),
+  };
+}
+
+// Botão "Ver mais" centralizado, responsivo (full-width no celular).
+export function ShowMore({
+  remaining,
+  onClick,
+}: {
+  remaining: number;
+  onClick: () => void;
+}) {
+  return (
+    <div className="mt-4 flex justify-center">
+      <button
+        type="button"
+        onClick={onClick}
+        className="w-full rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-fg shadow-sm transition hover:border-risd/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas sm:w-auto"
+      >
+        Ver mais{" "}
+        <span className="text-fg-subtle">
+          ({remaining} restante{remaining === 1 ? "" : "s"})
+        </span>
+      </button>
+    </div>
+  );
+}
+
+// Aviso de que a lista foi limitada no servidor (teto de desempenho). Sinaliza
+// que a busca/os filtros agem só sobre o que foi carregado.
+export function TruncationNotice({ count }: { count: number }) {
+  return (
+    <p className="mb-3 rounded-lg border border-line bg-surface-2/60 px-3 py-2 text-xs text-fg-subtle">
+      Exibindo as primeiras {count} tarefas (limite de desempenho). A busca e os
+      filtros abaixo agem sobre estas; refine para encontrar tarefas específicas.
+    </p>
   );
 }

@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import type { TaskTemplate } from "@/lib/types";
+import CreatorMeta from "@/components/CreatorMeta";
+import { resolvePersonNames } from "@/lib/creator";
 import TaskEditor from "./TaskEditor";
 import DeleteTaskButton from "./DeleteTaskButton";
 
@@ -25,7 +27,7 @@ export default async function TarefaDetailPage({
     supabase
       .from("task_templates")
       .select(
-        "id, title, description, instructions, company_id, collaborator_id, kind, due_time, weekdays, start_date, end_date, active"
+        "id, title, description, instructions, company_id, collaborator_id, kind, due_time, weekdays, start_date, end_date, active, created_by, created_at, standard_task_id"
       )
       .eq("id", id)
       .maybeSingle(),
@@ -50,6 +52,12 @@ export default async function TarefaDetailPage({
   const totalSeconds = instances.reduce((sum, r) => sum + r.total_seconds, 0);
   const instanceCount = instances.length;
 
+  // Transparência: quem criou esta tarefa (molde) e quando.
+  const names = await resolvePersonNames(supabase, [template.created_by]);
+  const creatorName = template.created_by
+    ? names.get(template.created_by) ?? null
+    : null;
+
   return (
     <AppShell
       user={{ name: profile.full_name, role: "admin", avatarUrl: profile.avatarUrl }}
@@ -58,7 +66,15 @@ export default async function TarefaDetailPage({
     >
       <div className="mx-auto max-w-2xl">
         <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
-          <h2 className="mb-4 font-semibold text-fg">Dados da tarefa</h2>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-semibold text-fg">Dados da tarefa</h2>
+            <CreatorMeta
+              label="Criada por"
+              who={creatorName}
+              whenISO={template.created_at}
+              fromStandard={!!template.standard_task_id}
+            />
+          </div>
           <TaskEditor
             template={template}
             companies={companies}

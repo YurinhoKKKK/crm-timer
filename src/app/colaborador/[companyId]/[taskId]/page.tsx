@@ -2,6 +2,12 @@ import { notFound } from "next/navigation";
 import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import type { TaskStatus } from "@/lib/types";
+import CreatorMeta from "@/components/CreatorMeta";
+import {
+  resolvePersonNames,
+  describeInstanceCreator,
+  type InstanceTemplate,
+} from "@/lib/creator";
 import Timer from "./Timer";
 
 type TaskRow = {
@@ -14,7 +20,9 @@ type TaskRow = {
   total_seconds: number;
   completion_note: string | null;
   company_id: string;
+  created_at: string;
   company: { name: string } | { name: string }[] | null;
+  template: InstanceTemplate | InstanceTemplate[] | null;
 };
 
 function first<T>(value: T | T[] | null): T | null {
@@ -48,7 +56,7 @@ export default async function TarefaPage({
   const { data: taskData } = await supabase
     .from("task_instances")
     .select(
-      "id, title, description, instructions, status, due_at, total_seconds, completion_note, company_id, company:companies!task_instances_company_id_fkey(name)"
+      "id, title, description, instructions, status, due_at, total_seconds, completion_note, company_id, created_at, company:companies!task_instances_company_id_fkey(name), template:task_templates!task_instances_template_id_fkey(created_by, created_at, standard_task_id)"
     )
     .eq("id", taskId)
     .eq("collaborator_id", profile.id)
@@ -56,6 +64,11 @@ export default async function TarefaPage({
 
   const task = taskData as TaskRow | null;
   if (!task) notFound();
+
+  // Transparência: quem criou a tarefa e quando (e se veio da recorrência).
+  const template = first(task.template);
+  const names = await resolvePersonNames(supabase, [template?.created_by]);
+  const creator = describeInstanceCreator(template, task.created_at, names);
 
   // Recupera um intervalo aberto (sem ended_at) para retomar o cronômetro.
   const { data: openEntry } = await supabase
@@ -113,6 +126,16 @@ export default async function TarefaPage({
               </div>
             )}
           </dl>
+          <div className="mt-4 border-t border-line pt-3">
+            <CreatorMeta
+              label="Criada por"
+              who={creator.who}
+              whenISO={creator.whenISO}
+              fromStandard={creator.fromStandard}
+              systemGenerated={creator.systemGenerated}
+              hasOrigin={creator.hasOrigin}
+            />
+          </div>
         </section>
 
         <Timer

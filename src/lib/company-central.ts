@@ -3,6 +3,12 @@ import type { TaskStatus, TaskKind } from "@/lib/types";
 import { formatDuration } from "@/lib/format";
 import { avatarUrl } from "@/lib/avatar";
 import { withSelf } from "@/lib/people";
+import {
+  resolvePersonNames,
+  describeInstanceCreator,
+  type CreatorInfo,
+  type InstanceTemplate,
+} from "@/lib/creator";
 
 // Central da empresa (Passo 19). Carregador compartilhado por admin e consultor:
 // mesma leitura de dados, RLS escopando quem vê o quê. Os agregados pesados
@@ -44,6 +50,7 @@ export type CentralCompany = {
   whatsappGroupName: string | null;
   whatsappContactId: string | null;
   createdAt: string;
+  creatorName: string | null; // quem cadastrou (null = anterior ao registro)
 };
 
 export type CentralOverview = {
@@ -68,6 +75,7 @@ export type CentralTaskItem = {
   total_seconds: number;
   collaboratorName: string;
   completionNote: string | null;
+  creator: CreatorInfo; // quem criou a tarefa e se veio da recorrência
 };
 
 export type CentralAttentionItem = {
@@ -139,7 +147,9 @@ export async function loadCompanyCentral(
     // companies_select (RLS) só devolve a empresa se o usuário tiver acesso.
     supabase
       .from("companies")
-      .select("id, name, whatsapp_group_name, whatsapp_contact_id, created_at")
+      .select(
+        "id, name, whatsapp_group_name, whatsapp_contact_id, created_at, created_by"
+      )
       .eq("id", companyId)
       .maybeSingle(),
     supabase
@@ -161,7 +171,7 @@ export async function loadCompanyCentral(
       let q = supabase
         .from("task_instances")
         .select(
-          "id, title, status, due_at, created_at, total_seconds, completion_note, collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email)"
+          "id, title, status, due_at, created_at, total_seconds, completion_note, collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email), template:task_templates!task_instances_template_id_fkey(created_by, created_at, standard_task_id)"
         )
         .eq("company_id", companyId)
         .order("due_at", { ascending: true, nullsFirst: false })
@@ -204,6 +214,7 @@ export async function loadCompanyCentral(
     whatsapp_group_name: string | null;
     whatsapp_contact_id: string | null;
     created_at: string;
+    created_by: string | null;
   } | null;
   if (!company) return { notFound: true };
 
@@ -247,9 +258,16 @@ export async function loadCompanyCentral(
     total_seconds: number;
     completion_note: string | null;
     collaborator: Joined<{ full_name: string | null; email: string }>;
+    template: Joined<InstanceTemplate>;
   }[]) ?? [];
   const tasksTruncated = allTaskRows.length > TASK_CAP;
   const taskRows = tasksTruncated ? allTaskRows.slice(0, TASK_CAP) : allTaskRows;
+
+  // Nomes de quem criou (empresa + tarefas), legíveis por qualquer cargo via
+  // display_names. Uma única chamada em lote.
+  const creatorIds: (string | null | undefined)[] = [company.created_by];
+  for (const r of taskRows) creatorIds.push(first(r.template)?.created_by);
+  const names = await resolvePersonNames(supabase, creatorIds);
 
   const tasks: CentralTaskItem[] = taskRows.map((r) => {
     const collab = first(r.collaborator);
@@ -263,6 +281,7 @@ export async function loadCompanyCentral(
       collaboratorName:
         collab?.full_name || collab?.email || "(sem responsável)",
       completionNote: r.completion_note,
+      creator: describeInstanceCreator(first(r.template), r.created_at, names),
     };
   });
 
@@ -355,6 +374,9 @@ export async function loadCompanyCentral(
         whatsappGroupName: company.whatsapp_group_name,
         whatsappContactId: company.whatsapp_contact_id,
         createdAt: company.created_at,
+        creatorName: company.created_by
+          ? names.get(company.created_by) ?? null
+          : null,
       },
       consultants,
       overview,

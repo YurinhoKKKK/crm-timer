@@ -87,6 +87,7 @@ export async function createCompany(
       name,
       whatsapp_contact_id: normalize(input.whatsappContactId),
       whatsapp_group_name: normalize(input.whatsappGroupName),
+      created_by: user.id, // transparência: quem cadastrou a empresa
     })
     .select("id")
     .single();

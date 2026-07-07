@@ -4,6 +4,7 @@ import PeriodFilter, { type Period } from "@/app/admin/PeriodFilter";
 import NewTaskForm from "@/app/admin/tarefas/NewTaskForm";
 import CompanyStandardTasks from "@/components/CompanyStandardTasks";
 import CompanyTaskList from "./CompanyTaskList";
+import CreatorMeta from "@/components/CreatorMeta";
 import { STATUS_META } from "@/lib/status";
 import { formatDuration, formatDue } from "@/lib/format";
 import { btnSecondary } from "@/lib/ui";
@@ -15,14 +16,6 @@ const PERIOD_LABEL: Record<Period, string> = {
   "30d": "nos últimos 30 dias",
   tudo: "em todo o período",
 };
-
-function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-}
 
 function formatDateTime(value: string): string {
   return new Date(value).toLocaleString("pt-BR", {
@@ -114,11 +107,15 @@ export default function CompanyCentral({
                     (company.whatsappContactId ? "(sem nome)" : "não vinculado")}
                 </span>
               </p>
-              <p className="text-fg-muted">
-                Cadastrada em{" "}
-                <span className="text-fg">{formatDate(company.createdAt)}</span>
-              </p>
             </div>
+            <CreatorMeta
+              label="Cadastrada por"
+              who={company.creatorName}
+              whenISO={company.createdAt}
+              dateOnly
+              hasOrigin={!!company.creatorName}
+              systemLabel="Cadastrada"
+            />
           </div>
           {editHref && (
             <Link href={editHref} className={`${btnSecondary} shrink-0`}>

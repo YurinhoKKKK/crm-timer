@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { TaskStatus } from "@/lib/types";
 import { STATUS_META } from "@/lib/status";
 import { formatDuration, formatDue } from "@/lib/format";
+import CreatorMeta from "@/components/CreatorMeta";
 import type { CentralTaskItem } from "@/lib/company-central";
 import {
   FilterBar,
@@ -188,6 +189,16 @@ export default function CompanyTaskList({
                         </p>
                       </div>
                     )}
+                    <div className="mt-3 border-t border-line pt-3">
+                      <CreatorMeta
+                        label="Criada por"
+                        who={t.creator.who}
+                        whenISO={t.creator.whenISO}
+                        fromStandard={t.creator.fromStandard}
+                        systemGenerated={t.creator.systemGenerated}
+                        hasOrigin={t.creator.hasOrigin}
+                      />
+                    </div>
                   </div>
                 )}
               </li>

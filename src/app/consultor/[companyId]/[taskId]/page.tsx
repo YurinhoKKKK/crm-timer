@@ -4,6 +4,8 @@ import AppShell from "@/components/AppShell";
 import type { TaskStatus } from "@/lib/types";
 import { STATUS_META } from "@/lib/status";
 import { formatDuration } from "@/lib/format";
+import CreatorMeta from "@/components/CreatorMeta";
+import { resolvePersonNames, describeInstanceCreator } from "@/lib/creator";
 import TaskInstanceEditor from "./TaskInstanceEditor";
 import DeleteTaskButton from "@/app/admin/tarefas/[id]/DeleteTaskButton";
 
@@ -20,8 +22,12 @@ type InstanceRow = {
   due_at: string | null;
   status: TaskStatus;
   total_seconds: number;
+  created_at: string;
   company: { name: string } | { name: string }[] | null;
-  template: { created_by: string } | { created_by: string }[] | null;
+  template:
+    | { created_by: string | null; created_at: string | null; standard_task_id: string | null }
+    | { created_by: string | null; created_at: string | null; standard_task_id: string | null }[]
+    | null;
 };
 
 function first<T>(value: T | T[] | null): T | null {
@@ -42,7 +48,7 @@ export default async function ConsultorTarefaPage({
     supabase
       .from("task_instances")
       .select(
-        "id, company_id, collaborator_id, template_id, title, description, instructions, due_at, status, total_seconds, company:companies!task_instances_company_id_fkey(name), template:task_templates!task_instances_template_id_fkey(created_by)"
+        "id, company_id, collaborator_id, template_id, title, description, instructions, due_at, status, total_seconds, created_at, company:companies!task_instances_company_id_fkey(name), template:task_templates!task_instances_template_id_fkey(created_by, created_at, standard_task_id)"
       )
       .eq("id", taskId)
       .maybeSingle(),
@@ -66,6 +72,11 @@ export default async function ConsultorTarefaPage({
   // aviso. A RLS (tt_delete) reforça a permissão no banco.
   const template = first(task.template);
   const canDelete = !!task.template_id && template?.created_by === profile.id;
+
+  // Transparência: quem criou a tarefa e quando (e se esta ocorrência veio da
+  // recorrência). O nome vem de display_names (legível a todos os cargos).
+  const names = await resolvePersonNames(supabase, [template?.created_by]);
+  const creator = describeInstanceCreator(template, task.created_at, names);
 
   let deleteSeconds = 0;
   let deleteCount = 0;
@@ -102,6 +113,16 @@ export default async function ConsultorTarefaPage({
           O status é definido pelo fluxo do timer do colaborador e não é editável
           aqui.
         </span>
+        <div className="w-full border-t border-line pt-3">
+          <CreatorMeta
+            label="Criada por"
+            who={creator.who}
+            whenISO={creator.whenISO}
+            fromStandard={creator.fromStandard}
+            systemGenerated={creator.systemGenerated}
+            hasOrigin={creator.hasOrigin}
+          />
+        </div>
       </section>
 
       <section className="rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">

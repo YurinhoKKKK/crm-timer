@@ -72,6 +72,7 @@ export type Database = {
       companies: {
         Row: {
           created_at: string
+          created_by: string | null
           id: string
           name: string
           updated_at: string
@@ -80,6 +81,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          created_by?: string | null
           id?: string
           name: string
           updated_at?: string
@@ -88,13 +90,22 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          created_by?: string | null
           id?: string
           name?: string
           updated_at?: string
           whatsapp_contact_id?: string | null
           whatsapp_group_name?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "companies_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       company_consultants: {
         Row: {
@@ -499,6 +510,10 @@ export type Database = {
           total: number
           done: number
         }[]
+      }
+      display_names: {
+        Args: { p_ids: string[] }
+        Returns: { id: string; name: string | null }[]
       }
       generate_daily_tasks: { Args: { target_date?: string }; Returns: number }
       is_admin: { Args: never; Returns: boolean }

@@ -34,6 +34,7 @@ export default function NewStandardTaskForm({
     emptyRows()
   );
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const companyItems: PickerItem[] = companies.map((c) => ({
@@ -53,6 +54,7 @@ export default function NewStandardTaskForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return; // trava reentrância (clique repetido)
     setError(null);
 
     const { assignments, missing } = collectAssignments(
@@ -64,29 +66,34 @@ export default function NewStandardTaskForm({
       return;
     }
 
-    const { error: actionError } = await createStandardTask(
-      {
-        title: form.title,
-        description: form.description,
-        instructions: form.instructions,
-        kind: form.kind,
-        dueTime: form.dueTime,
-        weekdays: Array.from(form.weekdays),
-      },
-      assignments.map((a) => ({
-        companyId: a.id,
-        collaboratorId: a.collaboratorId,
-      }))
-    );
+    setSubmitting(true);
+    try {
+      const { error: actionError } = await createStandardTask(
+        {
+          title: form.title,
+          description: form.description,
+          instructions: form.instructions,
+          kind: form.kind,
+          dueTime: form.dueTime,
+          weekdays: Array.from(form.weekdays),
+        },
+        assignments.map((a) => ({
+          companyId: a.id,
+          collaboratorId: a.collaboratorId,
+        }))
+      );
 
-    if (actionError) {
-      setError(actionError);
-      return;
+      if (actionError) {
+        setError(actionError);
+        return;
+      }
+
+      reset();
+      setOpen(false);
+      startTransition(() => router.refresh());
+    } finally {
+      setSubmitting(false);
     }
-
-    reset();
-    setOpen(false);
-    startTransition(() => router.refresh());
   }
 
   if (!open) {
@@ -133,8 +140,12 @@ export default function NewStandardTaskForm({
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       <div className="flex items-center gap-2">
-        <button type="submit" disabled={isPending} className={btnPrimary}>
-          {isPending ? "Salvando…" : "Salvar padrão"}
+        <button
+          type="submit"
+          disabled={submitting || isPending}
+          className={btnPrimary}
+        >
+          {submitting || isPending ? "Salvando…" : "Salvar padrão"}
         </button>
         <button
           type="button"

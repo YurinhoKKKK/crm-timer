@@ -55,6 +55,7 @@ export default function NewTaskForm({
   const [weekdays, setWeekdays] = useState<Set<number>>(new Set());
   const [endDate, setEndDate] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   function reset() {
@@ -82,29 +83,34 @@ export default function NewTaskForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return; // trava reentrância (clique repetido)
     setError(null);
+    setSubmitting(true);
+    try {
+      const { error: actionError } = await createTaskTemplate({
+        title,
+        description,
+        instructions,
+        companyId,
+        collaboratorId,
+        kind,
+        startDate,
+        dueTime,
+        weekdays: Array.from(weekdays),
+        endDate,
+      });
 
-    const { error: actionError } = await createTaskTemplate({
-      title,
-      description,
-      instructions,
-      companyId,
-      collaboratorId,
-      kind,
-      startDate,
-      dueTime,
-      weekdays: Array.from(weekdays),
-      endDate,
-    });
+      if (actionError) {
+        setError(actionError);
+        return;
+      }
 
-    if (actionError) {
-      setError(actionError);
-      return;
+      reset();
+      setOpen(false);
+      startTransition(() => router.refresh());
+    } finally {
+      setSubmitting(false);
     }
-
-    reset();
-    setOpen(false);
-    startTransition(() => router.refresh());
   }
 
   if (!open) {
@@ -311,8 +317,12 @@ export default function NewTaskForm({
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       <div className="flex items-center gap-2">
-        <button type="submit" disabled={isPending} className={btnPrimary}>
-          {isPending ? "Salvando…" : "Salvar tarefa"}
+        <button
+          type="submit"
+          disabled={submitting || isPending}
+          className={btnPrimary}
+        >
+          {submitting || isPending ? "Salvando…" : "Salvar tarefa"}
         </button>
         <button
           type="button"

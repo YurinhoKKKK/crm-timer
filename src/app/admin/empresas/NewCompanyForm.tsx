@@ -36,6 +36,7 @@ export default function NewCompanyForm({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [stdRows, setStdRows] = useState<Map<string, PickerRow>>(emptyRows());
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const stdItems: PickerItem[] = standards.map((s) => ({
@@ -64,6 +65,7 @@ export default function NewCompanyForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return; // trava reentrância (clique repetido)
     setError(null);
 
     const { assignments, missing } = collectAssignments(stdItems, stdRows);
@@ -72,27 +74,32 @@ export default function NewCompanyForm({
       return;
     }
 
-    const { error: actionError } = await createCompany(
-      {
-        name,
-        whatsappContactId: contactId,
-        whatsappGroupName: groupName,
-        consultantIds: Array.from(selected),
-      },
-      assignments.map((a) => ({
-        standardId: a.id,
-        collaboratorId: a.collaboratorId,
-      }))
-    );
+    setSubmitting(true);
+    try {
+      const { error: actionError } = await createCompany(
+        {
+          name,
+          whatsappContactId: contactId,
+          whatsappGroupName: groupName,
+          consultantIds: Array.from(selected),
+        },
+        assignments.map((a) => ({
+          standardId: a.id,
+          collaboratorId: a.collaboratorId,
+        }))
+      );
 
-    if (actionError) {
-      setError(actionError);
-      return;
+      if (actionError) {
+        setError(actionError);
+        return;
+      }
+
+      reset();
+      setOpen(false);
+      startTransition(() => router.refresh());
+    } finally {
+      setSubmitting(false);
     }
-
-    reset();
-    setOpen(false);
-    startTransition(() => router.refresh());
   }
 
   if (!open) {
@@ -191,8 +198,12 @@ export default function NewCompanyForm({
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       <div className="flex items-center gap-2">
-        <button type="submit" disabled={isPending} className={btnPrimary}>
-          {isPending ? "Salvando…" : "Salvar empresa"}
+        <button
+          type="submit"
+          disabled={submitting || isPending}
+          className={btnPrimary}
+        >
+          {submitting || isPending ? "Salvando…" : "Salvar empresa"}
         </button>
         <button
           type="button"

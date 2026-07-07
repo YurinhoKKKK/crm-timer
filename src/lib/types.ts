@@ -474,6 +474,32 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      company_overview: {
+        Args: { p_company_id: string; p_start: string | null; p_month_start: string }
+        Returns: {
+          total: number
+          a_fazer: number
+          iniciada: number
+          finalizada: number
+          cancelada: number
+          overdue: number
+          seconds_period: number
+          seconds_month: number
+          seconds_all: number
+        }[]
+      }
+      company_collaborator_summary: {
+        Args: { p_company_id: string; p_start: string | null }
+        Returns: {
+          collaborator_id: string
+          full_name: string | null
+          email: string | null
+          avatar_path: string | null
+          seconds: number
+          total: number
+          done: number
+        }[]
+      }
       generate_daily_tasks: { Args: { target_date?: string }; Returns: number }
       is_admin: { Args: never; Returns: boolean }
       my_collaborator_companies: { Args: never; Returns: string[] }

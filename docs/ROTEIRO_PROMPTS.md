@@ -541,7 +541,7 @@ soma dos tempos das tarefas é igual ao total da barra.
 
 ---
 
-## PASSO 18 — Preparar para escala (fazer por último)
+## PASSO 18 — Preparar para escala (fazer por último) (Feito)
 
 Mecânica: garantir que o sistema se comporte bem visualmente com muitas
 empresas (40+) e usuários (20+). Deixado por último conforme prioridade
@@ -559,6 +559,97 @@ auditoria de todas as telas e gráficos pensando em volume real:
 - Resumo por colaborador e demais tabelas: pagine ou limite com "ver mais".
 Me diga o que encontrou como risco de escala e aplique as correções.
 ```
+
+---
+
+## PASSO 19 — Tela completa de detalhe da empresa (admin e consultor) (Feito)
+
+Mecânica: uma "central da empresa" rica, que dá visão completa de cada
+cliente. Evolui a tela básica que já existe no painel do consultor e cria a
+equivalente no admin. Serve para consultar E agir.
+
+Escopo de acesso (o RLS já garante, mas confirmar):
+- Admin: acessa a tela de TODAS as empresas.
+- Consultor: acessa apenas as empresas sob responsabilidade dele.
+
+```
+Crie uma tela completa de detalhe da empresa ("central da empresa"),
+disponível nos painéis do admin e do consultor. Hoje o consultor tem uma
+versão básica dessa tela — evolua-a e crie a equivalente para o admin,
+reaproveitando componentes.
+
+ACESSO:
+- Admin acessa qualquer empresa. Consultor acessa só as empresas dele.
+  Confirme que o RLS reforça isso (não apenas a interface).
+
+CONTEÚDO DA TELA (organizado em blocos, do resumo ao detalhe):
+
+1. Cabeçalho da empresa:
+   - Nome, consultor(es) responsável(is), grupo de WhatsApp vinculado,
+     data de cadastro.
+
+2. Indicadores (cards com números):
+   - Total de tarefas e contagem por status: a fazer, em andamento
+     (iniciadas), finalizadas, atrasadas, canceladas — cada uma com sua
+     cor/tag.
+   - Tempo total gasto na empresa, e tempo gasto no mês atual (separados).
+
+3. Progresso:
+   - Barra de progressão (% de tarefas concluídas) na cor da marca.
+
+4. Tarefas atrasadas em destaque:
+   - Uma seção no topo que evidencia as tarefas atrasadas (prazo vencido e
+     não finalizadas), porque são as que exigem ação.
+
+5. Lista de tarefas (detalhamento):
+   - Todas as tarefas da empresa, com filtros por status e ordenação
+     (mais antiga, mais recente, próximas do prazo). Reaproveite os filtros
+     e a busca já existentes no sistema.
+   - Cada tarefa mostra: título, responsável, status (badge), prazo e tempo
+     gasto. Clicável para abrir o detalhe da tarefa.
+   - Detalhe das tarefas entregues/finalizadas: incluir o resumo escrito na
+     finalização e o tempo total.
+
+6. Resumo por colaborador (dentro da empresa):
+   - Quais colaboradores trabalharam nesta empresa e quanto tempo cada um
+     dedicou; % de conclusão de cada um dentro da empresa.
+
+7. Histórico de atividades:
+   - As entradas do activity_log daquela empresa (os resumos escritos ao
+     finalizar tarefas), em ordem cronológica — o "diário" do cliente.
+
+8. Tarefas padrão da empresa:
+   - Quais tarefas padrão esta empresa usa (do sistema de tarefas padrão já
+     existente).
+
+AÇÕES (a tela também permite agir, não só consultar):
+- Botão "Nova tarefa" já com a empresa pré-selecionada (reaproveite o fluxo
+  do passo que criou isso).
+- Botão "Editar empresa" para ajustar dados/vínculos ali mesmo.
+- Ações respeitam permissão: consultor só age nas empresas dele; admin em
+  todas.
+
+CUIDADOS:
+- Pense em ESCALA (uma empresa antiga pode ter milhares de instâncias de
+  tarefa por causa da recorrência diária): a lista de tarefas e o histórico
+  devem usar a paginação no servidor já implementada, não carregar tudo.
+- Todos os números (contagens, tempo) devem bater com o dashboard.
+- Mantenha a identidade visual da marca, tema claro/escuro e responsividade
+  (precisa funcionar bem no celular).
+
+Ao terminar, me mostre a tela para uma empresa com bastante dado e confirme,
+como admin e como consultor, que o acesso está correto (consultor não acessa
+empresa que não é dele).
+```
+
+### Checklist de validação
+- Como admin, abrir qualquer empresa e ver todos os blocos preenchidos.
+- Como consultor, confirmar que só acessa as empresas dele (tentar acessar
+  uma que não é dele deve ser bloqueado).
+- Conferir que os números (tarefas por status, tempo) batem com o dashboard.
+- Criar uma tarefa pela tela da empresa e confirmar que nasce vinculada a ela.
+- Abrir uma empresa com muitas tarefas e confirmar que carrega rápido
+  (paginação funcionando).
 
 ---
 

@@ -10,7 +10,12 @@ export function formatDuration(totalSeconds: number): string {
 
 export function formatDue(due: string | null): string {
   if (!due) return "Sem prazo";
+  // due_at é um instante (timestamptz). Exibimos SEMPRE no horário de Brasília,
+  // independentemente do fuso do runtime (o servidor Next roda em UTC; o browser
+  // do usuário, em BRT). Sem fixar o timeZone, a mesma tela mostraria horários
+  // diferentes no SSR e no cliente.
   return new Date(due).toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",

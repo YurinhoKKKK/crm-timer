@@ -19,6 +19,7 @@ import {
   norm,
 } from "@/components/ListControls";
 import { btnPrimary, btnSecondary } from "@/lib/ui";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import AssignmentPicker, {
   collectAssignments,
   type PickerItem,
@@ -153,13 +154,8 @@ function StandardRow({
   }
 
   async function remove() {
-    setError(null);
     const { error: actionError } = await deleteStandardTask(item.id);
-    if (actionError) {
-      setError(actionError);
-      setConfirming(false);
-      return;
-    }
+    if (actionError) return { error: actionError };
     startTransition(() => router.refresh());
   }
 
@@ -277,38 +273,20 @@ function StandardRow({
         <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>
       )}
 
-      {confirming && (
-        <div className="mt-3 rounded-lg border border-red-300/60 bg-red-50 p-3 text-sm dark:border-red-500/30 dark:bg-red-500/10">
-          <p className="text-red-800 dark:text-red-200">
-            Excluir a tarefa padrão &quot;{item.title}&quot; do catálogo?
-            {item.usageCount > 0 && (
-              <>
-                {" "}
-                As tarefas já atribuídas às {item.usageCount} empresa
-                {item.usageCount === 1 ? "" : "s"} permanecem, mas deixam de
-                receber atualizações desta padrão.
-              </>
-            )}
-          </p>
-          <div className="mt-3 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={remove}
-              disabled={isPending}
-              className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:opacity-60"
-            >
-              {isPending ? "Excluindo…" : "Confirmar exclusão"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirming(false)}
-              className={btnSecondary}
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        title={`Excluir a tarefa padrão "${item.title}"?`}
+        confirmLabel="Confirmar exclusão"
+        description={
+          item.usageCount > 0
+            ? `As tarefas já atribuídas às ${item.usageCount} empresa${
+                item.usageCount === 1 ? "" : "s"
+              } permanecem, mas deixam de receber atualizações desta padrão.`
+            : "A tarefa padrão sai do catálogo. Esta ação não pode ser desfeita."
+        }
+        onConfirm={remove}
+      />
     </li>
   );
 }

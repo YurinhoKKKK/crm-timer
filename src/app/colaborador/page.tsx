@@ -2,6 +2,8 @@ import Link from "next/link";
 import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import type { TaskStatus } from "@/lib/types";
+import LabelChips from "@/components/LabelChips";
+import { loadLabelsByCompany } from "@/lib/labels";
 
 type InstanceRow = {
   id: string;
@@ -77,6 +79,12 @@ export default async function ColaboradorPage() {
     a.name.localeCompare(b.name, "pt-BR")
   );
 
+  // Etiquetas herdadas da empresa (uma consulta em lote para todos os cards).
+  const labelsByCompany = await loadLabelsByCompany(
+    supabase,
+    companies.map((c) => c.id)
+  );
+
   return (
     <AppShell
       user={{
@@ -114,6 +122,10 @@ export default async function ColaboradorPage() {
                       →
                     </span>
                   </div>
+                  <LabelChips
+                    labels={labelsByCompany.get(c.id) ?? []}
+                    className="mt-2"
+                  />
 
                   <div className="mt-4">
                     <div className="mb-1.5 flex items-center justify-between text-xs text-fg-muted">

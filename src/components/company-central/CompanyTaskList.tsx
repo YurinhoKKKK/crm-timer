@@ -5,6 +5,8 @@ import type { TaskStatus } from "@/lib/types";
 import { STATUS_META } from "@/lib/status";
 import { formatDuration, formatDue } from "@/lib/format";
 import CreatorMeta from "@/components/CreatorMeta";
+import LabelChips from "@/components/LabelChips";
+import type { Label } from "@/lib/labels";
 import type { CentralTaskItem } from "@/lib/company-central";
 import {
   FilterBar,
@@ -36,9 +38,12 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
 export default function CompanyTaskList({
   tasks,
   truncated,
+  labels = [],
 }: {
   tasks: CentralTaskItem[];
   truncated: boolean;
+  // Etiquetas da empresa — herdadas por todas as tarefas (mesma empresa).
+  labels?: Label[];
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
@@ -132,6 +137,9 @@ export default function CompanyTaskList({
                         </span>
                       )}
                     </div>
+                    {labels.length > 0 && (
+                      <LabelChips labels={labels} className="mt-2" />
+                    )}
                     <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-subtle">
                       <span>{t.collaboratorName}</span>
                       <span>Prazo: {formatDue(t.due_at)}</span>

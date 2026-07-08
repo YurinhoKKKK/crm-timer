@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import type { TaskStatus } from "@/lib/types";
+import LabelChips from "@/components/LabelChips";
+import { loadCompanyLabels } from "@/lib/labels";
 import TaskList, { type TaskItem } from "./TaskList";
 
 type CompanyRow = { id: string; name: string };
@@ -30,6 +32,7 @@ export default async function ColaboradorEmpresaPage({
   const company = companyData as CompanyRow | null;
   if (!company) notFound();
 
+  const labels = await loadCompanyLabels(supabase, companyId);
   const tasks = (tasksData as TaskItem[]) ?? [];
   const total = tasks.length;
   const done = tasks.filter((t) => (t.status as TaskStatus) === "finalizada").length;
@@ -46,6 +49,7 @@ export default async function ColaboradorEmpresaPage({
       back={{ href: "/colaborador", label: "Minhas empresas" }}
     >
       <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
+        {labels.length > 0 && <LabelChips labels={labels} className="mb-4" />}
         <div className="mb-2 flex items-center justify-between text-sm text-fg-muted">
           <span className="font-medium text-fg">Progresso geral</span>
           <span className="font-mono tabular-nums">
@@ -71,7 +75,7 @@ export default async function ColaboradorEmpresaPage({
           Erro ao carregar tarefas: {error.message}
         </div>
       ) : (
-        <TaskList companyId={company.id} tasks={tasks} />
+        <TaskList companyId={company.id} tasks={tasks} labels={labels} />
       )}
     </AppShell>
   );

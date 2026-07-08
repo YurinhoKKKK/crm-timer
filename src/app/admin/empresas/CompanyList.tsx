@@ -12,6 +12,8 @@ import {
   norm,
   type SelectOption,
 } from "@/components/ListControls";
+import LabelChips from "@/components/LabelChips";
+import type { Label } from "@/lib/labels";
 
 export type CompanyItem = {
   id: string;
@@ -19,6 +21,7 @@ export type CompanyItem = {
   whatsappGroupName: string | null;
   whatsappContactId: string | null;
   consultants: { id: string; name: string }[];
+  labels: Label[];
 };
 
 export default function CompanyList({
@@ -73,9 +76,12 @@ export default function CompanyList({
                 className="group block rounded-xl border border-line bg-surface p-4 shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-fg group-hover:text-risd">
-                    {company.name}
-                  </span>
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="font-medium text-fg group-hover:text-risd">
+                      {company.name}
+                    </span>
+                    <LabelChips labels={company.labels} />
+                  </div>
                   <span className="text-fg-subtle transition group-hover:translate-x-0.5 group-hover:text-risd">
                     →
                   </span>

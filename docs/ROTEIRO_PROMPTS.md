@@ -653,6 +653,70 @@ empresa que não é dele).
 
 ---
 
+## PASSO 20 — Sistema de etiquetas de empresa (com herança nas tarefas)
+
+Mecânica: um sistema de etiquetas coloridas atribuíveis a empresas. As
+etiquetas de uma empresa aparecem em todas as tarefas dela, de forma
+retroativa e automática (a tarefa herda da empresa em tempo real, não por
+cópia). A primeira etiqueta é "Ema".
+
+```
+Implemente um sistema de ETIQUETAS (tags) coloridas para empresas.
+
+GERENCIAMENTO DE ETIQUETAS:
+- Uma área (na tela de Empresas ou nas configurações) para criar, editar e
+  remover etiquetas. Cada etiqueta tem: nome, cor de fundo e cor do texto.
+- Crie a primeira etiqueta já no sistema: nome "Ema", fundo #4A2882, texto
+  #FFFFFF.
+- Modele no banco uma tabela própria de etiquetas (ex: labels) e uma relação
+  muitos-para-muitos entre empresas e etiquetas (ex: company_labels), já que
+  uma empresa pode ter VÁRIAS etiquetas e uma etiqueta pode estar em várias
+  empresas.
+
+ATRIBUIÇÃO NA EMPRESA:
+- No formulário de CRIAÇÃO e de EDIÇÃO de empresa, permita selecionar uma ou
+  mais etiquetas (multi-seleção). O admin/consultor marca quais etiquetas a
+  empresa tem.
+- As etiquetas selecionadas aparecem no cabeçalho/detalhe da empresa,
+  renderizadas com suas cores.
+
+HERANÇA NAS TAREFAS (retroativa e automática — ponto crítico):
+- As etiquetas NÃO são copiadas para cada tarefa. Em vez disso, a tarefa
+  HERDA as etiquetas da sua empresa em tempo real: ao exibir uma tarefa,
+  o sistema busca as etiquetas da empresa dela e as mostra.
+- Isso garante que funcione RETROATIVAMENTE: marcar uma etiqueta numa empresa
+  já existente faz a etiqueta aparecer em TODAS as tarefas dela (antigas,
+  atuais e futuras) imediatamente, sem precisar atualizar tarefa por tarefa.
+  Desmarcar remove de todas automaticamente.
+- Mostre as etiquetas nas tarefas onde fizer sentido: no detalhe da tarefa,
+  na listagem de tarefas, e onde mais a tarefa aparecer (ex: painel do
+  colaborador). Renderizadas com as cores da etiqueta.
+
+CUIDADOS:
+- Pense em ESCALA: a herança em tempo real deve ser eficiente (não fazer uma
+  consulta separada por tarefa numa lista grande — busque as etiquetas das
+  empresas envolvidas de forma agrupada).
+- Respeite o RLS existente (admin/consultor no escopo deles; colaborador vê
+  as etiquetas das tarefas dele).
+- Mantenha a identidade visual da marca, tema claro/escuro e responsividade.
+
+Teste: criar a etiqueta "Ema", aplicá-la a uma empresa que JÁ TEM tarefas, e
+confirmar que a etiqueta aparece em todas as tarefas dela (inclusive as
+antigas). Depois desmarcar e confirmar que some de todas.
+```
+
+### Checklist de validação
+- Criar a etiqueta "Ema" (#4A2882 / #FFFFFF) e vê-la com as cores certas.
+- Criar uma segunda etiqueta qualquer para confirmar que o sistema é
+  extensível (não fixo só na Ema).
+- Aplicar 2 etiquetas a uma mesma empresa e ver as duas.
+- Marcar a etiqueta numa empresa antiga e confirmar que aparece nas tarefas
+  já existentes dela (o teste retroativo — o mais importante).
+- Desmarcar e confirmar que some de todas as tarefas.
+- Conferir que uma lista grande de tarefas com etiquetas continua carregando
+  rápido (escala).
+
+
 ## Dicas gerais ao usar o Claude Code
 
 - **Teste cada passo no navegador** antes de avançar. Se algo quebrar, 

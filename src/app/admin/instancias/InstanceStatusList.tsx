@@ -8,6 +8,8 @@ import {
   TruncationNotice,
   usePaged,
 } from "@/components/ListControls";
+import LabelChips from "@/components/LabelChips";
+import type { Label } from "@/lib/labels";
 
 export type InstanceItem = {
   id: string;
@@ -15,6 +17,7 @@ export type InstanceItem = {
   status: TaskStatus;
   due_at: string | null;
   total_seconds: number;
+  companyId: string;
   companyName: string;
   collaboratorName: string;
 };
@@ -24,9 +27,12 @@ export type InstanceItem = {
 export default function InstanceStatusList({
   items,
   truncated = false,
+  labelsByCompany,
 }: {
   items: InstanceItem[];
   truncated?: boolean;
+  // Etiquetas herdadas da empresa (company_id -> etiquetas).
+  labelsByCompany?: Record<string, Label[]>;
 }) {
   const { visible, hasMore, remaining, showMore } = usePaged(items);
 
@@ -53,6 +59,12 @@ export default function InstanceStatusList({
               <p className="mt-1 text-sm text-fg-muted">
                 {r.companyName} · {r.collaboratorName}
               </p>
+              {labelsByCompany?.[r.companyId]?.length ? (
+                <LabelChips
+                  labels={labelsByCompany[r.companyId]}
+                  className="mt-1.5"
+                />
+              ) : null}
               <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-fg-subtle">
                 <span>Prazo: {formatDue(r.due_at)}</span>
                 <span>

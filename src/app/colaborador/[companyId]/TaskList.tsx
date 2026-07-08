@@ -6,6 +6,8 @@ import type { TaskStatus } from "@/lib/types";
 import { STATUS_META } from "@/lib/status";
 import { formatDuration, formatDue } from "@/lib/format";
 import { ShowMore, usePaged } from "@/components/ListControls";
+import LabelChips from "@/components/LabelChips";
+import type { Label } from "@/lib/labels";
 
 export type TaskItem = {
   id: string;
@@ -27,9 +29,12 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
 export default function TaskList({
   companyId,
   tasks,
+  labels = [],
 }: {
   companyId: string;
   tasks: TaskItem[];
+  // Etiquetas da empresa — herdadas por todas as tarefas dela.
+  labels?: Label[];
 }) {
   const [sort, setSort] = useState<SortKey>("prazo");
 
@@ -113,6 +118,9 @@ export default function TaskList({
                   </span>
                 </div>
 
+                {labels.length > 0 && (
+                  <LabelChips labels={labels} className="mt-2" />
+                )}
                 <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-muted">
                   <span>Prazo: {formatDue(t.due_at)}</span>
                   <span>

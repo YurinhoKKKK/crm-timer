@@ -6,6 +6,9 @@ import { createCompany } from "../actions";
 import GroupSelect from "./GroupSelect";
 import { inputClass, labelClass, btnPrimary, btnSecondary } from "@/lib/ui";
 import type { TaskKind } from "@/lib/types";
+import type { Label } from "@/lib/labels";
+import LabelChips from "@/components/LabelChips";
+import LabelDialog from "./LabelDialog";
 import AssignmentPicker, {
   KindBadge,
   collectAssignments,
@@ -22,11 +25,13 @@ export default function NewCompanyForm({
   consultores,
   standards,
   collaborators,
+  labels: initialLabels,
 }: {
   consultores: ConsultantOption[];
   // Direção 2 — escolher tarefas padrão (com responsável) já na criação.
   standards: StandardOption[];
   collaborators: PersonOption[];
+  labels: Label[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -34,6 +39,9 @@ export default function NewCompanyForm({
   const [contactId, setContactId] = useState("");
   const [groupName, setGroupName] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [labels, setLabels] = useState<Label[]>(initialLabels);
+  const [labelIds, setLabelIds] = useState<Set<string>>(new Set());
+  const [creatingLabel, setCreatingLabel] = useState(false);
   const [stdRows, setStdRows] = useState<Map<string, PickerRow>>(emptyRows());
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -50,6 +58,7 @@ export default function NewCompanyForm({
     setContactId("");
     setGroupName("");
     setSelected(new Set());
+    setLabelIds(new Set());
     setStdRows(emptyRows());
     setError(null);
   }
@@ -61,6 +70,24 @@ export default function NewCompanyForm({
       else next.add(id);
       return next;
     });
+  }
+
+  function toggleLabel(id: string) {
+    setLabelIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function onLabelCreated(label: Label) {
+    setLabels((prev) =>
+      prev.some((l) => l.id === label.id)
+        ? prev
+        : [...prev, label].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
+    );
+    setLabelIds((prev) => new Set(prev).add(label.id));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -86,7 +113,8 @@ export default function NewCompanyForm({
         assignments.map((a) => ({
           standardId: a.id,
           collaboratorId: a.collaboratorId,
-        }))
+        })),
+        Array.from(labelIds)
       );
 
       if (actionError) {
@@ -174,6 +202,47 @@ export default function NewCompanyForm({
         </fieldset>
       )}
 
+      <fieldset>
+        <legend className="mb-2 text-sm font-medium text-fg">
+          Etiquetas{" "}
+          <span className="font-normal text-fg-subtle">(opcional)</span>
+        </legend>
+        <div className="flex flex-wrap gap-2">
+          {labels.map((l) => {
+            const checked = labelIds.has(l.id);
+            return (
+              <button
+                key={l.id}
+                type="button"
+                onClick={() => toggleLabel(l.id)}
+                aria-pressed={checked}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+                  checked
+                    ? "border-transparent ring-2 ring-risd ring-offset-1 ring-offset-surface"
+                    : "border-line opacity-70 hover:opacity-100"
+                }`}
+                style={{ backgroundColor: l.bg_color, color: l.text_color }}
+              >
+                {l.name}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setCreatingLabel(true)}
+            className="inline-flex items-center gap-1 rounded-full border border-dashed border-line px-2.5 py-1 text-xs font-medium text-fg-muted transition hover:border-risd/50 hover:text-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+          >
+            <span aria-hidden="true">＋</span> Nova etiqueta
+          </button>
+        </div>
+        {labelIds.size > 0 && (
+          <p className="mt-2 flex items-center gap-1.5 text-xs text-fg-subtle">
+            Selecionadas:{" "}
+            <LabelChips labels={labels.filter((l) => labelIds.has(l.id))} />
+          </p>
+        )}
+      </fieldset>
+
       {standards.length > 0 && collaborators.length > 0 && (
         <fieldset>
           <legend className="mb-1 text-sm font-medium text-fg">
@@ -216,6 +285,14 @@ export default function NewCompanyForm({
           Cancelar
         </button>
       </div>
+
+      {creatingLabel && (
+        <LabelDialog
+          open
+          onClose={() => setCreatingLabel(false)}
+          onSaved={onLabelCreated}
+        />
+      )}
     </form>
   );
 }

@@ -5,6 +5,8 @@ import type { TaskStatus } from "@/lib/types";
 import { STATUS_META } from "@/lib/status";
 import { formatDuration } from "@/lib/format";
 import CreatorMeta from "@/components/CreatorMeta";
+import LabelChips from "@/components/LabelChips";
+import { loadCompanyLabels } from "@/lib/labels";
 import { resolvePersonNames, describeInstanceCreator } from "@/lib/creator";
 import TaskInstanceEditor from "./TaskInstanceEditor";
 import DeleteTaskButton from "@/app/admin/tarefas/[id]/DeleteTaskButton";
@@ -78,6 +80,9 @@ export default async function ConsultorTarefaPage({
   const names = await resolvePersonNames(supabase, [template?.created_by]);
   const creator = describeInstanceCreator(template, task.created_at, names);
 
+  // Etiquetas herdadas da empresa (exibidas no detalhe da tarefa).
+  const labels = await loadCompanyLabels(supabase, task.company_id);
+
   let deleteSeconds = 0;
   let deleteCount = 0;
   if (canDelete && task.template_id) {
@@ -97,6 +102,11 @@ export default async function ConsultorTarefaPage({
       back={{ href: `/consultor/${companyId}`, label: companyName }}
     >
       <section className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface p-4 shadow-card">
+        {labels.length > 0 && (
+          <div className="w-full">
+            <LabelChips labels={labels} />
+          </div>
+        )}
         <span
           className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${meta.badge}`}
         >

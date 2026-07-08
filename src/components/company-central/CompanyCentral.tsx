@@ -5,6 +5,7 @@ import NewTaskForm from "@/app/admin/tarefas/NewTaskForm";
 import CompanyStandardTasks from "@/components/CompanyStandardTasks";
 import CompanyTaskList from "./CompanyTaskList";
 import CreatorMeta from "@/components/CreatorMeta";
+import LabelChips from "@/components/LabelChips";
 import { STATUS_META } from "@/lib/status";
 import { formatDuration, formatDue } from "@/lib/format";
 import { btnSecondary } from "@/lib/ui";
@@ -80,6 +81,9 @@ export default function CompanyCentral({
       <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 space-y-2">
+            {company.labels.length > 0 && (
+              <LabelChips labels={company.labels} size="md" />
+            )}
             <div>
               <p className="text-xs text-fg-subtle">Consultor(es) responsável(is)</p>
               {consultants.length > 0 ? (
@@ -268,7 +272,11 @@ export default function CompanyCentral({
         <h3 className="mb-4 text-sm font-semibold text-fg">
           Tarefas {PERIOD_LABEL[period]}
         </h3>
-        <CompanyTaskList tasks={data.tasks} truncated={data.tasksTruncated} />
+        <CompanyTaskList
+          tasks={data.tasks}
+          truncated={data.tasksTruncated}
+          labels={company.labels}
+        />
       </section>
 
       {/* 6. Resumo por colaborador */}

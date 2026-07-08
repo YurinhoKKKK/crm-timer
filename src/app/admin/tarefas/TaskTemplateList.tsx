@@ -13,6 +13,8 @@ import {
   norm,
   type SelectOption,
 } from "@/components/ListControls";
+import LabelChips from "@/components/LabelChips";
+import type { Label } from "@/lib/labels";
 
 const WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
@@ -52,10 +54,13 @@ export default function TaskTemplateList({
   templates,
   companies,
   collaborators,
+  labelsByCompany,
 }: {
   templates: TemplateItem[];
   companies: SelectOption[];
   collaborators: SelectOption[];
+  // Etiquetas herdadas da empresa (company_id -> etiquetas).
+  labelsByCompany?: Record<string, Label[]>;
 }) {
   const [query, setQuery] = useState("");
   const [companyId, setCompanyId] = useState("");
@@ -143,6 +148,12 @@ export default function TaskTemplateList({
                 <p className="mt-1 text-sm text-fg-muted">
                   {t.companyName} · {t.collaboratorName}
                 </p>
+                {labelsByCompany?.[t.companyId]?.length ? (
+                  <LabelChips
+                    labels={labelsByCompany[t.companyId]}
+                    className="mt-1.5"
+                  />
+                ) : null}
                 <p className="mt-1 text-xs text-fg-subtle">
                   {describeSchedule(t)}
                 </p>

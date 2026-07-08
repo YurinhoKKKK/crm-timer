@@ -8,6 +8,7 @@ import TarefasTabs from "./TarefasTabs";
 import NewStandardTaskForm from "./NewStandardTaskForm";
 import StandardTaskList, { type StandardItem } from "./StandardTaskList";
 import { withSelf } from "@/lib/people";
+import { loadLabelsByCompany, type Label } from "@/lib/labels";
 
 type Option = { id: string; name: string };
 type PersonOption = { id: string; full_name: string; email: string };
@@ -101,6 +102,16 @@ export default async function TarefasPage() {
 
   const canCreate = companies.length > 0 && collaborators.length > 0;
 
+  // Etiquetas herdadas por empresa (herança exibida em cada tarefa da lista).
+  const labelsMap = await loadLabelsByCompany(
+    supabase,
+    templates.map((t) => t.companyId)
+  );
+  const labelsByCompany = Object.fromEntries(labelsMap) as Record<
+    string,
+    Label[]
+  >;
+
   // Uso por padrão: contagem + em quais empresas está atribuída e com quem
   // (para o seletor de empresas na edição da padrão — Direção 1).
   const usageByStandard = new Map<string, number>();
@@ -187,6 +198,7 @@ export default async function TarefasPage() {
                   value: p.id,
                   label: p.full_name || p.email,
                 }))}
+                labelsByCompany={labelsByCompany}
               />
             )}
           </>

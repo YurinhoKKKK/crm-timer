@@ -5,6 +5,7 @@ import TaskInstanceList, {
   type TaskInstanceItem,
 } from "@/components/TaskInstanceList";
 import type { SelectOption } from "@/components/ListControls";
+import { loadLabelsByCompany, type Label } from "@/lib/labels";
 
 type Joined<T> = T | T[] | null;
 
@@ -71,6 +72,16 @@ export default async function ConsultorTarefasPage() {
     items.map((i) => [i.collaboratorId, i.collaboratorName])
   );
 
+  // Etiquetas herdadas por empresa (uma consulta em lote para toda a lista).
+  const labelsMap = await loadLabelsByCompany(
+    supabase,
+    items.map((i) => i.companyId)
+  );
+  const labelsByCompany = Object.fromEntries(labelsMap) as Record<
+    string,
+    Label[]
+  >;
+
   return (
     <AppShell
       user={{ name: profile.full_name, role: "consultor", avatarUrl: profile.avatarUrl }}
@@ -89,6 +100,7 @@ export default async function ConsultorTarefasPage() {
           companies={companies}
           collaborators={collaborators}
           truncated={truncated}
+          labelsByCompany={labelsByCompany}
         />
       )}
     </AppShell>

@@ -65,7 +65,8 @@ function normalize(value: string): string | null {
 // pelo mesmo núcleo do vínculo vivo (regra de aparição no dia incluída).
 export async function createCompany(
   input: CompanyInput,
-  standardAssignments: CompanyStandardAssignment[] = []
+  standardAssignments: CompanyStandardAssignment[] = [],
+  labelIds: string[] = []
 ): Promise<{ error: string | null; id?: string }> {
   const name = input.name.trim();
   if (!name) {
@@ -109,6 +110,19 @@ export async function createCompany(
 
     if (linkError) {
       return { error: linkError.message, id: company.id };
+    }
+  }
+
+  const labels = Array.from(new Set(labelIds));
+  if (labels.length > 0) {
+    const { error: labelError } = await supabase
+      .from("company_labels")
+      .insert(labels.map((label_id) => ({ company_id: company.id, label_id })));
+    if (labelError) {
+      return {
+        error: `Empresa criada, mas falhou ao aplicar etiquetas: ${labelError.message}`,
+        id: company.id,
+      };
     }
   }
 

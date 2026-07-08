@@ -3,6 +3,7 @@ import AppShell from "@/components/AppShell";
 import type { TaskStatus } from "@/lib/types";
 import { STATUS_META } from "@/lib/status";
 import InstanceStatusList, { type InstanceItem } from "./InstanceStatusList";
+import { loadLabelsByCompany, type Label } from "@/lib/labels";
 
 type Period = "hoje" | "7d" | "30d" | "tudo";
 type Filter = TaskStatus | "atrasadas";
@@ -30,6 +31,7 @@ type InstanceRow = {
   due_at: string | null;
   task_date: string;
   total_seconds: number;
+  company_id: string;
   company: Joined<{ name: string }>;
   collaborator: Joined<{ full_name: string; email: string }>;
 };
@@ -73,7 +75,7 @@ export default async function InstanciasPage({
   let query = supabase
     .from("task_instances")
     .select(
-      "id, title, status, due_at, task_date, total_seconds, company:companies!task_instances_company_id_fkey(name), collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email)"
+      "id, title, status, due_at, task_date, total_seconds, company_id, company:companies!task_instances_company_id_fkey(name), collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email)"
     )
     .order("due_at", { ascending: true, nullsFirst: false })
     .limit(CAP + 1);
@@ -99,12 +101,23 @@ export default async function InstanciasPage({
     status: r.status,
     due_at: r.due_at,
     total_seconds: r.total_seconds,
+    companyId: r.company_id,
     companyName: first(r.company)?.name ?? "(empresa removida)",
     collaboratorName:
       first(r.collaborator)?.full_name ||
       first(r.collaborator)?.email ||
       "(colaborador removido)",
   }));
+
+  // Etiquetas herdadas por empresa (exibidas em cada tarefa da lista).
+  const labelsMap = await loadLabelsByCompany(
+    supabase,
+    items.map((i) => i.companyId)
+  );
+  const labelsByCompany = Object.fromEntries(labelsMap) as Record<
+    string,
+    Label[]
+  >;
 
   const title = filter ? FILTER_TITLE[filter] : "Tarefas";
 
@@ -130,7 +143,11 @@ export default async function InstanciasPage({
           Nenhuma tarefa neste status no período selecionado.
         </div>
       ) : (
-        <InstanceStatusList items={items} truncated={truncated} />
+        <InstanceStatusList
+          items={items}
+          truncated={truncated}
+          labelsByCompany={labelsByCompany}
+        />
       )}
     </AppShell>
   );

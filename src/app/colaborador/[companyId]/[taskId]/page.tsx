@@ -3,6 +3,8 @@ import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import type { TaskStatus } from "@/lib/types";
 import CreatorMeta from "@/components/CreatorMeta";
+import LabelChips from "@/components/LabelChips";
+import { loadCompanyLabels } from "@/lib/labels";
 import {
   resolvePersonNames,
   describeInstanceCreator,
@@ -33,6 +35,7 @@ function first<T>(value: T | T[] | null): T | null {
 function formatDue(due: string | null): string {
   if (!due) return "Sem prazo";
   return new Date(due).toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -82,6 +85,8 @@ export default async function TarefaPage({
     .maybeSingle();
 
   const company = first(task.company);
+  // Etiquetas herdadas da empresa (exibidas no detalhe da tarefa).
+  const labels = await loadCompanyLabels(supabase, task.company_id);
 
   return (
     <AppShell
@@ -98,6 +103,7 @@ export default async function TarefaPage({
     >
       <div className="mx-auto max-w-2xl">
         <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
+          {labels.length > 0 && <LabelChips labels={labels} className="mb-4" />}
           <dl className="space-y-4 text-sm">
             <div>
               <dt className="text-xs font-medium uppercase tracking-wide text-fg-subtle">

@@ -4,7 +4,9 @@ import AppShell from "@/components/AppShell";
 import type { Company, TaskKind } from "@/lib/types";
 import NewCompanyForm from "./NewCompanyForm";
 import CompanyList, { type CompanyItem } from "./CompanyList";
+import LabelManager from "./LabelManager";
 import { withSelf } from "@/lib/people";
+import { loadLabelCatalog, loadLabelsByCompany } from "@/lib/labels";
 
 type ConsultantOption = { id: string; full_name: string; email: string };
 type PersonOption = { id: string; full_name: string; email: string };
@@ -55,6 +57,16 @@ export default async function EmpresasPage() {
   ]);
 
   const companies = (companiesData as Company[]) ?? [];
+
+  // Etiquetas: catálogo (p/ atribuir na criação e gerir) + mapa por empresa
+  // (herança exibida na lista). Uma consulta em lote — escala sem N queries.
+  const [labelCatalog, labelsByCompany] = await Promise.all([
+    loadLabelCatalog(supabase),
+    loadLabelsByCompany(
+      supabase,
+      companies.map((c) => c.id)
+    ),
+  ]);
   // O admin pode se incluir como consultor responsável de uma empresa (Passo 14).
   const consultores = withSelf((consultoresData as ConsultantOption[]) ?? [], profile);
   // ...e também como responsável de uma tarefa padrão da empresa.
@@ -85,6 +97,7 @@ export default async function EmpresasPage() {
       id: x.id,
       name: x.full_name || x.email,
     })),
+    labels: labelsByCompany.get(c.id) ?? [],
   }));
 
   return (
@@ -98,7 +111,10 @@ export default async function EmpresasPage() {
         consultores={consultores}
         standards={standards}
         collaborators={colaboradores}
+        labels={labelCatalog}
       />
+
+      <LabelManager labels={labelCatalog} />
 
       {consultores.length === 0 && (
         <p className="mb-6 text-sm text-fg-subtle">

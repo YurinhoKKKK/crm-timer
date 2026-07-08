@@ -3,6 +3,8 @@ import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import type { TaskTemplate } from "@/lib/types";
 import CreatorMeta from "@/components/CreatorMeta";
+import LabelChips from "@/components/LabelChips";
+import { loadCompanyLabels } from "@/lib/labels";
 import { resolvePersonNames } from "@/lib/creator";
 import TaskEditor from "./TaskEditor";
 import DeleteTaskButton from "./DeleteTaskButton";
@@ -58,6 +60,11 @@ export default async function TarefaDetailPage({
     ? names.get(template.created_by) ?? null
     : null;
 
+  // Etiquetas herdadas da empresa desta tarefa (molde).
+  const labels = template.company_id
+    ? await loadCompanyLabels(supabase, template.company_id)
+    : [];
+
   return (
     <AppShell
       user={{ name: profile.full_name, role: "admin", avatarUrl: profile.avatarUrl }}
@@ -75,6 +82,7 @@ export default async function TarefaDetailPage({
               fromStandard={!!template.standard_task_id}
             />
           </div>
+          {labels.length > 0 && <LabelChips labels={labels} className="mb-4" />}
           <TaskEditor
             template={template}
             companies={companies}

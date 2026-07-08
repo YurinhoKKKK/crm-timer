@@ -3,9 +3,11 @@ import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import type { Company } from "@/lib/types";
 import CompanyConsultants from "../../CompanyConsultants";
+import CompanyLabels from "../../CompanyLabels";
 import CompanyEditor from "../CompanyEditor";
 import DeleteCompanyButton from "../DeleteCompanyButton";
 import { withSelf } from "@/lib/people";
+import { loadLabelCatalog, loadCompanyLabels } from "@/lib/labels";
 
 type ConsultantOption = { id: string; full_name: string; email: string };
 type CompanyLink = {
@@ -27,28 +29,35 @@ export default async function EmpresaEditarPage({
   const { id } = params;
   const { supabase, profile } = await guardRole(["admin"]);
 
-  const [{ data: companyData }, { data: linksData }, { data: consultoresData }] =
-    await Promise.all([
-      supabase
-        .from("companies")
-        .select(
-          "id, name, whatsapp_contact_id, whatsapp_group_name, created_at, updated_at"
-        )
-        .eq("id", id)
-        .maybeSingle(),
-      supabase
-        .from("company_consultants")
-        .select(
-          "consultant:profiles!company_consultants_consultant_id_fkey(id, full_name, email)"
-        )
-        .eq("company_id", id),
-      supabase
-        .from("profiles")
-        .select("id, full_name, email")
-        // Admins também podem ser responsáveis (consultores) de uma empresa.
-        .in("role", ["consultor", "admin"])
-        .order("full_name", { ascending: true }),
-    ]);
+  const [
+    { data: companyData },
+    { data: linksData },
+    { data: consultoresData },
+    labelCatalog,
+    companyLabels,
+  ] = await Promise.all([
+    supabase
+      .from("companies")
+      .select(
+        "id, name, whatsapp_contact_id, whatsapp_group_name, created_at, updated_at"
+      )
+      .eq("id", id)
+      .maybeSingle(),
+    supabase
+      .from("company_consultants")
+      .select(
+        "consultant:profiles!company_consultants_consultant_id_fkey(id, full_name, email)"
+      )
+      .eq("company_id", id),
+    supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      // Admins também podem ser responsáveis (consultores) de uma empresa.
+      .in("role", ["consultor", "admin"])
+      .order("full_name", { ascending: true }),
+    loadLabelCatalog(supabase),
+    loadCompanyLabels(supabase, id),
+  ]);
 
   const company = companyData as Company | null;
   if (!company) notFound();
@@ -77,6 +86,14 @@ export default async function EmpresaEditarPage({
             companyId={company.id}
             consultores={consultores}
             selectedIds={selectedIds}
+          />
+        </section>
+
+        <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
+          <CompanyLabels
+            companyId={company.id}
+            labels={labelCatalog}
+            selectedIds={companyLabels.map((l) => l.id)}
           />
         </section>
 

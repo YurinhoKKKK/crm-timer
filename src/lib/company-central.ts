@@ -3,6 +3,7 @@ import type { TaskStatus, TaskKind } from "@/lib/types";
 import { formatDuration } from "@/lib/format";
 import { avatarUrl } from "@/lib/avatar";
 import { withSelf } from "@/lib/people";
+import { loadCompanyLabels, type Label } from "@/lib/labels";
 import {
   resolvePersonNames,
   describeInstanceCreator,
@@ -51,6 +52,7 @@ export type CentralCompany = {
   whatsappContactId: string | null;
   createdAt: string;
   creatorName: string | null; // quem cadastrou (null = anterior ao registro)
+  labels: Label[]; // etiquetas da empresa (herdadas por todas as tarefas)
 };
 
 export type CentralOverview = {
@@ -143,6 +145,7 @@ export async function loadCompanyCentral(
     { data: standardData },
     { data: assignedData },
     { data: collaboratorsData },
+    companyLabels,
   ] = await Promise.all([
     // companies_select (RLS) só devolve a empresa se o usuário tiver acesso.
     supabase
@@ -206,6 +209,7 @@ export async function loadCompanyCentral(
       .select("id, full_name, email")
       .in("role", ["colaborador", "admin"])
       .order("full_name", { ascending: true }),
+    loadCompanyLabels(supabase, companyId),
   ]);
 
   const company = companyData as {
@@ -377,6 +381,7 @@ export async function loadCompanyCentral(
         creatorName: company.created_by
           ? names.get(company.created_by) ?? null
           : null,
+        labels: companyLabels,
       },
       consultants,
       overview,

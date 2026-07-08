@@ -5,6 +5,8 @@ import Link from "next/link";
 import type { TaskStatus, TaskKind } from "@/lib/types";
 import { STATUS_META } from "@/lib/status";
 import { formatDuration, formatDue } from "@/lib/format";
+import LabelChips from "@/components/LabelChips";
+import type { Label } from "@/lib/labels";
 import {
   FilterBar,
   SearchBox,
@@ -45,6 +47,7 @@ export default function TaskInstanceList({
   companies,
   collaborators,
   truncated = false,
+  labelsByCompany,
 }: {
   items: TaskInstanceItem[];
   panel: "consultor" | "colaborador" | "admin";
@@ -52,6 +55,9 @@ export default function TaskInstanceList({
   collaborators?: SelectOption[];
   // Quando true, a query limitou a lista à janela mais recente (Passo 18).
   truncated?: boolean;
+  // Etiquetas herdadas da empresa (company_id -> etiquetas). A tarefa não copia:
+  // exibe as da empresa em tempo real.
+  labelsByCompany?: Record<string, Label[]>;
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
@@ -151,6 +157,12 @@ export default function TaskInstanceList({
                   {t.companyName}
                   {panel === "consultor" ? ` · ${t.collaboratorName}` : ""}
                 </p>
+                {labelsByCompany?.[t.companyId]?.length ? (
+                  <LabelChips
+                    labels={labelsByCompany[t.companyId]}
+                    className="mt-1.5"
+                  />
+                ) : null}
                 <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-fg-subtle">
                   <span>Prazo: {formatDue(t.due_at)}</span>
                   <span>

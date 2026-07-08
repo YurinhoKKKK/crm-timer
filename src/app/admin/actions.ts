@@ -59,6 +59,31 @@ function normalize(value: string): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+const DUPLICATE_COMPANY_MSG = "Já existe uma empresa com esse nome.";
+
+type MaybeClient = Awaited<ReturnType<typeof createClient>>;
+
+// Checa se o nome já está em uso, com a MESMA regra do índice único do banco
+// (companies_name_unique_ci): ignora maiúsculas/minúsculas e espaços nas
+// bordas. Pré-checagem para dar mensagem clara; a constraint é a garantia real.
+async function companyNameTaken(
+  supabase: MaybeClient,
+  name: string,
+  excludeId?: string
+): Promise<boolean> {
+  const target = name.trim().toLowerCase();
+  if (!target) return false;
+  // ilike sem curingas = igualdade case-insensitive; escapamos %/_/\ do nome.
+  const pattern = name.trim().replace(/([\\%_])/g, "\\$1");
+  const { data } = await supabase
+    .from("companies")
+    .select("id, name")
+    .ilike("name", pattern);
+  return ((data as { id: string; name: string }[]) ?? []).some(
+    (c) => c.id !== excludeId && c.name.trim().toLowerCase() === target
+  );
+}
+
 // Cria uma empresa e (opcionalmente) já vincula consultores. A RLS
 // (companies_admin_all / cc_admin_all) garante que só o admin escreve aqui.
 // `standardAssignments` (Direção 2) já atribui tarefas padrão à empresa nova,
@@ -82,6 +107,10 @@ export async function createCompany(
     return { error: "Sessão expirada. Faça login novamente." };
   }
 
+  if (await companyNameTaken(supabase, name)) {
+    return { error: DUPLICATE_COMPANY_MSG };
+  }
+
   const { data: company, error } = await supabase
     .from("companies")
     .insert({
@@ -94,6 +123,8 @@ export async function createCompany(
     .single();
 
   if (error || !company) {
+    // 23505 = violação de unicidade (corrida/duplo-submit escapou da pré-checagem).
+    if (error?.code === "23505") return { error: DUPLICATE_COMPANY_MSG };
     return { error: error?.message ?? "Não foi possível criar a empresa." };
   }
 
@@ -212,6 +243,11 @@ export async function updateCompany(
     return { error: "Sessão expirada. Faça login novamente." };
   }
 
+  // Não deixa renomear para o nome de OUTRA empresa (exclui a própria).
+  if (await companyNameTaken(supabase, name, companyId)) {
+    return { error: DUPLICATE_COMPANY_MSG };
+  }
+
   const { error } = await supabase
     .from("companies")
     .update({
@@ -222,6 +258,7 @@ export async function updateCompany(
     .eq("id", companyId);
 
   if (error) {
+    if (error.code === "23505") return { error: DUPLICATE_COMPANY_MSG };
     return { error: error.message };
   }
 

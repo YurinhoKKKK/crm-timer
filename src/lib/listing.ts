@@ -17,6 +17,13 @@ const MARKETPLACE_LABELS: Record<ListingMarketplace, string> = {
   amazon: "Amazon",
 };
 
+// Ordem canônica dos marketplaces (para ordenar de forma estável).
+const MARKETPLACE_ORDER: Record<ListingMarketplace, number> = {
+  mercado_livre: 0,
+  shopee: 1,
+  amazon: 2,
+};
+
 export function marketplaceLabel(value: ListingMarketplace): string {
   return MARKETPLACE_LABELS[value] ?? value;
 }
@@ -145,12 +152,6 @@ export async function loadListingResults(
   const first = <T,>(v: T | T[] | null): T | null =>
     Array.isArray(v) ? v[0] ?? null : v;
 
-  const order: Record<ListingMarketplace, number> = {
-    mercado_livre: 0,
-    shopee: 1,
-    amazon: 2,
-  };
-
   const rows = ((data as Row[] | null) ?? []).map((r) => {
     const brand = first(r.brand);
     return {
@@ -165,7 +166,7 @@ export async function loadListingResults(
   rows.sort(
     (a, b) =>
       a.brandPos - b.brandPos ||
-      order[a.marketplace] - order[b.marketplace] ||
+      MARKETPLACE_ORDER[a.marketplace] - MARKETPLACE_ORDER[b.marketplace] ||
       a.brandName.localeCompare(b.brandName, "pt-BR")
   );
 
@@ -174,5 +175,109 @@ export async function loadListingResults(
     marketplace: r.marketplace,
     link: r.link,
     reason: r.reason,
+  }));
+}
+
+// Uma marca × marketplace entregue numa listagem da empresa (aba "Minhas
+// Listagens", passo 23). `dateISO` é a data da entrega (finalização; ou a data
+// da tarefa como fallback), usada para ordenar/exibir.
+export type CompanyListingRow = {
+  id: string;
+  brandName: string;
+  marketplace: ListingMarketplace;
+  link: string | null;
+  reason: string | null;
+  taskId: string;
+  taskTitle: string;
+  dateISO: string | null;
+};
+
+// Todas as listagens (resultados marca × marketplace) de UMA empresa. Escala:
+// puxa por template→instância→resultado com filtros por id (sem varrer tudo). A
+// RLS (tt_select / lr_select) já escopa admin (todas) e consultor (só as dele).
+export async function loadCompanyListings(
+  supabase: Client,
+  companyId: string
+): Promise<CompanyListingRow[]> {
+  // 1. Templates de listagem desta empresa.
+  const { data: tmplData } = await supabase
+    .from("task_templates")
+    .select("id")
+    .eq("company_id", companyId)
+    .eq("template_type", "listagem");
+  const templateIds = ((tmplData as { id: string }[] | null) ?? []).map(
+    (t) => t.id
+  );
+  if (templateIds.length === 0) return [];
+
+  // 2. Instâncias dessas listagens (título e data).
+  const { data: instData } = await supabase
+    .from("task_instances")
+    .select("id, title, task_date, finished_at")
+    .in("template_id", templateIds);
+  const instances =
+    (instData as
+      | { id: string; title: string; task_date: string; finished_at: string | null }[]
+      | null) ?? [];
+  if (instances.length === 0) return [];
+
+  const instById = new Map(instances.map((i) => [i.id, i]));
+  const taskIds = instances.map((i) => i.id);
+
+  // 3. Resultados (marca × marketplace) dessas tarefas.
+  const { data: resData } = await supabase
+    .from("listing_results")
+    .select(
+      "id, task_id, marketplace, link, not_done_reason, brand:listing_brands!listing_results_brand_id_fkey(name, position)"
+    )
+    .in("task_id", taskIds);
+
+  type Row = {
+    id: string;
+    task_id: string;
+    marketplace: ListingMarketplace;
+    link: string | null;
+    not_done_reason: string | null;
+    brand: { name: string; position: number } | { name: string; position: number }[] | null;
+  };
+  const first = <T,>(v: T | T[] | null): T | null =>
+    Array.isArray(v) ? v[0] ?? null : v;
+
+  const rows: (CompanyListingRow & { brandPos: number })[] = (
+    (resData as Row[] | null) ?? []
+  ).map((r) => {
+    const brand = first(r.brand);
+    const inst = instById.get(r.task_id);
+    return {
+      id: r.id,
+      brandName: brand?.name ?? "(marca removida)",
+      brandPos: brand?.position ?? 0,
+      marketplace: r.marketplace,
+      link: r.link,
+      reason: r.not_done_reason,
+      taskId: r.task_id,
+      taskTitle: inst?.title ?? "(tarefa removida)",
+      dateISO: inst?.finished_at ?? (inst ? `${inst.task_date}T00:00:00` : null),
+    };
+  });
+
+  // Ordem padrão: entrega mais recente primeiro; depois marca e marketplace.
+  rows.sort(
+    (a, b) =>
+      (b.dateISO ?? "").localeCompare(a.dateISO ?? "") ||
+      a.brandPos - b.brandPos ||
+      MARKETPLACE_ORDER[a.marketplace] - MARKETPLACE_ORDER[b.marketplace] ||
+      a.brandName.localeCompare(b.brandName, "pt-BR")
+  );
+
+  return rows.map((r) => ({
+    id: r.id,
+    brandName: r.brandName,
+    marketplace: r.marketplace,
+    link: r.link,
+    reason: r.reason,
+    taskId: r.taskId,
+    taskTitle: r.taskTitle,
+    dateISO: r.dateISO,
   }));
 }

@@ -2,7 +2,10 @@ import { notFound } from "next/navigation";
 import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import CompanyCentral from "@/components/company-central/CompanyCentral";
+import CompanyCentralTabs from "@/components/company-central/CompanyCentralTabs";
+import CompanyListings from "@/components/company-central/CompanyListings";
 import { loadCompanyCentral, type Period } from "@/lib/company-central";
+import { loadCompanyListings } from "@/lib/listing";
 
 const PERIODS: Period[] = ["hoje", "7d", "30d", "tudo"];
 
@@ -28,6 +31,10 @@ export default async function ConsultorEmpresaPage({
   const res = await loadCompanyCentral(supabase, profile, params.companyId, period);
   if (res.notFound) notFound();
 
+  const listings = res.data
+    ? await loadCompanyListings(supabase, params.companyId)
+    : [];
+
   return (
     <AppShell
       user={{ name: profile.full_name, role: "consultor", avatarUrl: profile.avatarUrl }}
@@ -39,7 +46,10 @@ export default async function ConsultorEmpresaPage({
           Erro ao carregar a empresa: {res.error ?? "dados indisponíveis"}.
         </div>
       ) : (
-        <CompanyCentral data={res.data} period={period} />
+        <CompanyCentralTabs
+          overview={<CompanyCentral data={res.data} period={period} />}
+          listings={<CompanyListings rows={listings} />}
+        />
       )}
     </AppShell>
   );

@@ -779,7 +779,7 @@ margem sim com alíquota; confirmar que tudo é salvo e exibido corretamente.
 
 ---
 
-## PASSO 23 — Aba "Minhas Listagens" na tela da empresa
+## PASSO 23 — Aba "Minhas Listagens" na tela da empresa (Feito)
 
 ```
 Na tela de detalhe da empresa, adicione uma aba "Minhas Listagens" que mostra

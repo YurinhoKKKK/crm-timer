@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import type { TaskKind } from "@/lib/types";
+import type { TaskKind, TemplateType } from "@/lib/types";
 import {
   FilterBar,
   SearchBox,
@@ -22,6 +22,7 @@ export type TemplateItem = {
   id: string;
   title: string;
   kind: TaskKind;
+  templateType: TemplateType;
   due_time: string | null;
   weekdays: number[] | null;
   start_date: string;
@@ -36,6 +37,12 @@ function formatTime(time: string | null): string | null {
   return time ? time.slice(0, 5) : null;
 }
 
+// Tipo "efetivo" da tarefa para filtro/rótulo: a listagem tem kind='unica' por
+// baixo, então usamos template_type para distingui-la.
+function effectiveType(t: TemplateItem): "unica" | "diaria" | "listagem" {
+  return t.templateType === "listagem" ? "listagem" : t.kind;
+}
+
 function describeSchedule(t: TemplateItem): string {
   const time = formatTime(t.due_time);
   if (t.kind === "diaria") {
@@ -47,7 +54,8 @@ function describeSchedule(t: TemplateItem): string {
     return `Diária · ${days || "sem dias"}${time ? ` · até ${time}` : ""}`;
   }
   const date = new Date(`${t.start_date}T00:00:00`).toLocaleDateString("pt-BR");
-  return `Única · ${date}${time ? ` · até ${time}` : ""}`;
+  const prefix = t.templateType === "listagem" ? "Listagem" : "Única";
+  return `${prefix} · ${date}${time ? ` · até ${time}` : ""}`;
 }
 
 export default function TaskTemplateList({
@@ -73,7 +81,7 @@ export default function TaskTemplateList({
       if (q && !norm(t.title).includes(q)) return false;
       if (companyId && t.companyId !== companyId) return false;
       if (collaboratorId && t.collaboratorId !== collaboratorId) return false;
-      if (kind && t.kind !== kind) return false;
+      if (kind && effectiveType(t) !== kind) return false;
       return true;
     });
   }, [templates, query, companyId, collaboratorId, kind]);
@@ -110,6 +118,7 @@ export default function TaskTemplateList({
           options={[
             { value: "unica", label: "Única" },
             { value: "diaria", label: "Diária" },
+            { value: "listagem", label: "Listagem de marcas" },
           ]}
         />
       </FilterBar>
@@ -132,12 +141,18 @@ export default function TaskTemplateList({
                   </span>
                   <span
                     className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      t.kind === "diaria"
-                        ? "bg-brand-tint text-risd"
-                        : "border border-line bg-surface-2 text-fg-muted"
+                      t.templateType === "listagem"
+                        ? "bg-brand-tint text-chrysler"
+                        : t.kind === "diaria"
+                          ? "bg-brand-tint text-risd"
+                          : "border border-line bg-surface-2 text-fg-muted"
                     }`}
                   >
-                    {t.kind === "diaria" ? "Diária" : "Única"}
+                    {t.templateType === "listagem"
+                      ? "Listagem de marcas"
+                      : t.kind === "diaria"
+                        ? "Diária"
+                        : "Única"}
                   </span>
                   {!t.active && (
                     <span className="rounded-full border border-line bg-surface-2 px-2 py-0.5 text-xs text-fg-subtle">

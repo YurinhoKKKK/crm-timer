@@ -29,7 +29,7 @@ export default async function TarefaDetailPage({
     supabase
       .from("task_templates")
       .select(
-        "id, title, description, instructions, company_id, collaborator_id, kind, due_time, weekdays, start_date, end_date, active, created_by, created_at, standard_task_id"
+        "id, title, description, instructions, company_id, collaborator_id, kind, due_time, weekdays, start_date, end_date, active, created_by, created_at, standard_task_id, template_type, listing_needs_margin, listing_tax_rate, listing_marketplaces"
       )
       .eq("id", id)
       .maybeSingle(),
@@ -49,6 +49,17 @@ export default async function TarefaDetailPage({
 
   const companies = (companiesData as Option[]) ?? [];
   const collaborators = (collaboratorsData as PersonOption[]) ?? [];
+
+  // Marcas da listagem (se for esse o tipo) para pré-preencher o editor.
+  const { data: brandData } = await supabase
+    .from("listing_brands")
+    .select("name")
+    .eq("template_id", id)
+    .order("position", { ascending: true })
+    .order("created_at", { ascending: true });
+  const brands = ((brandData as { name: string }[] | null) ?? []).map(
+    (b) => b.name
+  );
 
   const instances = (instancesData as { total_seconds: number }[]) ?? [];
   const totalSeconds = instances.reduce((sum, r) => sum + r.total_seconds, 0);
@@ -87,6 +98,7 @@ export default async function TarefaDetailPage({
             template={template}
             companies={companies}
             collaborators={collaborators}
+            brands={brands}
           />
           <p className="mt-4 text-xs text-fg-subtle">
             Editar a tarefa vale para as próximas gerações. Instâncias já criadas

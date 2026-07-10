@@ -2,9 +2,13 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { TaskKind, TaskTemplate } from "@/lib/types";
+import type { TaskTemplate } from "@/lib/types";
 import { updateTaskTemplate } from "../../actions";
 import Combobox from "@/components/Combobox";
+import ListingFields, {
+  emptyListingForm,
+  type ListingFormValue,
+} from "../ListingFields";
 import {
   inputClass,
   labelClass,
@@ -16,6 +20,13 @@ import {
 type Option = { id: string; name: string };
 type PersonOption = { id: string; full_name: string; email: string };
 type Status = "idle" | "saving" | "saved" | "error";
+type FormMode = "unica" | "diaria" | "listagem";
+
+const TYPE_OPTIONS: { value: FormMode; label: string }[] = [
+  { value: "unica", label: "Única" },
+  { value: "diaria", label: "Diária" },
+  { value: "listagem", label: "Listagem de marcas" },
+];
 
 const WEEKDAYS = [
   { value: 0, label: "Dom" },
@@ -35,10 +46,12 @@ export default function TaskEditor({
   template,
   companies,
   collaborators,
+  brands: initialBrands = [],
 }: {
   template: TaskTemplate;
   companies: Option[];
   collaborators: PersonOption[];
+  brands?: string[];
 }) {
   const router = useRouter();
   const [title, setTitle] = useState(template.title);
@@ -46,13 +59,28 @@ export default function TaskEditor({
   const [instructions, setInstructions] = useState(template.instructions ?? "");
   const [companyId, setCompanyId] = useState(template.company_id);
   const [collaboratorId, setCollaboratorId] = useState(template.collaborator_id);
-  const [kind, setKind] = useState<TaskKind>(template.kind);
+  const [mode, setMode] = useState<FormMode>(
+    template.template_type === "listagem" ? "listagem" : template.kind
+  );
   const [startDate, setStartDate] = useState(template.start_date ?? todayISO());
   const [dueTime, setDueTime] = useState(template.due_time?.slice(0, 5) ?? "");
   const [weekdays, setWeekdays] = useState<Set<number>>(
     new Set(template.weekdays ?? [])
   );
   const [endDate, setEndDate] = useState(template.end_date ?? "");
+  const [listing, setListing] = useState<ListingFormValue>(() =>
+    template.template_type === "listagem"
+      ? {
+          brands: initialBrands,
+          marketplaces: new Set(template.listing_marketplaces ?? []),
+          needsMargin: template.listing_needs_margin,
+          taxRate:
+            template.listing_tax_rate === null
+              ? ""
+              : String(template.listing_tax_rate),
+        }
+      : emptyListingForm()
+  );
   const [active, setActive] = useState(template.active);
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -72,18 +100,27 @@ export default function TaskEditor({
     setStatus("saving");
     setErrorMsg(null);
 
+    const isListing = mode === "listagem";
     const { error } = await updateTaskTemplate(template.id, {
       title,
       description,
       instructions,
       companyId,
       collaboratorId,
-      kind,
+      kind: mode === "diaria" ? "diaria" : "unica",
       startDate,
       dueTime,
       weekdays: Array.from(weekdays),
       endDate,
       active,
+      templateType: isListing ? "listagem" : "padrao",
+      brands: isListing ? listing.brands : [],
+      marketplaces: isListing ? Array.from(listing.marketplaces) : [],
+      needsMargin: isListing ? listing.needsMargin : false,
+      taxRate:
+        isListing && listing.needsMargin && listing.taxRate.trim() !== ""
+          ? Number(listing.taxRate)
+          : null,
     });
 
     if (error) {
@@ -173,26 +210,26 @@ export default function TaskEditor({
 
       <fieldset>
         <legend className={labelClass}>Tipo</legend>
-        <div className="flex gap-2">
-          {(["unica", "diaria"] as TaskKind[]).map((k) => {
-            const isActive = kind === k;
+        <div className="flex flex-wrap gap-2">
+          {TYPE_OPTIONS.map((opt) => {
+            const isActive = mode === opt.value;
             return (
-              <label key={k} className={chipClass(isActive)}>
+              <label key={opt.value} className={chipClass(isActive)}>
                 <input
                   type="radio"
                   name="t-kind"
                   className="accent-risd"
                   checked={isActive}
-                  onChange={() => setKind(k)}
+                  onChange={() => setMode(opt.value)}
                 />
-                {k === "unica" ? "Única" : "Diária"}
+                {opt.label}
               </label>
             );
           })}
         </div>
       </fieldset>
 
-      {kind === "unica" ? (
+      {mode === "unica" || mode === "listagem" ? (
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="t-start" className={labelClass}>
@@ -209,7 +246,7 @@ export default function TaskEditor({
           </div>
           <div>
             <label htmlFor="t-due-unica" className={labelClass}>
-              Horário-limite <span className={hintClass}>(opcional)</span>
+              Horário <span className={hintClass}>(opcional)</span>
             </label>
             <input
               id="t-due-unica"
@@ -268,6 +305,14 @@ export default function TaskEditor({
             </div>
           </div>
         </div>
+      )}
+
+      {mode === "listagem" && (
+        <ListingFields
+          idPrefix="edit-listing"
+          value={listing}
+          onChange={(patch) => setListing((prev) => ({ ...prev, ...patch }))}
+        />
       )}
 
       <label className="flex cursor-pointer items-center gap-2 text-sm text-fg">

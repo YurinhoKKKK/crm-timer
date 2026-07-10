@@ -4,7 +4,9 @@ import AppShell from "@/components/AppShell";
 import type { TaskStatus } from "@/lib/types";
 import CreatorMeta from "@/components/CreatorMeta";
 import LabelChips from "@/components/LabelChips";
+import ListingSummary from "@/components/ListingSummary";
 import { loadCompanyLabels } from "@/lib/labels";
+import { loadListingByTemplate, loadListingResults } from "@/lib/listing";
 import {
   resolvePersonNames,
   describeInstanceCreator,
@@ -22,6 +24,7 @@ type TaskRow = {
   total_seconds: number;
   completion_note: string | null;
   company_id: string;
+  template_id: string | null;
   created_at: string;
   company: { name: string } | { name: string }[] | null;
   template: InstanceTemplate | InstanceTemplate[] | null;
@@ -59,7 +62,7 @@ export default async function TarefaPage({
   const { data: taskData } = await supabase
     .from("task_instances")
     .select(
-      "id, title, description, instructions, status, due_at, total_seconds, completion_note, company_id, created_at, company:companies!task_instances_company_id_fkey(name), template:task_templates!task_instances_template_id_fkey(created_by, created_at, standard_task_id)"
+      "id, title, description, instructions, status, due_at, total_seconds, completion_note, company_id, template_id, created_at, company:companies!task_instances_company_id_fkey(name), template:task_templates!task_instances_template_id_fkey(created_by, created_at, standard_task_id)"
     )
     .eq("id", taskId)
     .eq("collaborator_id", profile.id)
@@ -87,6 +90,16 @@ export default async function TarefaPage({
   const company = first(task.company);
   // Etiquetas herdadas da empresa (exibidas no detalhe da tarefa).
   const labels = await loadCompanyLabels(supabase, task.company_id);
+
+  // Se a tarefa vier de uma listagem de marcas (passo 22), carrega os detalhes
+  // e, se já finalizada, os resultados (links/justificativas) capturados.
+  const listing = task.template_id
+    ? await loadListingByTemplate(supabase, task.template_id)
+    : null;
+  const listingResults =
+    listing && task.status === "finalizada"
+      ? await loadListingResults(supabase, task.id)
+      : [];
 
   return (
     <AppShell
@@ -144,6 +157,8 @@ export default async function TarefaPage({
           </div>
         </section>
 
+        {listing && <ListingSummary listing={listing} className="mb-6" />}
+
         <Timer
           taskId={task.id}
           companyId={task.company_id}
@@ -151,6 +166,12 @@ export default async function TarefaPage({
           totalSeconds={task.total_seconds}
           openStartedAt={openEntry?.started_at ?? null}
           completionNote={task.completion_note}
+          listing={
+            listing
+              ? { brands: listing.brands, marketplaces: listing.marketplaces }
+              : null
+          }
+          listingResults={listingResults}
         />
       </div>
     </AppShell>

@@ -2,8 +2,17 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { TaskStatus } from "@/lib/types";
-import { startTimer, pauseTimer, finishTask } from "../../actions";
+import type { TaskStatus, ListingMarketplace } from "@/lib/types";
+import type { ListingBrandRef, ListingResultView } from "@/lib/listing";
+import { marketplaceLabel } from "@/lib/listing";
+import ListingResultsView from "@/components/ListingResultsView";
+import {
+  startTimer,
+  pauseTimer,
+  finishTask,
+  finishListingTask,
+  type ListingResultInput,
+} from "../../actions";
 
 function formatClock(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));
@@ -14,6 +23,10 @@ function formatClock(totalSeconds: number): string {
   return `${pad(h)}:${pad(m)}:${pad(sec)}`;
 }
 
+function comboKey(brandId: string, mk: ListingMarketplace): string {
+  return `${brandId}|${mk}`;
+}
+
 export default function Timer({
   taskId,
   companyId,
@@ -21,6 +34,8 @@ export default function Timer({
   totalSeconds,
   openStartedAt,
   completionNote,
+  listing,
+  listingResults,
 }: {
   taskId: string;
   companyId: string;
@@ -28,8 +43,14 @@ export default function Timer({
   totalSeconds: number;
   openStartedAt: string | null;
   completionNote: string | null;
+  // Quando presente, a tarefa é uma LISTAGEM: a finalização captura os links por
+  // combinação marca × marketplace (passo 22.1), não o resumo simples.
+  listing?: { brands: ListingBrandRef[]; marketplaces: ListingMarketplace[] } | null;
+  // Resultados já capturados (para exibir na tarefa finalizada).
+  listingResults?: ListingResultView[];
 }) {
   const router = useRouter();
+  const isListing = !!listing;
   const [localStatus, setLocalStatus] = useState<TaskStatus>(status);
   const [base, setBase] = useState(totalSeconds);
   const [startedAtMs, setStartedAtMs] = useState<number | null>(
@@ -44,6 +65,30 @@ export default function Timer({
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+
+  // Estado da captura de links da listagem (uma entrada por marca × marketplace).
+  const [linkByKey, setLinkByKey] = useState<Record<string, string>>({});
+  const [notDoneByKey, setNotDoneByKey] = useState<Record<string, boolean>>({});
+  const [reasonByKey, setReasonByKey] = useState<Record<string, string>>({});
+
+  const combos = listing
+    ? listing.brands.flatMap((b) =>
+        listing.marketplaces.map((mk) => ({
+          key: comboKey(b.id, mk),
+          brandId: b.id,
+          brandName: b.name,
+          marketplace: mk,
+        }))
+      )
+    : [];
+
+  // Cada combinação precisa de link OU (não feita + justificativa).
+  const listingValid =
+    combos.length > 0 &&
+    combos.every((c) => {
+      if (notDoneByKey[c.key]) return (reasonByKey[c.key] ?? "").trim().length > 0;
+      return (linkByKey[c.key] ?? "").trim().length > 0;
+    });
 
   // Tique de 1s enquanto rodando (o tempo autoritativo vem do servidor ao pausar).
   useEffect(() => {
@@ -109,6 +154,43 @@ export default function Timer({
     startTransition(() => router.refresh());
   }
 
+  async function handleFinishListing(send: boolean) {
+    setError(null);
+    setWarning(null);
+    const results: ListingResultInput[] = combos.map((c) =>
+      notDoneByKey[c.key]
+        ? {
+            brandId: c.brandId,
+            brandName: c.brandName,
+            marketplace: c.marketplace,
+            reason: reasonByKey[c.key],
+          }
+        : {
+            brandId: c.brandId,
+            brandName: c.brandName,
+            marketplace: c.marketplace,
+            link: linkByKey[c.key],
+          }
+    );
+    setBusy(true);
+    const {
+      error: err,
+      totalSeconds: total,
+      warning: warn,
+    } = await finishListingTask(taskId, companyId, results, note, send);
+    setBusy(false);
+    if (err) {
+      setError(err);
+      return;
+    }
+    if (typeof total === "number") setBase(total);
+    setStartedAtMs(null);
+    setLocalStatus("finalizada");
+    setFinishing(false);
+    if (warn) setWarning(warn);
+    startTransition(() => router.refresh());
+  }
+
   // --- Tarefa já encerrada -------------------------------------------------
   if (finalized || canceled) {
     return (
@@ -135,6 +217,9 @@ export default function Timer({
             </span>
           </span>
         </div>
+        {finalized && isListing && listingResults && listingResults.length > 0 && (
+          <ListingResultsView results={listingResults} className="mt-4" />
+        )}
         {finalized && (completionNote || note) && (
           <div className="mt-4 rounded-xl border border-line bg-surface-2 p-4">
             <p className="text-xs font-medium uppercase tracking-wide text-fg-subtle">
@@ -221,6 +306,125 @@ export default function Timer({
             >
               Finalizar
             </button>
+          </div>
+        ) : isListing ? (
+          <div>
+            <p className="mb-1.5 text-sm font-medium text-fg">
+              Links das listagens <span className="text-red-500">*</span>
+            </p>
+            <p className="mb-3 text-xs text-fg-subtle">
+              Para cada marca e marketplace, cole o link da planilha ou marque
+              como não feita com uma justificativa.
+            </p>
+            <ul className="space-y-3">
+              {combos.map((c) => {
+                const notDone = !!notDoneByKey[c.key];
+                return (
+                  <li
+                    key={c.key}
+                    className="rounded-xl border border-line bg-surface-2 p-3"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium text-fg">
+                        {c.brandName}
+                      </span>
+                      <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-xs text-fg-muted">
+                        {marketplaceLabel(c.marketplace)}
+                      </span>
+                      <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-xs text-fg-muted">
+                        <input
+                          type="checkbox"
+                          className="accent-risd"
+                          checked={notDone}
+                          onChange={(e) =>
+                            setNotDoneByKey((prev) => ({
+                              ...prev,
+                              [c.key]: e.target.checked,
+                            }))
+                          }
+                        />
+                        Não foi feita
+                      </label>
+                    </div>
+                    {notDone ? (
+                      <input
+                        type="text"
+                        value={reasonByKey[c.key] ?? ""}
+                        onChange={(e) =>
+                          setReasonByKey((prev) => ({
+                            ...prev,
+                            [c.key]: e.target.value,
+                          }))
+                        }
+                        placeholder="Justificativa (ex.: marca sem relevância)"
+                        className="mt-2 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg shadow-sm placeholder:text-fg-subtle focus:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+                      />
+                    ) : (
+                      <input
+                        type="url"
+                        inputMode="url"
+                        value={linkByKey[c.key] ?? ""}
+                        onChange={(e) =>
+                          setLinkByKey((prev) => ({
+                            ...prev,
+                            [c.key]: e.target.value,
+                          }))
+                        }
+                        placeholder="https://link-da-planilha…"
+                        className="mt-2 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg shadow-sm placeholder:text-fg-subtle focus:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+                      />
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+
+            <label
+              htmlFor="listing-note"
+              className="mb-1.5 mt-4 block text-sm font-medium text-fg"
+            >
+              Resumo <span className="text-fg-subtle">(opcional)</span>
+            </label>
+            <textarea
+              id="listing-note"
+              rows={3}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Observações (opcional)…"
+              className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm text-fg shadow-sm transition placeholder:text-fg-subtle focus:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+            />
+
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3">
+              <button
+                type="button"
+                onClick={() => handleFinishListing(true)}
+                disabled={busy || !listingValid}
+                className="w-full rounded-xl bg-chrysler px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-chrysler/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chrysler focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              >
+                Finalizar e enviar ao WhatsApp
+              </button>
+              <button
+                type="button"
+                onClick={() => handleFinishListing(false)}
+                disabled={busy || !listingValid}
+                className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-sm font-medium text-fg shadow-sm transition hover:border-risd/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              >
+                Finalizar e apenas salvar no registro
+              </button>
+              <button
+                type="button"
+                onClick={() => setFinishing(false)}
+                disabled={busy}
+                className="w-full rounded-xl px-4 py-3 text-sm text-fg-muted transition hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface sm:w-auto"
+              >
+                Cancelar
+              </button>
+            </div>
+            <p className="mt-3 text-xs text-fg-subtle">
+              Os links ficam visíveis na aba &quot;Minhas Listagens&quot; e para o
+              cliente. O resumo em texto, se preenchido, segue a escolha de enviar
+              ao WhatsApp.
+            </p>
           </div>
         ) : (
           <div>

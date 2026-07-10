@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
-import type { TaskKind } from "@/lib/types";
+import type { TaskKind, TemplateType } from "@/lib/types";
 import NewTaskForm from "./NewTaskForm";
 import TaskTemplateList, { type TemplateItem } from "./TaskTemplateList";
 import TarefasTabs from "./TarefasTabs";
@@ -17,6 +17,7 @@ type TemplateRow = {
   id: string;
   title: string;
   kind: TaskKind;
+  template_type: TemplateType;
   due_time: string | null;
   weekdays: number[] | null;
   start_date: string;
@@ -56,7 +57,7 @@ export default async function TarefasPage() {
     supabase
       .from("task_templates")
       .select(
-        "id, title, kind, due_time, weekdays, start_date, active, created_at, company_id, collaborator_id, company:companies!task_templates_company_id_fkey(name), collaborator:profiles!task_templates_collaborator_id_fkey(full_name, email)"
+        "id, title, kind, template_type, due_time, weekdays, start_date, active, created_at, company_id, collaborator_id, company:companies!task_templates_company_id_fkey(name), collaborator:profiles!task_templates_collaborator_id_fkey(full_name, email)"
       )
       .order("created_at", { ascending: false }),
     // Catálogo de tarefas padrão (Passo 15).
@@ -88,6 +89,7 @@ export default async function TarefasPage() {
       id: t.id,
       title: t.title,
       kind: t.kind,
+      templateType: t.template_type,
       due_time: t.due_time,
       weekdays: t.weekdays,
       start_date: t.start_date,

@@ -6,7 +6,10 @@ import { STATUS_META } from "@/lib/status";
 import { formatDuration } from "@/lib/format";
 import CreatorMeta from "@/components/CreatorMeta";
 import LabelChips from "@/components/LabelChips";
+import ListingSummary from "@/components/ListingSummary";
+import ListingResultsView from "@/components/ListingResultsView";
 import { loadCompanyLabels } from "@/lib/labels";
+import { loadListingByTemplate, loadListingResults } from "@/lib/listing";
 import { resolvePersonNames, describeInstanceCreator } from "@/lib/creator";
 import TaskInstanceEditor from "./TaskInstanceEditor";
 import DeleteTaskButton from "@/app/admin/tarefas/[id]/DeleteTaskButton";
@@ -83,6 +86,16 @@ export default async function ConsultorTarefaPage({
   // Etiquetas herdadas da empresa (exibidas no detalhe da tarefa).
   const labels = await loadCompanyLabels(supabase, task.company_id);
 
+  // Detalhes da listagem de marcas (passo 22), se for esse o tipo da tarefa;
+  // e os resultados (links/justificativas) se já finalizada (passo 22.1).
+  const listing = task.template_id
+    ? await loadListingByTemplate(supabase, task.template_id)
+    : null;
+  const listingResults =
+    listing && task.status === "finalizada"
+      ? await loadListingResults(supabase, task.id)
+      : [];
+
   let deleteSeconds = 0;
   let deleteCount = 0;
   if (canDelete && task.template_id) {
@@ -134,6 +147,14 @@ export default async function ConsultorTarefaPage({
           />
         </div>
       </section>
+
+      {listing && <ListingSummary listing={listing} className="mb-6" />}
+
+      {listingResults.length > 0 && (
+        <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
+          <ListingResultsView results={listingResults} />
+        </section>
+      )}
 
       <section className="rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
         <h2 className="mb-4 font-semibold text-fg">Editar tarefa</h2>

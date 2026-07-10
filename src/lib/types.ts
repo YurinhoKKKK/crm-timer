@@ -140,6 +140,151 @@ export type Database = {
           },
         ]
       }
+      company_labels: {
+        Row: {
+          company_id: string
+          created_at: string
+          label_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          label_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          label_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_labels_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_labels_label_id_fkey"
+            columns: ["label_id"]
+            isOneToOne: false
+            referencedRelation: "labels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      labels: {
+        Row: {
+          bg_color: string
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          text_color: string
+        }
+        Insert: {
+          bg_color?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          text_color?: string
+        }
+        Update: {
+          bg_color?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          text_color?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "labels_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      listing_brands: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          position: number
+          template_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          position?: number
+          template_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          position?: number
+          template_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listing_brands_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "task_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      listing_results: {
+        Row: {
+          brand_id: string
+          created_at: string
+          id: string
+          link: string | null
+          marketplace: Database["public"]["Enums"]["listing_marketplace"]
+          not_done_reason: string | null
+          task_id: string
+        }
+        Insert: {
+          brand_id: string
+          created_at?: string
+          id?: string
+          link?: string | null
+          marketplace: Database["public"]["Enums"]["listing_marketplace"]
+          not_done_reason?: string | null
+          task_id: string
+        }
+        Update: {
+          brand_id?: string
+          created_at?: string
+          id?: string
+          link?: string | null
+          marketplace?: Database["public"]["Enums"]["listing_marketplace"]
+          not_done_reason?: string | null
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listing_results_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "listing_brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "listing_results_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "task_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_path: string | null
@@ -312,8 +457,12 @@ export type Database = {
           id: string
           instructions: string | null
           kind: Database["public"]["Enums"]["task_kind"]
+          listing_marketplaces: Database["public"]["Enums"]["listing_marketplace"][]
+          listing_needs_margin: boolean
+          listing_tax_rate: number | null
           standard_task_id: string | null
           start_date: string
+          template_type: Database["public"]["Enums"]["template_type"]
           title: string
           weekdays: number[] | null
         }
@@ -329,8 +478,12 @@ export type Database = {
           id?: string
           instructions?: string | null
           kind: Database["public"]["Enums"]["task_kind"]
+          listing_marketplaces?: Database["public"]["Enums"]["listing_marketplace"][]
+          listing_needs_margin?: boolean
+          listing_tax_rate?: number | null
           standard_task_id?: string | null
           start_date?: string
+          template_type?: Database["public"]["Enums"]["template_type"]
           title: string
           weekdays?: number[] | null
         }
@@ -346,8 +499,12 @@ export type Database = {
           id?: string
           instructions?: string | null
           kind?: Database["public"]["Enums"]["task_kind"]
+          listing_marketplaces?: Database["public"]["Enums"]["listing_marketplace"][]
+          listing_needs_margin?: boolean
+          listing_tax_rate?: number | null
           standard_task_id?: string | null
           start_date?: string
+          template_type?: Database["public"]["Enums"]["template_type"]
           title?: string
           weekdays?: number[] | null
         }
@@ -478,44 +635,51 @@ export type Database = {
     }
     Functions: {
       admin_adjust_time: {
-        Args: { p_task: string; p_new_seconds: number; p_reason?: string }
+        Args: { p_new_seconds: number; p_reason?: string; p_task: string }
         Returns: number
       }
       auth_role: {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
-      company_overview: {
-        Args: { p_company_id: string; p_start: string | null; p_month_start: string }
-        Returns: {
-          total: number
-          a_fazer: number
-          iniciada: number
-          finalizada: number
-          cancelada: number
-          overdue: number
-          seconds_period: number
-          seconds_month: number
-          seconds_all: number
-        }[]
-      }
       company_collaborator_summary: {
-        Args: { p_company_id: string; p_start: string | null }
+        Args: { p_company_id: string; p_start: string }
         Returns: {
+          avatar_path: string
           collaborator_id: string
-          full_name: string | null
-          email: string | null
-          avatar_path: string | null
+          done: number
+          email: string
+          full_name: string
           seconds: number
           total: number
-          done: number
+        }[]
+      }
+      company_overview: {
+        Args: { p_company_id: string; p_month_start: string; p_start: string }
+        Returns: {
+          a_fazer: number
+          cancelada: number
+          finalizada: number
+          iniciada: number
+          overdue: number
+          seconds_all: number
+          seconds_month: number
+          seconds_period: number
+          total: number
         }[]
       }
       display_names: {
         Args: { p_ids: string[] }
-        Returns: { id: string; name: string | null }[]
+        Returns: {
+          id: string
+          name: string
+        }[]
       }
       generate_daily_tasks: { Args: { target_date?: string }; Returns: number }
+      generate_template_today: {
+        Args: { p_template: string }
+        Returns: boolean
+      }
       is_admin: { Args: never; Returns: boolean }
       my_collaborator_companies: { Args: never; Returns: string[] }
       my_consultant_companies: { Args: never; Returns: string[] }
@@ -525,12 +689,23 @@ export type Database = {
         Args: { p_note: string; p_send: boolean; p_task: string }
         Returns: number
       }
+      timer_finish_listing: {
+        Args: {
+          p_note: string
+          p_results: Json
+          p_send: boolean
+          p_task: string
+        }
+        Returns: number
+      }
       timer_pause: { Args: { p_task: string }; Returns: number }
       timer_start: { Args: { p_task: string }; Returns: string }
     }
     Enums: {
+      listing_marketplace: "mercado_livre" | "shopee" | "amazon"
       task_kind: "unica" | "diaria"
       task_status: "a_fazer" | "iniciada" | "finalizada" | "cancelada"
+      template_type: "padrao" | "listagem"
       user_role: "admin" | "consultor" | "colaborador" | "pending"
     }
     CompositeTypes: {
@@ -659,8 +834,10 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      listing_marketplace: ["mercado_livre", "shopee", "amazon"],
       task_kind: ["unica", "diaria"],
       task_status: ["a_fazer", "iniciada", "finalizada", "cancelada"],
+      template_type: ["padrao", "listagem"],
       user_role: ["admin", "consultor", "colaborador", "pending"],
     },
   },
@@ -674,6 +851,8 @@ export const Constants = {
 export type Role = Database["public"]["Enums"]["user_role"]
 export type TaskKind = Database["public"]["Enums"]["task_kind"]
 export type TaskStatus = Database["public"]["Enums"]["task_status"]
+export type TemplateType = Database["public"]["Enums"]["template_type"]
+export type ListingMarketplace = Database["public"]["Enums"]["listing_marketplace"]
 
 export type Profile = Tables<"profiles">
 export type Company = Tables<"companies">
@@ -684,3 +863,5 @@ export type TimeEntry = Tables<"time_entries">
 export type ActivityLog = Tables<"activity_log">
 export type StandardTask = Tables<"standard_tasks">
 export type TimeAdjustment = Tables<"time_adjustments">
+export type ListingBrand = Tables<"listing_brands">
+export type ListingResult = Tables<"listing_results">

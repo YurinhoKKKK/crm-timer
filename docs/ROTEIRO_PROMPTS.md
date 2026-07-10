@@ -653,7 +653,7 @@ empresa que não é dele).
 
 ---
 
-## PASSO 20 — Sistema de etiquetas de empresa (com herança nas tarefas)
+## PASSO 20 — Sistema de etiquetas de empresa (com herança nas tarefas) (Feito)
 
 Mecânica: um sistema de etiquetas coloridas atribuíveis a empresas. As
 etiquetas de uma empresa aparecem em todas as tarefas dela, de forma
@@ -715,6 +715,191 @@ antigas). Depois desmarcar e confirmar que some de todas.
 - Desmarcar e confirmar que some de todas as tarefas.
 - Conferir que uma lista grande de tarefas com etiquetas continua carregando
   rápido (escala).
+
+
+---
+
+# FRENTE: TELA DE EMPRESA RICA + ACESSO DO CLIENTE (Passos 21 a 25)
+
+Objetivo comum: enriquecer a tela da empresa e, ao final, expô-la de forma
+SEGURA e CURADA para o cliente acompanhar o projeto dele. Faça na ordem — o
+acesso do cliente (25) é o mais sensível e vem por último, apoiado no que os
+outros construírem. (O sistema de notificações foi adiado.)
+
+---
+
+## PASSO 21 — Colaborador cadastra tarefa para si mesmo (ignorar por enquanto)
+
+```
+Permita que COLABORADORES cadastrem tarefas exclusivamente para si mesmos.
+
+- No painel do colaborador, adicione a opção de criar tarefa. O responsável
+  é sempre ELE MESMO (não pode atribuir a outros).
+- Ele pode escolher QUALQUER empresa do sistema como destino da tarefa.
+- Os demais campos são os mesmos do cadastro de tarefa normal (título,
+  descrição, instruções, tipo único/diário, prazo).
+- A tarefa criada por ele se comporta como qualquer outra dele (aparece nas
+  telas dele, cronometrável pelo timer, etc.).
+- Registre corretamente quem criou (created_by = o colaborador).
+- Respeite o RLS: ele só cria tarefas para si mesmo; não ganha acesso a
+  tarefas de outros colaboradores.
+
+Teste: um colaborador cria uma tarefa para si numa empresa qualquer e ela
+aparece nas tarefas dele, cronometrável.
+```
+
+---
+
+## PASSO 22 — Novo tipo de tarefa: Listagem de marcas (Feito)
+
+```
+Crie um novo tipo de tarefa: "Listagem de marcas", com um formulário
+dedicado que aparece ao selecionar esse tipo no cadastro de tarefa.
+
+CAMPOS DESTE TIPO:
+- Campos comuns: Título, Descrição, Empresa, Colaborador, Data e Horário.
+  (Este tipo NÃO tem a escolha único/diário — é sempre pontual.)
+- Marcas: o usuário digita quais marcas quer (permitir adicionar várias).
+- Marketplaces: para cada listagem, escolher em quais dos 3 marketplaces a
+  pesquisa será feita — Mercado Livre, Shopee, Amazon (pode marcar um ou
+  mais).
+- Cálculo de margem: um sim/não. Se SIM, aparece um campo para informar a
+  ALÍQUOTA de imposto paga pelo cliente (um percentual).
+  IMPORTANTE: o sistema apenas ARMAZENA esses dados (marcas, marketplaces,
+  se precisa margem, alíquota). NÃO faz nenhum cálculo de margem — quem
+  calcula é o colaborador por fora. O sistema é só o registro.
+
+- Modele no banco de forma limpa (ex: um tipo/flag no template + tabela(s)
+  para as marcas/marketplaces da listagem).
+- Respeite o RLS existente.
+
+Teste: criar uma tarefa de listagem com 3 marcas, marketplaces variados, e
+margem sim com alíquota; confirmar que tudo é salvo e exibido corretamente.
+```
+
+---
+
+## PASSO 23 — Aba "Minhas Listagens" na tela da empresa
+
+```
+Na tela de detalhe da empresa, adicione uma aba "Minhas Listagens" que mostra
+as tarefas de listagem (passo 22) feitas para AQUELA empresa.
+
+- Liste as marcas das listagens de forma organizada. Cada marca aparece
+  com o LINK nela (clicável) e o marketplace em que a pesquisa foi feita.
+- Permita ORDENAR, FILTRAR e PESQUISAR (ex: por marca, por marketplace,
+  por data).
+- Só mostra as listagens da empresa em questão.
+- Reaproveite os componentes de busca/filtro já existentes no sistema.
+- Respeite o escopo: admin vê de qualquer empresa; consultor só das dele.
+- Pense em escala (pode haver muitas listagens) — use a paginação já
+  implementada.
+
+Teste: abrir a aba numa empresa com várias listagens e conferir ordenação,
+filtro e busca funcionando, com os links das marcas clicáveis.
+```
+
+---
+
+## PASSO 24 — Anotações Rich Text na tela da empresa
+
+```
+Adicione uma seção de ANOTAÇÕES na tela de detalhe da empresa, com editor
+rich text avançado. Serve para consultores, colaboradores e administradores
+registrarem anotações, resumos de reunião, planos de ação, etc.
+
+EDITOR:
+- Editor rich text de nível "Word": negrito, itálico, sublinhado, títulos,
+  listas, links, e INSERÇÃO DE IMAGENS no meio do texto (upload via Supabase
+  Storage; crie o bucket e as políticas adequadas).
+- Use uma biblioteca de editor rich text consolidada (ex: TipTap ou similar)
+  — me diga qual escolheu.
+
+GERENCIAMENTO DAS ANOTAÇÕES:
+- Uma seção/aba na tela da empresa com todas as anotações registradas, de
+  forma organizada (mais recentes primeiro, com autor e data).
+- Criar, editar e excluir anotações.
+- Ao EDITAR, salve registro de QUEM alterou e QUANDO (histórico/auditoria).
+  Mostre "editado por X em [data]".
+- VISIBILIDADE: cada anotação tem um marcador "visível ao cliente" vs.
+  "interna". Por padrão, INTERNA (segurança). As visíveis ao cliente serão
+  as únicas mostradas no acesso do cliente (passo 25).
+
+- Respeite o RLS (admin/consultor no escopo; colaborador conforme acesso à
+  empresa).
+- Mantenha identidade visual, tema claro/escuro, responsividade.
+
+Teste: criar uma anotação com formatação e imagem; editá-la e ver o registro
+de quem/quando; marcar uma como visível ao cliente e outra como interna.
+```
+
+---
+
+## PASSO 25 — Acesso do cliente (visão pública segura e CURADA) ⚠️ CUIDADO MÁXIMO
+
+Mecânica: um link protegido por senha que dá ao cliente acesso SOMENTE à
+própria empresa, sem conta, sem navegação. A tela é CURADA para mostrar valor
+entregue e comunicação — NÃO expõe tarefas, tempo, atrasos ou operação
+interna. É o passo mais sensível — segurança e curadoria acima de tudo.
+
+Decisão de conteúdo (importante): o cliente NÃO vê o operacional interno
+(nada de contagem de tarefas, tempo gasto, tarefas atrasadas, lista de
+tarefas, resumo por colaborador, progresso/percentual). Isso é proposital —
+evita expor a operação e criar ansiedade com atrasos/pendências. A tela
+mostra ENTREGA (listagens) e COMUNICAÇÃO curada (atualizações).
+
+```
+Crie um acesso EXTERNO para o cliente acompanhar o projeto da empresa dele.
+Este é o passo mais sensível do sistema — priorize SEGURANÇA e CURADORIA.
+
+ACESSO:
+- Para cada empresa, gere um LINK único com token imprevisível (aleatório,
+  longo — NÃO baseado em id sequencial adivinhável).
+- Protegido por SENHA definida por empresa (admin/consultor define e pode
+  redefinir). Cliente abre o link, digita a senha, vê a tela. Sem criar
+  conta, sem login no sistema real.
+- Admin/consultor pode gerar/revogar o link e trocar a senha quando quiser.
+
+TELA DO CLIENTE (curada, separada e enxuta):
+- Crie uma tela SEPARADA e blindada (NÃO reutilize a tela interna escondendo
+  campos). Por construção, ela só acessa dados daquela empresa.
+- CONTEÚDO que o cliente VÊ:
+  1. Cabeçalho acolhedor: nome da empresa/cliente, logo da Monvatti,
+     saudação/profissional.
+  2. Listagens (destaque principal): as marcas cadastradas nos marketplaces
+     (do sistema de listagens), organizadas, com links e o marketplace de
+     cada uma. É a entrega concreta e visível.
+  3. Atualizações do projeto: as anotações marcadas como "visível ao cliente"
+     (do sistema de anotações), em ordem cronológica — resumos de reunião,
+     planos de ação, novidades. NUNCA as anotações internas.
+- CONTEÚDO que o cliente NÃO vê (jamais): contagem/lista de tarefas, tempo
+  gasto, tarefas atrasadas ou pendentes, quem executou o quê, resumo por
+  colaborador, custos, anotações internas, dados de outras empresas,
+  indicadores de progresso/percentual, e qualquer navegação para outras
+  telas. Sem menu lateral.
+
+SEGURANÇA (revisar com rigor):
+- A blindagem tem que estar no BACKEND/RLS, não só na interface: as consultas
+  do acesso do cliente só retornam dados da empresa do token. Esconder na
+  tela não basta.
+- Trocar o token/URL não pode dar acesso a outra empresa.
+- Rate limit nas tentativas de senha (anti-força-bruta).
+- Token e senha nunca em URL/logs.
+
+Antes de finalizar, me explique COMO garantiu que um cliente não consegue,
+de forma alguma, ver dados de outra empresa nem o conteúdo interno (qual a
+camada de proteção real). Depois me deixe testar: acessar com a senha certa
+(vê só listagens/atualizações da empresa dele), e tentar burlar (trocar
+token, senha errada, tentar acessar telas internas ou dados operacionais) —
+tudo bloqueado.
+```
+
+### Ordem e validação da frente
+- Faça 21 → 22 → 23 → 24 → 25.
+- O passo 25 é o mais sensível: teste exaustivamente (a) o ISOLAMENTO (um
+  cliente jamais vê outra empresa) e (b) a CURADORIA (nenhum dado operacional
+  interno aparece) ANTES de enviar qualquer link a clientes reais.
+- No 24, confirme que "interna" é o padrão, para nada vazar por engano no 25.
 
 
 ## Dicas gerais ao usar o Claude Code

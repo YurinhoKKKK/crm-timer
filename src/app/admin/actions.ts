@@ -2,7 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase-server";
-import type { Role, TaskKind, TablesInsert } from "@/lib/types";
+import type {
+  Role,
+  TaskKind,
+  TemplateType,
+  ListingMarketplace,
+  TablesInsert,
+} from "@/lib/types";
 import {
   applyCompanyStandards,
   type CompanyStandardAssignment,
@@ -307,6 +313,13 @@ type TaskTemplateInput = {
   weekdays: number[]; // 0-6 (usado em "diaria")
   endDate: string; // YYYY-MM-DD (opcional, "diaria")
   active?: boolean; // só aplicado na edição
+  // Passo 22 — "Listagem de marcas". Quando templateType='listagem', a tarefa é
+  // sempre pontual (kind='unica' por baixo) e carrega os campos abaixo.
+  templateType?: TemplateType;
+  brands?: string[];
+  marketplaces?: ListingMarketplace[];
+  needsMargin?: boolean;
+  taxRate?: number | null;
 };
 
 type TemplateFields = {
@@ -320,17 +333,81 @@ type TemplateFields = {
   weekdays: number[] | null;
   end_date: string | null;
   start_date?: string;
+  template_type: TemplateType;
+  listing_needs_margin: boolean;
+  listing_tax_rate: number | null;
+  listing_marketplaces: ListingMarketplace[];
 };
 
+const VALID_MARKETPLACES: ListingMarketplace[] = [
+  "mercado_livre",
+  "shopee",
+  "amazon",
+];
+
 // Valida e normaliza a entrada do formulário de tarefa, compartilhado por
-// criar e editar. Retorna os campos prontos para gravar ou uma mensagem.
+// criar e editar. Retorna os campos prontos para gravar (mais as marcas, que
+// vão numa tabela filha) ou uma mensagem de erro.
 function validateTemplateInput(
   input: TaskTemplateInput
-): { error: string } | { fields: TemplateFields } {
+): { error: string } | { fields: TemplateFields; brands: string[] } {
   const title = input.title.trim();
   if (!title) return { error: "Informe o título da tarefa." };
   if (!input.companyId) return { error: "Selecione a empresa." };
   if (!input.collaboratorId) return { error: "Selecione o colaborador." };
+
+  const templateType: TemplateType =
+    input.templateType === "listagem" ? "listagem" : "padrao";
+
+  // ---- Listagem de marcas (sempre pontual) -------------------------------
+  if (templateType === "listagem") {
+    if (!input.startDate) {
+      return { error: "Informe a data da listagem." };
+    }
+    const brands = (input.brands ?? [])
+      .map((b) => b.trim())
+      .filter((b) => b.length > 0);
+    if (brands.length === 0) {
+      return { error: "Adicione ao menos uma marca." };
+    }
+    const marketplaces = Array.from(new Set(input.marketplaces ?? [])).filter(
+      (m) => VALID_MARKETPLACES.includes(m)
+    );
+    if (marketplaces.length === 0) {
+      return { error: "Selecione ao menos um marketplace." };
+    }
+    const needsMargin = input.needsMargin === true;
+    let taxRate: number | null = null;
+    if (needsMargin) {
+      taxRate = input.taxRate ?? null;
+      if (taxRate === null || Number.isNaN(taxRate)) {
+        return { error: "Informe a alíquota de imposto do cliente." };
+      }
+      if (taxRate < 0 || taxRate > 100) {
+        return { error: "A alíquota deve estar entre 0 e 100%." };
+      }
+    }
+
+    const fields: TemplateFields = {
+      title,
+      description: normalize(input.description),
+      instructions: normalize(input.instructions),
+      company_id: input.companyId,
+      collaborator_id: input.collaboratorId,
+      kind: "unica", // pontual: reaproveita o trigger da instância imediata
+      due_time: normalize(input.dueTime),
+      weekdays: null,
+      end_date: null,
+      start_date: input.startDate,
+      template_type: "listagem",
+      listing_needs_margin: needsMargin,
+      listing_tax_rate: taxRate,
+      listing_marketplaces: marketplaces,
+    };
+    return { fields, brands };
+  }
+
+  // ---- Tarefa comum (única/diária) ---------------------------------------
   if (input.kind !== "unica" && input.kind !== "diaria") {
     return { error: "Tipo de tarefa inválido." };
   }
@@ -357,12 +434,16 @@ function validateTemplateInput(
     due_time: normalize(input.dueTime),
     weekdays: input.kind === "unica" ? null : weekdays,
     end_date: input.kind === "unica" ? null : normalize(input.endDate),
+    template_type: "padrao",
+    listing_needs_margin: false,
+    listing_tax_rate: null,
+    listing_marketplaces: [],
   };
   if (input.kind === "unica" || input.startDate) {
     fields.start_date = input.startDate;
   }
 
-  return { fields };
+  return { fields, brands: [] };
 }
 
 // Cria um task_template. Os triggers do banco cuidam das instâncias:
@@ -400,6 +481,23 @@ export async function createTaskTemplate(
     return { error: error?.message ?? "Não foi possível criar a tarefa." };
   }
 
+  // Marcas da listagem (tabela filha). A ordem é preservada por `position`.
+  if (result.brands.length > 0) {
+    const { error: brandError } = await supabase.from("listing_brands").insert(
+      result.brands.map((name, position) => ({
+        template_id: data.id,
+        name,
+        position,
+      }))
+    );
+    if (brandError) {
+      return {
+        error: `Tarefa criada, mas falhou ao salvar as marcas: ${brandError.message}`,
+        id: data.id,
+      };
+    }
+  }
+
   revalidatePath("/admin/tarefas");
   return { error: null, id: data.id };
 }
@@ -431,6 +529,29 @@ export async function updateTaskTemplate(
 
   if (error) {
     return { error: error.message };
+  }
+
+  // Marcas da listagem: substitui o conjunto (apaga as atuais e insere as novas).
+  // Para tarefas comuns, `brands` é vazio — a limpeza mantém o estado consistente
+  // caso o tipo tenha mudado.
+  const { error: delError } = await supabase
+    .from("listing_brands")
+    .delete()
+    .eq("template_id", templateId);
+  if (delError) {
+    return { error: `Tarefa salva, mas falhou ao atualizar marcas: ${delError.message}` };
+  }
+  if (result.brands.length > 0) {
+    const { error: insError } = await supabase.from("listing_brands").insert(
+      result.brands.map((name, position) => ({
+        template_id: templateId,
+        name,
+        position,
+      }))
+    );
+    if (insError) {
+      return { error: `Tarefa salva, mas falhou ao salvar marcas: ${insError.message}` };
+    }
   }
 
   // Propaga a edição para as instâncias ainda não iniciadas (a_fazer).

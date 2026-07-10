@@ -2,9 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { TaskKind } from "@/lib/types";
 import { createTaskTemplate } from "../actions";
 import Combobox from "@/components/Combobox";
+import ListingFields, {
+  emptyListingForm,
+  type ListingFormValue,
+} from "./ListingFields";
 import {
   inputClass,
   labelClass,
@@ -16,6 +19,16 @@ import {
 
 type Option = { id: string; name: string };
 type PersonOption = { id: string; full_name: string; email: string };
+
+// Modo do formulário: os dois tipos comuns (única/diária) + a listagem de
+// marcas (passo 22), que é sempre pontual e tem campos próprios.
+type FormMode = "unica" | "diaria" | "listagem";
+
+const TYPE_OPTIONS: { value: FormMode; label: string }[] = [
+  { value: "unica", label: "Única" },
+  { value: "diaria", label: "Diária" },
+  { value: "listagem", label: "Listagem de marcas" },
+];
 
 const WEEKDAYS = [
   { value: 0, label: "Dom" },
@@ -49,11 +62,12 @@ export default function NewTaskForm({
   const [instructions, setInstructions] = useState("");
   const [companyId, setCompanyId] = useState(lockedCompany?.id ?? "");
   const [collaboratorId, setCollaboratorId] = useState("");
-  const [kind, setKind] = useState<TaskKind>("unica");
+  const [mode, setMode] = useState<FormMode>("unica");
   const [startDate, setStartDate] = useState(todayISO());
   const [dueTime, setDueTime] = useState("");
   const [weekdays, setWeekdays] = useState<Set<number>>(new Set());
   const [endDate, setEndDate] = useState("");
+  const [listing, setListing] = useState<ListingFormValue>(emptyListingForm());
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -64,11 +78,12 @@ export default function NewTaskForm({
     setInstructions("");
     setCompanyId(lockedCompany?.id ?? "");
     setCollaboratorId("");
-    setKind("unica");
+    setMode("unica");
     setStartDate(todayISO());
     setDueTime("");
     setWeekdays(new Set());
     setEndDate("");
+    setListing(emptyListingForm());
     setError(null);
   }
 
@@ -87,17 +102,26 @@ export default function NewTaskForm({
     setError(null);
     setSubmitting(true);
     try {
+      const isListing = mode === "listagem";
       const { error: actionError } = await createTaskTemplate({
         title,
         description,
         instructions,
         companyId,
         collaboratorId,
-        kind,
+        kind: mode === "diaria" ? "diaria" : "unica",
         startDate,
         dueTime,
         weekdays: Array.from(weekdays),
         endDate,
+        templateType: isListing ? "listagem" : "padrao",
+        brands: isListing ? listing.brands : [],
+        marketplaces: isListing ? Array.from(listing.marketplaces) : [],
+        needsMargin: isListing ? listing.needsMargin : false,
+        taxRate:
+          isListing && listing.needsMargin && listing.taxRate.trim() !== ""
+            ? Number(listing.taxRate)
+            : null,
       });
 
       if (actionError) {
@@ -217,26 +241,26 @@ export default function NewTaskForm({
 
       <fieldset>
         <legend className={labelClass}>Tipo</legend>
-        <div className="flex gap-2">
-          {(["unica", "diaria"] as TaskKind[]).map((k) => {
-            const active = kind === k;
+        <div className="flex flex-wrap gap-2">
+          {TYPE_OPTIONS.map((opt) => {
+            const active = mode === opt.value;
             return (
-              <label key={k} className={chipClass(active)}>
+              <label key={opt.value} className={chipClass(active)}>
                 <input
                   type="radio"
                   name="kind"
                   className="accent-risd"
                   checked={active}
-                  onChange={() => setKind(k)}
+                  onChange={() => setMode(opt.value)}
                 />
-                {k === "unica" ? "Única" : "Diária"}
+                {opt.label}
               </label>
             );
           })}
         </div>
       </fieldset>
 
-      {kind === "unica" ? (
+      {mode === "unica" || mode === "listagem" ? (
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="task-start" className={labelClass}>
@@ -253,7 +277,7 @@ export default function NewTaskForm({
           </div>
           <div>
             <label htmlFor="task-due-unica" className={labelClass}>
-              Horário-limite <span className={hintClass}>(opcional)</span>
+              Horário <span className={hintClass}>(opcional)</span>
             </label>
             <input
               id="task-due-unica"
@@ -312,6 +336,14 @@ export default function NewTaskForm({
             </div>
           </div>
         </div>
+      )}
+
+      {mode === "listagem" && (
+        <ListingFields
+          idPrefix="new-listing"
+          value={listing}
+          onChange={(patch) => setListing((prev) => ({ ...prev, ...patch }))}
+        />
       )}
 
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}

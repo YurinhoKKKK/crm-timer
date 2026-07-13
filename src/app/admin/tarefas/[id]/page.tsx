@@ -5,7 +5,7 @@ import type { TaskTemplate } from "@/lib/types";
 import CreatorMeta from "@/components/CreatorMeta";
 import LabelChips from "@/components/LabelChips";
 import { loadCompanyLabels } from "@/lib/labels";
-import { resolvePersonNames } from "@/lib/creator";
+import { resolvePeople } from "@/lib/creator";
 import TaskEditor from "./TaskEditor";
 import DeleteTaskButton from "./DeleteTaskButton";
 
@@ -66,9 +66,9 @@ export default async function TarefaDetailPage({
   const instanceCount = instances.length;
 
   // Transparência: quem criou esta tarefa (molde) e quando.
-  const names = await resolvePersonNames(supabase, [template.created_by]);
-  const creatorName = template.created_by
-    ? names.get(template.created_by) ?? null
+  const people = await resolvePeople(supabase, [template.created_by]);
+  const creator = template.created_by
+    ? people.get(template.created_by) ?? null
     : null;
 
   // Etiquetas herdadas da empresa desta tarefa (molde).
@@ -88,7 +88,8 @@ export default async function TarefaDetailPage({
             <h2 className="font-semibold text-fg">Dados da tarefa</h2>
             <CreatorMeta
               label="Criada por"
-              who={creatorName}
+              who={creator?.name ?? null}
+              whoAvatarUrl={creator?.avatarUrl}
               whenISO={template.created_at}
               fromStandard={!!template.standard_task_id}
             />

@@ -7,8 +7,14 @@ import CompanyList, { type CompanyItem } from "./CompanyList";
 import LabelManager from "./LabelManager";
 import { withSelf } from "@/lib/people";
 import { loadLabelCatalog, loadLabelsByCompany } from "@/lib/labels";
+import { avatarUrl } from "@/lib/avatar";
 
-type ConsultantOption = { id: string; full_name: string; email: string };
+type ConsultantOption = {
+  id: string;
+  full_name: string;
+  email: string;
+  avatar_path?: string | null;
+};
 type PersonOption = { id: string; full_name: string; email: string };
 type StandardOption = { id: string; title: string; kind: TaskKind };
 
@@ -35,7 +41,7 @@ export default async function EmpresasPage() {
     supabase
       .from("company_consultants")
       .select(
-        "company_id, consultant:profiles!company_consultants_consultant_id_fkey(id, full_name, email)"
+        "company_id, consultant:profiles!company_consultants_consultant_id_fkey(id, full_name, email, avatar_path)"
       ),
     supabase
       .from("profiles")
@@ -96,6 +102,7 @@ export default async function EmpresasPage() {
     consultants: (consultantsByCompany.get(c.id) ?? []).map((x) => ({
       id: x.id,
       name: x.full_name || x.email,
+      avatarUrl: avatarUrl(x.avatar_path),
     })),
     labels: labelsByCompany.get(c.id) ?? [],
   }));

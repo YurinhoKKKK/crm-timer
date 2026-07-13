@@ -9,6 +9,7 @@ import NewStandardTaskForm from "./NewStandardTaskForm";
 import StandardTaskList, { type StandardItem } from "./StandardTaskList";
 import { withSelf } from "@/lib/people";
 import { loadLabelsByCompany, type Label } from "@/lib/labels";
+import { avatarUrl } from "@/lib/avatar";
 
 type Option = { id: string; name: string };
 type PersonOption = { id: string; full_name: string; email: string };
@@ -27,8 +28,8 @@ type TemplateRow = {
   collaborator_id: string;
   company: { name: string } | { name: string }[] | null;
   collaborator:
-    | { full_name: string; email: string }
-    | { full_name: string; email: string }[]
+    | { full_name: string; email: string; avatar_path: string | null }
+    | { full_name: string; email: string; avatar_path: string | null }[]
     | null;
 };
 
@@ -57,7 +58,7 @@ export default async function TarefasPage() {
     supabase
       .from("task_templates")
       .select(
-        "id, title, kind, template_type, due_time, weekdays, start_date, active, created_at, company_id, collaborator_id, company:companies!task_templates_company_id_fkey(name), collaborator:profiles!task_templates_collaborator_id_fkey(full_name, email)"
+        "id, title, kind, template_type, due_time, weekdays, start_date, active, created_at, company_id, collaborator_id, company:companies!task_templates_company_id_fkey(name), collaborator:profiles!task_templates_collaborator_id_fkey(full_name, email, avatar_path)"
       )
       .order("created_at", { ascending: false }),
     // Catálogo de tarefas padrão (Passo 15).
@@ -99,6 +100,7 @@ export default async function TarefasPage() {
       companyName: company?.name ?? "(empresa removida)",
       collaboratorName:
         collaborator?.full_name || collaborator?.email || "(colaborador removido)",
+      collaboratorAvatarUrl: avatarUrl(collaborator?.avatar_path),
     };
   });
 

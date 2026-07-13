@@ -3,7 +3,9 @@ import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import type { TaskStatus } from "@/lib/types";
 import LabelChips from "@/components/LabelChips";
+import CompanyNotes from "@/components/company-central/CompanyNotes";
 import { loadCompanyLabels } from "@/lib/labels";
+import { loadCompanyNotes } from "@/lib/notes";
 import TaskList, { type TaskItem } from "./TaskList";
 
 type CompanyRow = { id: string; name: string };
@@ -32,7 +34,10 @@ export default async function ColaboradorEmpresaPage({
   const company = companyData as CompanyRow | null;
   if (!company) notFound();
 
-  const labels = await loadCompanyLabels(supabase, companyId);
+  const [labels, notes] = await Promise.all([
+    loadCompanyLabels(supabase, companyId),
+    loadCompanyNotes(supabase, companyId),
+  ]);
   const tasks = (tasksData as TaskItem[]) ?? [];
   const total = tasks.length;
   const done = tasks.filter((t) => (t.status as TaskStatus) === "finalizada").length;
@@ -77,6 +82,18 @@ export default async function ColaboradorEmpresaPage({
       ) : (
         <TaskList companyId={company.id} tasks={tasks} labels={labels} />
       )}
+
+      {/* Anotações da empresa (passo 24): o colaborador lê todas e cria as
+          suas; edita/exclui só as próprias (RLS cn_*). */}
+      <section className="mt-8">
+        <h2 className="mb-4 text-base font-semibold text-fg">Anotações</h2>
+        <CompanyNotes
+          companyId={company.id}
+          userId={profile.id}
+          isAdmin={profile.role === "admin"}
+          notes={notes}
+        />
+      </section>
     </AppShell>
   );
 }

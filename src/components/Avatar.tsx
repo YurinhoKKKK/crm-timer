@@ -35,11 +35,14 @@ export default function Avatar({
       ? "bg-white/15 text-white ring-white/20"
       : "bg-brand-tint text-risd ring-risd/20";
 
+  // Iniciais proporcionais nos tamanhos pequenos das listas densas.
+  const textSize = size <= 24 ? "text-[9px]" : "text-xs";
+
   return (
     <span
       style={dimension}
       aria-hidden="true"
-      className={`flex shrink-0 items-center justify-center rounded-full text-xs font-semibold ring-1 ring-inset ${base}`}
+      className={`flex shrink-0 items-center justify-center rounded-full font-semibold ring-1 ring-inset ${textSize} ${base}`}
     >
       {initialsOf(name)}
     </span>

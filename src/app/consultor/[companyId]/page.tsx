@@ -4,8 +4,10 @@ import AppShell from "@/components/AppShell";
 import CompanyCentral from "@/components/company-central/CompanyCentral";
 import CompanyCentralTabs from "@/components/company-central/CompanyCentralTabs";
 import CompanyListings from "@/components/company-central/CompanyListings";
+import CompanyNotes from "@/components/company-central/CompanyNotes";
 import { loadCompanyCentral, type Period } from "@/lib/company-central";
 import { loadCompanyListings } from "@/lib/listing";
+import { loadCompanyNotes } from "@/lib/notes";
 
 const PERIODS: Period[] = ["hoje", "7d", "30d", "tudo"];
 
@@ -31,9 +33,12 @@ export default async function ConsultorEmpresaPage({
   const res = await loadCompanyCentral(supabase, profile, params.companyId, period);
   if (res.notFound) notFound();
 
-  const listings = res.data
-    ? await loadCompanyListings(supabase, params.companyId)
-    : [];
+  const [listings, notes] = res.data
+    ? await Promise.all([
+        loadCompanyListings(supabase, params.companyId),
+        loadCompanyNotes(supabase, params.companyId),
+      ])
+    : [[], []];
 
   return (
     <AppShell
@@ -49,6 +54,14 @@ export default async function ConsultorEmpresaPage({
         <CompanyCentralTabs
           overview={<CompanyCentral data={res.data} period={period} />}
           listings={<CompanyListings rows={listings} />}
+          notes={
+            <CompanyNotes
+              companyId={params.companyId}
+              userId={profile.id}
+              isAdmin={false}
+              notes={notes}
+            />
+          }
         />
       )}
     </AppShell>

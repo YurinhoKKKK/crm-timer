@@ -8,7 +8,7 @@ import ListingSummary from "@/components/ListingSummary";
 import { loadCompanyLabels } from "@/lib/labels";
 import { loadListingByTemplate, loadListingResults } from "@/lib/listing";
 import {
-  resolvePersonNames,
+  resolvePeople,
   describeInstanceCreator,
   type InstanceTemplate,
 } from "@/lib/creator";
@@ -73,8 +73,8 @@ export default async function TarefaPage({
 
   // Transparência: quem criou a tarefa e quando (e se veio da recorrência).
   const template = first(task.template);
-  const names = await resolvePersonNames(supabase, [template?.created_by]);
-  const creator = describeInstanceCreator(template, task.created_at, names);
+  const people = await resolvePeople(supabase, [template?.created_by]);
+  const creator = describeInstanceCreator(template, task.created_at, people);
 
   // Recupera um intervalo aberto (sem ended_at) para retomar o cronômetro.
   const { data: openEntry } = await supabase
@@ -149,6 +149,7 @@ export default async function TarefaPage({
             <CreatorMeta
               label="Criada por"
               who={creator.who}
+              whoAvatarUrl={creator.whoAvatarUrl}
               whenISO={creator.whenISO}
               fromStandard={creator.fromStandard}
               systemGenerated={creator.systemGenerated}

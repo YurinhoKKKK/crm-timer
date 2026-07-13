@@ -6,6 +6,7 @@ import TaskInstanceList, {
 } from "@/components/TaskInstanceList";
 import type { SelectOption } from "@/components/ListControls";
 import { loadLabelsByCompany, type Label } from "@/lib/labels";
+import { avatarUrl } from "@/lib/avatar";
 
 type Joined<T> = T | T[] | null;
 
@@ -18,7 +19,7 @@ type InstanceRow = {
   company_id: string;
   collaborator_id: string;
   company: Joined<{ name: string }>;
-  collaborator: Joined<{ full_name: string; email: string }>;
+  collaborator: Joined<{ full_name: string; email: string; avatar_path: string | null }>;
   template: Joined<{ kind: TaskKind }>;
 };
 
@@ -39,7 +40,7 @@ export default async function ConsultorTarefasPage() {
   const { data, error } = await supabase
     .from("task_instances")
     .select(
-      "id, title, status, due_at, total_seconds, company_id, collaborator_id, company:companies!task_instances_company_id_fkey(name), collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email), template:task_templates!task_instances_template_id_fkey(kind)"
+      "id, title, status, due_at, total_seconds, company_id, collaborator_id, company:companies!task_instances_company_id_fkey(name), collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email, avatar_path), template:task_templates!task_instances_template_id_fkey(kind)"
     )
     .order("due_at", { ascending: true, nullsFirst: false })
     .limit(CAP + 1);
@@ -63,6 +64,7 @@ export default async function ConsultorTarefasPage() {
       collaboratorId: r.collaborator_id,
       collaboratorName:
         collaborator?.full_name || collaborator?.email || "(colaborador removido)",
+      collaboratorAvatarUrl: avatarUrl(collaborator?.avatar_path),
     };
   });
 

@@ -9,6 +9,7 @@ import {
   usePaged,
 } from "@/components/ListControls";
 import LabelChips from "@/components/LabelChips";
+import Person from "@/components/Person";
 import type { Label } from "@/lib/labels";
 
 export type InstanceItem = {
@@ -20,6 +21,7 @@ export type InstanceItem = {
   companyId: string;
   companyName: string;
   collaboratorName: string;
+  collaboratorAvatarUrl?: string | null;
 };
 
 // Lista de instâncias por status (drill-down do dashboard). Renderiza uma janela
@@ -56,8 +58,14 @@ export default function InstanceStatusList({
                   {meta.label}
                 </span>
               </div>
-              <p className="mt-1 text-sm text-fg-muted">
-                {r.companyName} · {r.collaboratorName}
+              <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-fg-muted">
+                <span>{r.companyName}</span>
+                <span aria-hidden="true">·</span>
+                <Person
+                  name={r.collaboratorName}
+                  avatarUrl={r.collaboratorAvatarUrl}
+                  size={18}
+                />
               </p>
               {labelsByCompany?.[r.companyId]?.length ? (
                 <LabelChips

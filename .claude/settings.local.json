@@ -59,7 +59,16 @@
       "Bash(/c/Users/renat/AppData/Local/Programs/Microsoft VS Code/bin/code *)",
       "PowerShell($w = Get-Command winget -ErrorAction SilentlyContinue; if \\($w\\) { \"winget: $\\($w.Source\\)\" } else { \"winget NAO disponivel\" })",
       "PowerShell(winget install *)",
-      "PowerShell($deno = Get-ChildItem \"$env:LOCALAPPDATA\\\\Microsoft\\\\WinGet\\\\Packages\" -Recurse -Filter deno.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName; if \\(-not $deno\\) { $deno = \\(Get-Command deno -ErrorAction SilentlyContinue\\).Source }; \"deno path: $deno\"; if \\($deno\\) { & $deno --version })"
+      "PowerShell($deno = Get-ChildItem \"$env:LOCALAPPDATA\\\\Microsoft\\\\WinGet\\\\Packages\" -Recurse -Filter deno.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName; if \\(-not $deno\\) { $deno = \\(Get-Command deno -ErrorAction SilentlyContinue\\).Source }; \"deno path: $deno\"; if \\($deno\\) { & $deno --version })",
+      "Bash(echo \"EXIT_TSC=$?\")",
+      "Bash(echo \"TSC=$?\")",
+      "mcp__claude_ai_Supabase__get_publishable_keys",
+      "mcp__claude_ai_Supabase__get_project_url",
+      "PowerShell(npm install *)",
+      "PowerShell(node -p \"require\\('@tiptap/react/package.json'\\).version + ' / ' + require\\('@tiptap/starter-kit/package.json'\\).version\")",
+      "PowerShell(npm ls *)",
+      "PowerShell(npm uninstall *)",
+      "Bash(node -e ' *)"
     ]
   }
 }

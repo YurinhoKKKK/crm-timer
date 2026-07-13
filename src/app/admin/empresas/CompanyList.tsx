@@ -13,6 +13,7 @@ import {
   type SelectOption,
 } from "@/components/ListControls";
 import LabelChips from "@/components/LabelChips";
+import Avatar from "@/components/Avatar";
 import type { Label } from "@/lib/labels";
 
 export type CompanyItem = {
@@ -20,7 +21,7 @@ export type CompanyItem = {
   name: string;
   whatsappGroupName: string | null;
   whatsappContactId: string | null;
-  consultants: { id: string; name: string }[];
+  consultants: { id: string; name: string; avatarUrl?: string | null }[];
   labels: Label[];
 };
 
@@ -100,8 +101,9 @@ export default function CompanyList({
                     {company.consultants.map((c) => (
                       <span
                         key={c.id}
-                        className="rounded-full border border-line bg-surface-2 px-2 py-0.5 text-xs text-fg-muted"
+                        className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface-2 py-0.5 pl-1 pr-2 text-xs text-fg-muted"
                       >
+                        <Avatar name={c.name} url={c.avatarUrl} size={18} />
                         {c.name}
                       </span>
                     ))}

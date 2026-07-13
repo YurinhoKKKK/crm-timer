@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import { STATUS_META } from "@/lib/status";
 import { formatDuration } from "@/lib/format";
+import Person from "@/components/Person";
 import type { Period } from "./PeriodFilter";
 import {
   getCompanyTimeBreakdown,
@@ -197,7 +198,11 @@ function BreakdownPanel({
                             />
                             {meta.label}
                           </span>
-                          <span>{t.collaboratorName}</span>
+                          <Person
+                            name={t.collaboratorName}
+                            avatarUrl={t.collaboratorAvatarUrl}
+                            size={16}
+                          />
                         </div>
                       </div>
                       <span className="shrink-0 font-mono text-sm tabular-nums text-fg">

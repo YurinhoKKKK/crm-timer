@@ -6,6 +6,7 @@ import type { TaskStatus, TaskKind } from "@/lib/types";
 import { STATUS_META } from "@/lib/status";
 import { formatDuration, formatDue } from "@/lib/format";
 import LabelChips from "@/components/LabelChips";
+import Person from "@/components/Person";
 import type { Label } from "@/lib/labels";
 import {
   FilterBar,
@@ -30,6 +31,7 @@ export type TaskInstanceItem = {
   companyName: string;
   collaboratorId: string;
   collaboratorName: string;
+  collaboratorAvatarUrl?: string | null;
 };
 
 const STATUS_OPTIONS: SelectOption[] = (
@@ -153,9 +155,18 @@ export default function TaskInstanceList({
                     {meta.label}
                   </span>
                 </div>
-                <p className="mt-1 text-sm text-fg-muted">
-                  {t.companyName}
-                  {panel === "consultor" ? ` · ${t.collaboratorName}` : ""}
+                <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-fg-muted">
+                  <span>{t.companyName}</span>
+                  {panel === "consultor" && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <Person
+                        name={t.collaboratorName}
+                        avatarUrl={t.collaboratorAvatarUrl}
+                        size={18}
+                      />
+                    </>
+                  )}
                 </p>
                 {labelsByCompany?.[t.companyId]?.length ? (
                   <LabelChips

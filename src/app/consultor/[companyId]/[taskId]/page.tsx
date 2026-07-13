@@ -10,11 +10,18 @@ import ListingSummary from "@/components/ListingSummary";
 import ListingResultsView from "@/components/ListingResultsView";
 import { loadCompanyLabels } from "@/lib/labels";
 import { loadListingByTemplate, loadListingResults } from "@/lib/listing";
-import { resolvePersonNames, describeInstanceCreator } from "@/lib/creator";
+import { resolvePeople, describeInstanceCreator } from "@/lib/creator";
+import Person from "@/components/Person";
+import { avatarUrl } from "@/lib/avatar";
 import TaskInstanceEditor from "./TaskInstanceEditor";
 import DeleteTaskButton from "@/app/admin/tarefas/[id]/DeleteTaskButton";
 
-type PersonOption = { id: string; full_name: string; email: string };
+type PersonOption = {
+  id: string;
+  full_name: string;
+  email: string;
+  avatar_path?: string | null;
+};
 
 type InstanceRow = {
   id: string;
@@ -59,7 +66,7 @@ export default async function ConsultorTarefaPage({
       .maybeSingle(),
     supabase
       .from("profiles")
-      .select("id, full_name, email")
+      .select("id, full_name, email, avatar_path")
       // Admins também podem ser responsáveis de tarefas.
       .in("role", ["colaborador", "admin"])
       .order("full_name", { ascending: true }),
@@ -79,9 +86,12 @@ export default async function ConsultorTarefaPage({
   const canDelete = !!task.template_id && template?.created_by === profile.id;
 
   // Transparência: quem criou a tarefa e quando (e se esta ocorrência veio da
-  // recorrência). O nome vem de display_names (legível a todos os cargos).
-  const names = await resolvePersonNames(supabase, [template?.created_by]);
-  const creator = describeInstanceCreator(template, task.created_at, names);
+  // recorrência). Nome+foto vêm de display_profiles (legível a todos os cargos).
+  const people = await resolvePeople(supabase, [template?.created_by]);
+  const creator = describeInstanceCreator(template, task.created_at, people);
+
+  // Responsável atual pela execução (para exibir com avatar no cabeçalho).
+  const responsible = collaborators.find((c) => c.id === task.collaborator_id);
 
   // Etiquetas herdadas da empresa (exibidas no detalhe da tarefa).
   const labels = await loadCompanyLabels(supabase, task.company_id);
@@ -126,6 +136,17 @@ export default async function ConsultorTarefaPage({
           <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
           {meta.label}
         </span>
+        {responsible && (
+          <span className="flex items-center gap-1.5 text-sm text-fg-muted">
+            Responsável:{" "}
+            <Person
+              name={responsible.full_name || responsible.email}
+              avatarUrl={avatarUrl(responsible.avatar_path)}
+              size={20}
+              className="text-fg"
+            />
+          </span>
+        )}
         <span className="text-sm text-fg-muted">
           Tempo gasto:{" "}
           <span className="font-mono tabular-nums text-fg">
@@ -140,6 +161,7 @@ export default async function ConsultorTarefaPage({
           <CreatorMeta
             label="Criada por"
             who={creator.who}
+            whoAvatarUrl={creator.whoAvatarUrl}
             whenISO={creator.whenISO}
             fromStandard={creator.fromStandard}
             systemGenerated={creator.systemGenerated}

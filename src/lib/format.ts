@@ -8,6 +8,13 @@ export function formatDuration(totalSeconds: number): string {
   return `${hours}h ${minutes}min`;
 }
 
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function formatDue(due: string | null): string {
   if (!due) return "Sem prazo";
   // due_at é um instante (timestamptz). Exibimos SEMPRE no horário de Brasília,

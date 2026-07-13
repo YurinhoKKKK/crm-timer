@@ -14,6 +14,7 @@ import {
   type SelectOption,
 } from "@/components/ListControls";
 import LabelChips from "@/components/LabelChips";
+import Person from "@/components/Person";
 import type { Label } from "@/lib/labels";
 
 const WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -31,6 +32,7 @@ export type TemplateItem = {
   collaboratorId: string;
   companyName: string;
   collaboratorName: string;
+  collaboratorAvatarUrl?: string | null;
 };
 
 function formatTime(time: string | null): string | null {
@@ -160,8 +162,14 @@ export default function TaskTemplateList({
                     </span>
                   )}
                 </div>
-                <p className="mt-1 text-sm text-fg-muted">
-                  {t.companyName} · {t.collaboratorName}
+                <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-fg-muted">
+                  <span>{t.companyName}</span>
+                  <span aria-hidden="true">·</span>
+                  <Person
+                    name={t.collaboratorName}
+                    avatarUrl={t.collaboratorAvatarUrl}
+                    size={18}
+                  />
                 </p>
                 {labelsByCompany?.[t.companyId]?.length ? (
                   <LabelChips

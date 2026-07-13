@@ -173,6 +173,64 @@ export type Database = {
           },
         ]
       }
+      company_notes: {
+        Row: {
+          attachments: Json
+          author_id: string
+          company_id: string
+          content_html: string
+          created_at: string
+          id: string
+          updated_at: string | null
+          updated_by: string | null
+          visible_to_client: boolean
+        }
+        Insert: {
+          attachments?: Json
+          author_id: string
+          company_id: string
+          content_html: string
+          created_at?: string
+          id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          visible_to_client?: boolean
+        }
+        Update: {
+          attachments?: Json
+          author_id?: string
+          company_id?: string
+          content_html?: string
+          created_at?: string
+          id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          visible_to_client?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_notes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_notes_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_notes_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       labels: {
         Row: {
           bg_color: string
@@ -864,4 +922,5 @@ export type ActivityLog = Tables<"activity_log">
 export type StandardTask = Tables<"standard_tasks">
 export type TimeAdjustment = Tables<"time_adjustments">
 export type ListingBrand = Tables<"listing_brands">
+export type CompanyNote = Tables<"company_notes">
 export type ListingResult = Tables<"listing_results">

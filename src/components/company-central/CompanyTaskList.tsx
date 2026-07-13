@@ -6,6 +6,7 @@ import { STATUS_META } from "@/lib/status";
 import { formatDuration, formatDue } from "@/lib/format";
 import CreatorMeta from "@/components/CreatorMeta";
 import LabelChips from "@/components/LabelChips";
+import Person from "@/components/Person";
 import type { Label } from "@/lib/labels";
 import type { CentralTaskItem } from "@/lib/company-central";
 import {
@@ -141,7 +142,11 @@ export default function CompanyTaskList({
                       <LabelChips labels={labels} className="mt-2" />
                     )}
                     <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-subtle">
-                      <span>{t.collaboratorName}</span>
+                      <Person
+                        name={t.collaboratorName}
+                        avatarUrl={t.collaboratorAvatarUrl}
+                        size={16}
+                      />
                       <span>Prazo: {formatDue(t.due_at)}</span>
                       <span>
                         Tempo:{" "}
@@ -174,7 +179,13 @@ export default function CompanyTaskList({
                     <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
                       <div>
                         <dt className="text-xs text-fg-subtle">Responsável</dt>
-                        <dd className="text-fg">{t.collaboratorName}</dd>
+                        <dd className="text-fg">
+                          <Person
+                            name={t.collaboratorName}
+                            avatarUrl={t.collaboratorAvatarUrl}
+                            size={18}
+                          />
+                        </dd>
                       </div>
                       <div>
                         <dt className="text-xs text-fg-subtle">Prazo</dt>
@@ -201,6 +212,7 @@ export default function CompanyTaskList({
                       <CreatorMeta
                         label="Criada por"
                         who={t.creator.who}
+                        whoAvatarUrl={t.creator.whoAvatarUrl}
                         whenISO={t.creator.whenISO}
                         fromStandard={t.creator.fromStandard}
                         systemGenerated={t.creator.systemGenerated}

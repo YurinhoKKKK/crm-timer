@@ -2,6 +2,8 @@
 // todos os cargos. Também sinaliza origem: tarefa padrão ou geração automática
 // pela recorrência. Presentacional (sem estado) — pode rodar no servidor.
 
+import Avatar from "@/components/Avatar";
+
 function formatWhen(iso: string | null, dateOnly: boolean): string {
   if (!iso) return "data não registrada";
   const d = new Date(iso);
@@ -35,6 +37,7 @@ const clockIcon = (
 export default function CreatorMeta({
   label,
   who,
+  whoAvatarUrl = null,
   whenISO,
   dateOnly = false,
   fromStandard = false,
@@ -45,6 +48,7 @@ export default function CreatorMeta({
 }: {
   label: string; // "Criada por" | "Cadastrada por"
   who: string | null;
+  whoAvatarUrl?: string | null;
   whenISO: string | null;
   dateOnly?: boolean;
   fromStandard?: boolean;
@@ -62,7 +66,8 @@ export default function CreatorMeta({
         {hasOrigin ? (
           <p>
             {label}{" "}
-            <span className="font-medium text-fg-muted">
+            <span className="inline-flex items-center gap-1 align-middle font-medium text-fg-muted">
+              {who && <Avatar name={who} url={whoAvatarUrl} size={16} />}
               {who ?? "usuário não identificado"}
             </span>
             {fromStandard && (

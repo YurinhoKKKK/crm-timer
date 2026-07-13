@@ -801,7 +801,7 @@ filtro e busca funcionando, com os links das marcas clicáveis.
 
 ---
 
-## PASSO 24 — Anotações Rich Text na tela da empresa
+## PASSO 24 — Anotações Rich Text na tela da empresa (Feito)
 
 ```
 Adicione uma seção de ANOTAÇÕES na tela de detalhe da empresa, com editor

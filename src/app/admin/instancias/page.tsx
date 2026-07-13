@@ -4,6 +4,7 @@ import type { TaskStatus } from "@/lib/types";
 import { STATUS_META } from "@/lib/status";
 import InstanceStatusList, { type InstanceItem } from "./InstanceStatusList";
 import { loadLabelsByCompany, type Label } from "@/lib/labels";
+import { avatarUrl } from "@/lib/avatar";
 
 type Period = "hoje" | "7d" | "30d" | "tudo";
 type Filter = TaskStatus | "atrasadas";
@@ -33,7 +34,7 @@ type InstanceRow = {
   total_seconds: number;
   company_id: string;
   company: Joined<{ name: string }>;
-  collaborator: Joined<{ full_name: string; email: string }>;
+  collaborator: Joined<{ full_name: string; email: string; avatar_path: string | null }>;
 };
 
 function first<T>(value: Joined<T>): T | null {
@@ -75,7 +76,7 @@ export default async function InstanciasPage({
   let query = supabase
     .from("task_instances")
     .select(
-      "id, title, status, due_at, task_date, total_seconds, company_id, company:companies!task_instances_company_id_fkey(name), collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email)"
+      "id, title, status, due_at, task_date, total_seconds, company_id, company:companies!task_instances_company_id_fkey(name), collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email, avatar_path)"
     )
     .order("due_at", { ascending: true, nullsFirst: false })
     .limit(CAP + 1);
@@ -107,6 +108,7 @@ export default async function InstanciasPage({
       first(r.collaborator)?.full_name ||
       first(r.collaborator)?.email ||
       "(colaborador removido)",
+    collaboratorAvatarUrl: avatarUrl(first(r.collaborator)?.avatar_path),
   }));
 
   // Etiquetas herdadas por empresa (exibidas em cada tarefa da lista).

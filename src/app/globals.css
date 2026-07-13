@@ -90,6 +90,234 @@ body {
   }
 }
 
+/* ---------------------------------------------------------------------------
+   Conteúdo rich text das anotações (passo 24) — vale para o editor (TipTap,
+   .ProseMirror) e para a leitura (.note-content). Segue os tokens do tema.
+--------------------------------------------------------------------------- */
+.rich-text {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--fg);
+  overflow-wrap: break-word;
+}
+.rich-text h1,
+.rich-text h2,
+.rich-text h3 {
+  font-weight: 600;
+  color: var(--fg);
+  margin: 1em 0 0.4em;
+}
+.rich-text h1 {
+  font-size: 1.25rem;
+}
+.rich-text h2 {
+  font-size: 1.1rem;
+}
+.rich-text h3 {
+  font-size: 1rem;
+}
+.rich-text p {
+  margin: 0.4em 0;
+}
+.rich-text ul,
+.rich-text ol {
+  margin: 0.4em 0;
+  padding-left: 1.4em;
+}
+.rich-text ul {
+  list-style: disc;
+}
+.rich-text ol {
+  list-style: decimal;
+}
+.rich-text li {
+  margin: 0.15em 0;
+}
+.rich-text a {
+  color: #3145ff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.rich-text img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  border: 1px solid var(--line);
+  margin: 0.5em 0;
+}
+.rich-text blockquote {
+  border-left: 3px solid var(--line-strong);
+  padding-left: 0.75em;
+  color: var(--fg-muted);
+  margin: 0.5em 0;
+}
+.rich-text code {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 0.25rem;
+  padding: 0.1em 0.35em;
+  font-size: 0.85em;
+}
+.rich-text pre {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 0.75em 1em;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+.rich-text pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.85em;
+}
+.rich-text hr {
+  border: none;
+  border-top: 1px solid var(--line-strong);
+  margin: 1em 0;
+}
+.rich-text mark {
+  border-radius: 0.2em;
+  padding: 0.05em 0.15em;
+}
+/* Tabelas (extensão Table do TipTap) */
+.rich-text .tableWrapper {
+  overflow-x: auto;
+  margin: 0.75em 0;
+}
+.rich-text table {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: fixed;
+  margin: 0.75em 0;
+}
+.rich-text .tableWrapper table {
+  margin: 0;
+}
+.rich-text th,
+.rich-text td {
+  border: 1px solid var(--line-strong);
+  padding: 0.4em 0.6em;
+  vertical-align: top;
+  position: relative;
+}
+.rich-text th {
+  background: var(--surface-2);
+  font-weight: 600;
+  text-align: left;
+}
+.rich-text .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(49, 69, 255, 0.12);
+  pointer-events: none;
+}
+/* Lista de tarefas (checklist) */
+.rich-text ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0.2em;
+}
+.rich-text ul[data-type="taskList"] li {
+  display: flex;
+  gap: 0.5em;
+}
+.rich-text ul[data-type="taskList"] li > label {
+  flex-shrink: 0;
+  margin-top: 0.3em;
+  user-select: none;
+}
+.rich-text ul[data-type="taskList"] li > div {
+  flex: 1 1 auto;
+}
+.rich-text ul[data-type="taskList"] input[type="checkbox"] {
+  accent-color: #3145ff;
+}
+.rich-text li[data-checked="true"] > div {
+  color: var(--fg-muted);
+  text-decoration: line-through;
+}
+.rich-text :first-child {
+  margin-top: 0;
+}
+.rich-text :last-child {
+  margin-bottom: 0;
+}
+
+/* Leitura da anotação: imagens ampliam em lightbox ao clicar */
+.note-view img {
+  cursor: zoom-in;
+}
+
+/* Área editável do TipTap */
+.rich-text.ProseMirror {
+  min-height: 10rem;
+  padding: 0.75rem;
+  outline: none;
+}
+.rich-text.ProseMirror img.ProseMirror-selectednode {
+  outline: 2px solid #3145ff;
+}
+/* Imagem redimensionável (NodeView): alças nos 4 cantos ao selecionar */
+.rich-text .img-resizer {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  line-height: 0;
+}
+.rich-text .img-resizer img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.rich-text .img-resizer.selected img {
+  outline: 2px solid #3145ff;
+}
+.rich-text .img-resizer .img-handle {
+  display: none;
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  border-radius: 9999px;
+  background: #3145ff;
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 0 1px rgba(20, 24, 28, 0.2);
+  z-index: 5;
+  touch-action: none;
+}
+.rich-text .img-resizer.selected .img-handle {
+  display: block;
+}
+.rich-text .img-resizer .img-handle-nw {
+  top: -5px;
+  left: -5px;
+  cursor: nwse-resize;
+}
+.rich-text .img-resizer .img-handle-ne {
+  top: -5px;
+  right: -5px;
+  cursor: nesw-resize;
+}
+.rich-text .img-resizer .img-handle-sw {
+  bottom: -5px;
+  left: -5px;
+  cursor: nesw-resize;
+}
+.rich-text .img-resizer .img-handle-se {
+  bottom: -5px;
+  right: -5px;
+  cursor: nwse-resize;
+}
+/* Placeholder do editor vazio */
+.rich-text.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--fg-subtle);
+}
+
 /* Scrollbar discreta */
 * {
   scrollbar-width: thin;

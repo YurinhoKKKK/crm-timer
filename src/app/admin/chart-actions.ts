@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase-server";
 import type { TaskStatus } from "@/lib/types";
+import { avatarUrl } from "@/lib/avatar";
 import type { Period } from "./PeriodFilter";
 
 export type BreakdownTask = {
@@ -9,6 +10,7 @@ export type BreakdownTask = {
   title: string;
   status: TaskStatus;
   collaboratorName: string;
+  collaboratorAvatarUrl: string | null;
   seconds: number;
 };
 
@@ -33,7 +35,11 @@ type Row = {
   title: string;
   status: TaskStatus;
   total_seconds: number;
-  collaborator: Joined<{ full_name: string | null; email: string }>;
+  collaborator: Joined<{
+    full_name: string | null;
+    email: string;
+    avatar_path: string | null;
+  }>;
 };
 
 // Passo 17 — tarefas que compõem o tempo de uma empresa no período, ordenadas
@@ -60,7 +66,7 @@ export async function getCompanyTimeBreakdown(
   let query = supabase
     .from("task_instances")
     .select(
-      "id, title, status, total_seconds, collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email)"
+      "id, title, status, total_seconds, collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email, avatar_path)"
     )
     .eq("company_id", companyId);
   if (collaboratorId) query = query.eq("collaborator_id", collaboratorId);
@@ -78,6 +84,7 @@ export async function getCompanyTimeBreakdown(
         status: r.status,
         collaboratorName:
           collab?.full_name || collab?.email || "(sem responsável)",
+        collaboratorAvatarUrl: avatarUrl(collab?.avatar_path),
         seconds: r.total_seconds,
       };
     })

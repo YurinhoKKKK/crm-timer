@@ -88,12 +88,13 @@ export default function CompanyCentral({
               <p className="text-xs text-fg-subtle">Consultor(es) responsável(is)</p>
               {consultants.length > 0 ? (
                 <div className="mt-1 flex flex-wrap gap-1.5">
-                  {consultants.map((name) => (
+                  {consultants.map((c) => (
                     <span
-                      key={name}
-                      className="rounded-full border border-line bg-surface-2 px-2 py-0.5 text-xs text-fg-muted"
+                      key={c.name}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface-2 py-0.5 pl-1 pr-2 text-xs text-fg-muted"
                     >
-                      {name}
+                      <Avatar name={c.name} url={c.avatarUrl} size={18} />
+                      {c.name}
                     </span>
                   ))}
                 </div>
@@ -115,6 +116,7 @@ export default function CompanyCentral({
             <CreatorMeta
               label="Cadastrada por"
               who={company.creatorName}
+              whoAvatarUrl={company.creatorAvatarUrl}
               whenISO={company.createdAt}
               dateOnly
               hasOrigin={!!company.creatorName}
@@ -249,7 +251,14 @@ export default function CompanyCentral({
                         </span>
                       )}
                     </div>
-                    <p className="mt-1 text-sm text-fg-muted">{t.collaboratorName}</p>
+                    <p className="mt-1 flex items-center gap-1.5 text-sm text-fg-muted">
+                      <Avatar
+                        name={t.collaboratorName}
+                        url={t.collaboratorAvatarUrl}
+                        size={18}
+                      />
+                      {t.collaboratorName}
+                    </p>
                   </div>
                   <span
                     className={`text-xs ${
@@ -329,7 +338,14 @@ export default function CompanyCentral({
               <li key={a.id} className="relative border-l-2 border-line pl-4">
                 <span className="absolute -left-[5px] top-1.5 h-2 w-2 rounded-full bg-risd" />
                 <div className="flex flex-wrap items-center gap-2 text-xs text-fg-subtle">
-                  <span className="font-medium text-fg">{a.collaboratorName}</span>
+                  <span className="inline-flex items-center gap-1.5 font-medium text-fg">
+                    <Avatar
+                      name={a.collaboratorName}
+                      url={a.collaboratorAvatarUrl}
+                      size={18}
+                    />
+                    {a.collaboratorName}
+                  </span>
                   <span>·</span>
                   <span>{formatDateTime(a.createdAt)}</span>
                   <span>·</span>

@@ -5,7 +5,7 @@ import { avatarUrl } from "@/lib/avatar";
 import { withSelf } from "@/lib/people";
 import { loadCompanyLabels, type Label } from "@/lib/labels";
 import {
-  resolvePersonNames,
+  resolvePeople,
   describeInstanceCreator,
   type CreatorInfo,
   type InstanceTemplate,
@@ -52,8 +52,11 @@ export type CentralCompany = {
   whatsappContactId: string | null;
   createdAt: string;
   creatorName: string | null; // quem cadastrou (null = anterior ao registro)
+  creatorAvatarUrl: string | null;
   labels: Label[]; // etiquetas da empresa (herdadas por todas as tarefas)
 };
+
+export type CentralPerson = { name: string; avatarUrl: string | null };
 
 export type CentralOverview = {
   total: number;
@@ -76,6 +79,7 @@ export type CentralTaskItem = {
   created_at: string;
   total_seconds: number;
   collaboratorName: string;
+  collaboratorAvatarUrl: string | null;
   completionNote: string | null;
   creator: CreatorInfo; // quem criou a tarefa e se veio da recorrência
 };
@@ -86,6 +90,7 @@ export type CentralAttentionItem = {
   status: TaskStatus;
   due_at: string | null;
   collaboratorName: string;
+  collaboratorAvatarUrl: string | null;
   overdue: boolean;
 };
 
@@ -106,6 +111,7 @@ export type CentralActivityItem = {
   sentWhatsapp: boolean;
   createdAt: string;
   collaboratorName: string;
+  collaboratorAvatarUrl: string | null;
 };
 
 export type StandardOption = { id: string; title: string; kind: TaskKind };
@@ -113,7 +119,7 @@ export type PersonOption = { id: string; full_name: string; email: string };
 
 export type CentralData = {
   company: CentralCompany;
-  consultants: string[];
+  consultants: CentralPerson[];
   overview: CentralOverview;
   tasks: CentralTaskItem[];
   tasksTruncated: boolean;
@@ -158,7 +164,7 @@ export async function loadCompanyCentral(
     supabase
       .from("company_consultants")
       .select(
-        "consultant:profiles!company_consultants_consultant_id_fkey(full_name, email)"
+        "consultant:profiles!company_consultants_consultant_id_fkey(full_name, email, avatar_path)"
       )
       .eq("company_id", companyId),
     supabase.rpc("company_overview", {
@@ -174,7 +180,7 @@ export async function loadCompanyCentral(
       let q = supabase
         .from("task_instances")
         .select(
-          "id, title, status, due_at, created_at, total_seconds, completion_note, collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email), template:task_templates!task_instances_template_id_fkey(created_by, created_at, standard_task_id)"
+          "id, title, status, due_at, created_at, total_seconds, completion_note, collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email, avatar_path), template:task_templates!task_instances_template_id_fkey(created_by, created_at, standard_task_id)"
         )
         .eq("company_id", companyId)
         .order("due_at", { ascending: true, nullsFirst: false })
@@ -186,7 +192,7 @@ export async function loadCompanyCentral(
       let q = supabase
         .from("activity_log")
         .select(
-          "id, message, seconds_spent, sent_whatsapp, created_at, collaborator:profiles!activity_log_collaborator_id_fkey(full_name, email)"
+          "id, message, seconds_spent, sent_whatsapp, created_at, collaborator:profiles!activity_log_collaborator_id_fkey(full_name, email, avatar_path)"
         )
         .eq("company_id", companyId)
         .order("created_at", { ascending: false })
@@ -226,12 +232,21 @@ export async function loadCompanyCentral(
   if (tasksError) return { notFound: false, error: tasksError.message };
 
   // --- Cabeçalho: consultores ---
-  const consultants: string[] = [];
+  const consultants: CentralPerson[] = [];
   for (const link of (consultantsData as {
-    consultant: Joined<{ full_name: string | null; email: string }>;
+    consultant: Joined<{
+      full_name: string | null;
+      email: string;
+      avatar_path: string | null;
+    }>;
   }[]) ?? []) {
     const c = first(link.consultant);
-    if (c) consultants.push(c.full_name || c.email);
+    if (c) {
+      consultants.push({
+        name: c.full_name || c.email,
+        avatarUrl: avatarUrl(c.avatar_path),
+      });
+    }
   }
 
   // --- Indicadores --- (a RPC devolve snake_case; normalizamos para camelCase)
@@ -261,17 +276,21 @@ export async function loadCompanyCentral(
     created_at: string;
     total_seconds: number;
     completion_note: string | null;
-    collaborator: Joined<{ full_name: string | null; email: string }>;
+    collaborator: Joined<{
+      full_name: string | null;
+      email: string;
+      avatar_path: string | null;
+    }>;
     template: Joined<InstanceTemplate>;
   }[]) ?? [];
   const tasksTruncated = allTaskRows.length > TASK_CAP;
   const taskRows = tasksTruncated ? allTaskRows.slice(0, TASK_CAP) : allTaskRows;
 
-  // Nomes de quem criou (empresa + tarefas), legíveis por qualquer cargo via
-  // display_names. Uma única chamada em lote.
+  // Nome+foto de quem criou (empresa + tarefas), legíveis por qualquer cargo
+  // via display_profiles. Uma única chamada em lote.
   const creatorIds: (string | null | undefined)[] = [company.created_by];
   for (const r of taskRows) creatorIds.push(first(r.template)?.created_by);
-  const names = await resolvePersonNames(supabase, creatorIds);
+  const people = await resolvePeople(supabase, creatorIds);
 
   const tasks: CentralTaskItem[] = taskRows.map((r) => {
     const collab = first(r.collaborator);
@@ -284,8 +303,9 @@ export async function loadCompanyCentral(
       total_seconds: r.total_seconds,
       collaboratorName:
         collab?.full_name || collab?.email || "(sem responsável)",
+      collaboratorAvatarUrl: avatarUrl(collab?.avatar_path),
       completionNote: r.completion_note,
-      creator: describeInstanceCreator(first(r.template), r.created_at, names),
+      creator: describeInstanceCreator(first(r.template), r.created_at, people),
     };
   });
 
@@ -299,6 +319,7 @@ export async function loadCompanyCentral(
       status: t.status,
       due_at: t.due_at,
       collaboratorName: t.collaboratorName,
+      collaboratorAvatarUrl: t.collaboratorAvatarUrl,
       overdue: !!t.due_at && new Date(t.due_at).getTime() < now,
     }))
     .sort((a, b) => {
@@ -337,7 +358,11 @@ export async function loadCompanyCentral(
       seconds_spent: number;
       sent_whatsapp: boolean;
       created_at: string;
-      collaborator: Joined<{ full_name: string | null; email: string }>;
+      collaborator: Joined<{
+        full_name: string | null;
+        email: string;
+        avatar_path: string | null;
+      }>;
     }[]) ?? []
   ).map((a) => {
     const collab = first(a.collaborator);
@@ -348,6 +373,7 @@ export async function loadCompanyCentral(
       sentWhatsapp: a.sent_whatsapp,
       createdAt: a.created_at,
       collaboratorName: collab?.full_name || collab?.email || "—",
+      collaboratorAvatarUrl: avatarUrl(collab?.avatar_path),
     };
   });
 
@@ -379,7 +405,10 @@ export async function loadCompanyCentral(
         whatsappContactId: company.whatsapp_contact_id,
         createdAt: company.created_at,
         creatorName: company.created_by
-          ? names.get(company.created_by) ?? null
+          ? people.get(company.created_by)?.name ?? null
+          : null,
+        creatorAvatarUrl: company.created_by
+          ? people.get(company.created_by)?.avatarUrl ?? null
           : null,
         labels: companyLabels,
       },

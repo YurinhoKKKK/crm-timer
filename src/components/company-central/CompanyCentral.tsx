@@ -7,7 +7,7 @@ import CompanyTaskList from "./CompanyTaskList";
 import CreatorMeta from "@/components/CreatorMeta";
 import LabelChips from "@/components/LabelChips";
 import TaskDetailLink from "@/components/TaskDetailLink";
-import { STATUS_META, OVERDUE_FILTER } from "@/lib/status";
+import { STATUS_META } from "@/lib/status";
 import { formatDuration, formatDue } from "@/lib/format";
 import { btnSecondary } from "@/lib/ui";
 import type { CentralData } from "@/lib/company-central";
@@ -82,22 +82,22 @@ export default function CompanyCentral({
   data,
   period,
   editHref,
-  taskStatus,
+  tasksHref,
 }: {
   data: CentralData;
   period: Period;
   // Link para a tela de edição de dados/vínculos (admin). Ausente no consultor.
   editHref?: string;
-  // Filtro de status vindo da URL (clique num card do funil) — pré-aplica o
-  // recorte na lista de tarefas.
-  taskStatus?: string;
+  // Base da tela dedicada de tarefas da empresa (drill-down do funil) — muda
+  // por painel: /admin/empresas/[id]/tarefas ou /consultor/[companyId]/tarefas.
+  tasksHref: string;
 }) {
   const { company, consultants, overview: o } = data;
 
-  // Clique num card do funil → lista de tarefas filtrada (mesma página, via
-  // querystring + âncora; o período atual é preservado).
+  // Clique num card do funil → tela dedicada com a lista filtrada (mesmo
+  // padrão do dashboard); o período atual é preservado.
   const taskHref = (status?: string) =>
-    `?periodo=${period}${status ? `&status=${status}` : ""}#tarefas`;
+    `${tasksHref}?periodo=${period}${status ? `&status=${status}` : ""}`;
 
   return (
     <>
@@ -199,7 +199,7 @@ export default function CompanyCentral({
           value={o.overdue}
           dot={o.overdue > 0 ? "bg-red-500" : "bg-fg-subtle"}
           tone={o.overdue > 0 ? "text-red-600 dark:text-red-400" : "text-fg"}
-          href={taskHref(OVERDUE_FILTER)}
+          href={taskHref("atrasadas")}
         />
         <StatCard
           label="Canceladas"
@@ -315,12 +315,8 @@ export default function CompanyCentral({
         )}
       </section>
 
-      {/* 5. Lista de tarefas (âncora dos cards do funil; scroll-mt para o
-          título não ficar colado no topo ao navegar pela âncora) */}
-      <section
-        id="tarefas"
-        className="mb-6 scroll-mt-20 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6"
-      >
+      {/* 5. Lista de tarefas */}
+      <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
         <h3 className="mb-4 text-sm font-semibold text-fg">
           Tarefas {PERIOD_LABEL[period]}
         </h3>
@@ -329,7 +325,6 @@ export default function CompanyCentral({
           truncated={data.tasksTruncated}
           labels={company.labels}
           groupStats={data.groupStats}
-          initialStatus={taskStatus}
         />
       </section>
 

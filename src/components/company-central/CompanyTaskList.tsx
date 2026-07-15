@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   STATUS_META,
   STATUS_FILTER_OPTIONS,
@@ -47,7 +47,6 @@ export default function CompanyTaskList({
   truncated,
   labels = [],
   groupStats,
-  initialStatus,
 }: {
   tasks: CentralTaskItem[];
   truncated: boolean;
@@ -55,18 +54,10 @@ export default function CompanyTaskList({
   labels?: Label[];
   // Contagens por template (banco) para os cabeçalhos dos grupos.
   groupStats?: GroupStats[];
-  // Filtro de status pré-aplicado (clique num card do funil da central).
-  initialStatus?: string;
 }) {
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState(initialStatus ?? "");
+  const [status, setStatus] = useState("");
   const [sort, setSort] = useState<SortKey>("prazo");
-
-  // Um novo clique no funil re-renderiza a página com outro initialStatus;
-  // sincroniza o filtro sem resetar busca/ordenação.
-  useEffect(() => {
-    setStatus(initialStatus ?? "");
-  }, [initialStatus]);
 
   const now = Date.now();
 

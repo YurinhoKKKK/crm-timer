@@ -34,9 +34,12 @@ export async function middleware(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
   const isAuthPage = path === "/login" || path === "/";
+  // Portal do cliente (passo 25): público por design — a proteção é o token
+  // imprevisível + senha + sessão própria, tudo validado no banco.
+  const isClientPortal = path === "/cliente" || path.startsWith("/cliente/");
 
   // Sem usuário e tentando acessar área protegida -> login
-  if (!user && !isAuthPage) {
+  if (!user && !isAuthPage && !isClientPortal) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 

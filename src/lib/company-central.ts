@@ -5,6 +5,7 @@ import { avatarUrl } from "@/lib/avatar";
 import { withSelf } from "@/lib/people";
 import { loadCompanyLabels, type Label } from "@/lib/labels";
 import type { GroupStats } from "@/lib/task-grouping";
+import type { ClientAccessInfo } from "@/lib/client-portal";
 import {
   resolvePeople,
   describeInstanceCreator,
@@ -138,6 +139,9 @@ export type CentralData = {
   standards: StandardOption[];
   currentStandardTasks: { standardId: string; collaboratorId: string }[];
   collaborators: PersonOption[];
+  // Acesso do cliente (passo 25): estado atual do link, para a gestão na
+  // central. null = nunca criado. RLS: só admin/consultor da empresa leem.
+  clientAccess: ClientAccessInfo | null;
 };
 
 export async function loadCompanyCentral(
@@ -162,6 +166,7 @@ export async function loadCompanyCentral(
     { data: assignedData },
     { data: collaboratorsData },
     companyLabels,
+    { data: clientAccessData },
   ] = await Promise.all([
     // companies_select (RLS) só devolve a empresa se o usuário tiver acesso.
     supabase
@@ -243,6 +248,11 @@ export async function loadCompanyCentral(
       .in("role", ["colaborador", "admin"])
       .order("full_name", { ascending: true }),
     loadCompanyLabels(supabase, companyId),
+    supabase
+      .from("client_portal_access")
+      .select("token, active, updated_at")
+      .eq("company_id", companyId)
+      .maybeSingle(),
   ]);
 
   const company = companyData as {
@@ -433,6 +443,20 @@ export async function loadCompanyCentral(
     self
   );
 
+  // --- Acesso do cliente (passo 25) ---
+  const rawAccess = clientAccessData as {
+    token: string;
+    active: boolean;
+    updated_at: string;
+  } | null;
+  const clientAccess: ClientAccessInfo | null = rawAccess
+    ? {
+        token: rawAccess.token,
+        active: rawAccess.active,
+        updatedAt: rawAccess.updated_at,
+      }
+    : null;
+
   return {
     notFound: false,
     data: {
@@ -461,6 +485,7 @@ export async function loadCompanyCentral(
       standards,
       currentStandardTasks,
       collaborators,
+      clientAccess,
     },
   };
 }

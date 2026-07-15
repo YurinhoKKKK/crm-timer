@@ -14,6 +14,12 @@ DOMPurify.addHook("afterSanitizeAttributes", (node) => {
   }
 });
 
+// Ponto único de sanitização do HTML de anotações — usado na leitura interna
+// e no portal do cliente (passo 25), sempre com o hook de links acima.
+export function sanitizeNoteHtml(html: string): string {
+  return DOMPurify.sanitize(html);
+}
+
 // Metadados de um documento anexo (guardados no JSONB company_notes.attachments;
 // o arquivo em si vive no bucket note-files).
 export type NoteAttachmentMeta = {
@@ -104,8 +110,8 @@ export async function loadCompanyNotes(
     attachments: parseAttachments(r.attachments, publicUrl),
     // Sanitiza no ponto único de leitura: o HTML vem do editor, mas quem grava
     // é o cliente (RLS) — nunca renderizar sem passar pelo DOMPurify (o mesmo
-    // conteúdo será exposto ao cliente externo no passo 25).
-    contentHtml: DOMPurify.sanitize(r.content_html),
+    // conteúdo é exposto ao cliente externo no portal do passo 25).
+    contentHtml: sanitizeNoteHtml(r.content_html),
     visibleToClient: r.visible_to_client,
     createdAtISO: r.created_at,
     updatedAtISO: r.updated_at,

@@ -4,6 +4,7 @@ import PeriodFilter, { type Period } from "@/app/admin/PeriodFilter";
 import NewTaskForm from "@/app/admin/tarefas/NewTaskForm";
 import CompanyStandardTasks from "@/components/CompanyStandardTasks";
 import CompanyTaskList from "./CompanyTaskList";
+import ClientAccessManager from "./ClientAccessManager";
 import CreatorMeta from "@/components/CreatorMeta";
 import LabelChips from "@/components/LabelChips";
 import TaskDetailLink from "@/components/TaskDetailLink";
@@ -407,7 +408,18 @@ export default function CompanyCentral({
         )}
       </section>
 
-      {/* 8. Tarefas padrão desta empresa */}
+      {/* 8. Acesso do cliente (passo 25): link + senha do portal externo */}
+      <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
+        <h3 className="mb-1 font-semibold text-fg">Acesso do cliente</h3>
+        <p className="mb-4 text-sm text-fg-muted">
+          Um link exclusivo, protegido por senha, para o cliente acompanhar as
+          entregas (listagens) e as atualizações do projeto — sem ver nada da
+          operação interna.
+        </p>
+        <ClientAccessManager companyId={company.id} access={data.clientAccess} />
+      </section>
+
+      {/* 9. Tarefas padrão desta empresa */}
       {data.standards.length > 0 && (
         <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
           <h3 className="mb-1 font-semibold text-fg">

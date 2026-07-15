@@ -15,6 +15,8 @@ type InstanceRow = {
   title: string;
   status: TaskStatus;
   due_at: string | null;
+  task_date: string;
+  template_id: string | null;
   total_seconds: number;
   company_id: string;
   collaborator_id: string;
@@ -30,24 +32,42 @@ function first<T>(value: Joined<T>): T | null {
 
 // Teto de itens carregados por vez (Passo 18). Esta lista não tem filtro de
 // período, então cresce sem limite; buscamos CAP+1 para saber se há mais.
+// Abertas e fechadas têm tetos separados: as fechadas viram GRUPOS por tarefa
+// (as contagens verdadeiras vêm da RPC), então carregamos só as recentes.
 const CAP = 300;
+
+const INSTANCE_SELECT =
+  "id, title, status, due_at, task_date, template_id, total_seconds, company_id, collaborator_id, company:companies!task_instances_company_id_fkey(name), collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email, avatar_path), template:task_templates!task_instances_template_id_fkey(kind)";
 
 export default async function ConsultorTarefasPage() {
   const { supabase, profile } = await guardRole(["consultor"]);
 
   // A RLS (ti_select) já limita às instâncias das empresas atribuídas ao
-  // consultor — de todos os colaboradores dessas empresas.
-  const { data, error } = await supabase
-    .from("task_instances")
-    .select(
-      "id, title, status, due_at, total_seconds, company_id, collaborator_id, company:companies!task_instances_company_id_fkey(name), collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email, avatar_path), template:task_templates!task_instances_template_id_fkey(kind)"
-    )
-    .order("due_at", { ascending: true, nullsFirst: false })
-    .limit(CAP + 1);
+  // consultor — de todos os colaboradores dessas empresas. Três leituras:
+  // abertas (todas, até o teto), fechadas recentes (viram grupos) e as
+  // contagens agregadas por template (banco, para os cabeçalhos dos grupos).
+  const [openRes, closedRes, statsRes] = await Promise.all([
+    supabase
+      .from("task_instances")
+      .select(INSTANCE_SELECT)
+      .in("status", ["a_fazer", "iniciada"])
+      .order("due_at", { ascending: true, nullsFirst: false })
+      .limit(CAP + 1),
+    supabase
+      .from("task_instances")
+      .select(INSTANCE_SELECT)
+      .in("status", ["finalizada", "cancelada"])
+      .order("task_date", { ascending: false })
+      .limit(CAP + 1),
+    supabase.rpc("task_group_stats", {}),
+  ]);
 
-  const allRows = (data as InstanceRow[]) ?? [];
-  const truncated = allRows.length > CAP;
-  const rows = truncated ? allRows.slice(0, CAP) : allRows;
+  const error = openRes.error ?? closedRes.error;
+  const openAll = (openRes.data as InstanceRow[]) ?? [];
+  const closedAll = (closedRes.data as InstanceRow[]) ?? [];
+  const truncated = openAll.length > CAP || closedAll.length > CAP;
+  const rows = [...openAll.slice(0, CAP), ...closedAll.slice(0, CAP)];
+  const groupStats = statsRes.data ?? [];
 
   const items: TaskInstanceItem[] = rows.map((r) => {
     const company = first(r.company);
@@ -57,6 +77,8 @@ export default async function ConsultorTarefasPage() {
       title: r.title,
       status: r.status,
       due_at: r.due_at,
+      task_date: r.task_date,
+      templateId: r.template_id,
       total_seconds: r.total_seconds,
       kind: first(r.template)?.kind ?? null,
       companyId: r.company_id,
@@ -103,6 +125,7 @@ export default async function ConsultorTarefasPage() {
           collaborators={collaborators}
           truncated={truncated}
           labelsByCompany={labelsByCompany}
+          groupStats={groupStats}
         />
       )}
     </AppShell>

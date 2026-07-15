@@ -6,6 +6,7 @@ import type { Label } from "@/lib/labels";
 import { deleteLabel } from "../label-actions";
 import LabelDialog from "./LabelDialog";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import { labelChipStyle } from "@/components/LabelChips";
 
 // Gerenciador compacto de etiquetas (na tela de Empresas). As etiquetas
 // aparecem como chips; clicar no chip edita, o × remove (com confirmação
@@ -44,8 +45,12 @@ export default function LabelManager({ labels }: { labels: Label[] }) {
           {labels.map((l) => (
             <span
               key={l.id}
-              className="group inline-flex items-center gap-1 rounded-full pl-2.5 pr-1 py-1 text-xs font-medium leading-none"
-              style={{ backgroundColor: l.bg_color, color: l.text_color }}
+              className={`group inline-flex items-center gap-1 rounded-full leading-none ${
+                l.highlight
+                  ? "pl-3 pr-1.5 py-1.5 text-sm font-bold tracking-wide"
+                  : "pl-2.5 pr-1 py-1 text-xs font-medium"
+              }`}
+              style={labelChipStyle(l)}
             >
               <button
                 type="button"

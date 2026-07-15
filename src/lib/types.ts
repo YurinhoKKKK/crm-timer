@@ -236,6 +236,7 @@ export type Database = {
           bg_color: string
           created_at: string
           created_by: string | null
+          highlight: boolean
           id: string
           name: string
           text_color: string
@@ -244,6 +245,7 @@ export type Database = {
           bg_color?: string
           created_at?: string
           created_by?: string | null
+          highlight?: boolean
           id?: string
           name: string
           text_color?: string
@@ -252,6 +254,7 @@ export type Database = {
           bg_color?: string
           created_at?: string
           created_by?: string | null
+          highlight?: boolean
           id?: string
           name?: string
           text_color?: string
@@ -743,6 +746,24 @@ export type Database = {
       my_consultant_companies: { Args: never; Returns: string[] }
       sync_standard_task: { Args: { p_standard: string }; Returns: number }
       sync_template_instances: { Args: { p_template: string }; Returns: number }
+      task_group_stats: {
+        Args: {
+          p_company_id?: string
+          p_collaborator_id?: string
+          p_start?: string
+        }
+        Returns: {
+          template_id: string
+          total: number
+          finalizadas: number
+          canceladas: number
+          abertas: number
+          atrasadas: number
+          seconds: number
+          first_date: string
+          last_date: string
+        }[]
+      }
       timer_finish: {
         Args: { p_note: string; p_send: boolean; p_task: string }
         Returns: number

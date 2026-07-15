@@ -1,8 +1,10 @@
-import Link from "next/link";
 import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import type { TaskStatus } from "@/lib/types";
 import NewTaskForm from "@/app/admin/tarefas/NewTaskForm";
+import CompanySummaryGrid, {
+  type CompanyCardItem,
+} from "@/components/CompanySummaryGrid";
 import { withSelf } from "@/lib/people";
 
 type Option = { id: string; name: string };
@@ -109,63 +111,19 @@ export default async function ConsultorPage() {
               Erro ao carregar o progresso: {error.message}
             </div>
           ) : (
-            <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {companyList.map((c) => {
-                const percent =
-                  c.total > 0 ? Math.round((c.done / c.total) * 100) : 0;
-                return (
-                  <li key={c.id}>
-                    <Link
-                      href={`/consultor/${c.id}`}
-                      className="group block rounded-xl border border-line bg-surface p-5 shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <h3 className="font-semibold text-fg group-hover:text-risd">
-                          {c.name}
-                        </h3>
-                        <span className="text-fg-subtle transition group-hover:translate-x-0.5 group-hover:text-risd">
-                          →
-                        </span>
-                      </div>
-
-                      <div className="mt-4">
-                        <div className="mb-1.5 flex items-center justify-between text-xs text-fg-muted">
-                          <span className="font-mono tabular-nums">
-                            {percent}% concluído
-                          </span>
-                          <span className="font-mono tabular-nums">
-                            {c.done}/{c.total}
-                          </span>
-                        </div>
-                        <div
-                          className="h-2 w-full overflow-hidden rounded-full bg-surface-2"
-                          role="progressbar"
-                          aria-valuenow={percent}
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                        >
-                          <div
-                            className="h-full rounded-full bg-risd transition-all"
-                            style={{ width: `${percent}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-                        <span className="rounded-full border border-line bg-surface-2 px-2 py-0.5 text-fg-muted">
-                          {c.pending} pendente{c.pending === 1 ? "" : "s"}
-                        </span>
-                        {c.overdue > 0 && (
-                          <span className="rounded-full bg-red-100 px-2 py-0.5 font-medium text-red-700 dark:bg-red-500/15 dark:text-red-300">
-                            {c.overdue} atrasada{c.overdue === 1 ? "" : "s"}
-                          </span>
-                        )}
-                      </div>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
+            <CompanySummaryGrid
+              items={companyList.map(
+                (c): CompanyCardItem => ({
+                  id: c.id,
+                  name: c.name,
+                  href: `/consultor/${c.id}`,
+                  done: c.done,
+                  total: c.total,
+                  pending: c.pending,
+                  overdue: c.overdue,
+                })
+              )}
+            />
           )}
         </>
       )}

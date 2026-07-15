@@ -27,6 +27,7 @@ export default function LabelDialog({
   const [name, setName] = useState(initial?.name ?? "");
   const [bg, setBg] = useState(initial?.bg_color ?? "#4A2882");
   const [text, setText] = useState(initial?.text_color ?? "#FFFFFF");
+  const [highlight, setHighlight] = useState(initial?.highlight ?? false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,7 +42,7 @@ export default function LabelDialog({
     setBusy(true);
     setError(null);
     try {
-      const payload = { name, bgColor: bg, textColor: text };
+      const payload = { name, bgColor: bg, textColor: text, highlight };
       const res = editing
         ? await updateLabel(initial!.id, payload)
         : await createLabel(payload);
@@ -79,11 +80,51 @@ export default function LabelDialog({
           />
         </div>
 
+        <div>
+          <span className={labelClass}>Tamanho</span>
+          <div className="flex gap-2" role="group" aria-label="Tamanho da etiqueta">
+            {(
+              [
+                { value: false, label: "Normal" },
+                { value: true, label: "Destaque" },
+              ] as const
+            ).map((o) => (
+              <button
+                key={o.label}
+                type="button"
+                onClick={() => setHighlight(o.value)}
+                aria-pressed={highlight === o.value}
+                className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${
+                  highlight === o.value
+                    ? "border-risd/50 bg-brand-tint text-risd"
+                    : "border-line bg-surface text-fg-muted hover:border-risd/40"
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1.5 text-xs text-fg-subtle">
+            A etiqueta em destaque aparece maior e mais chamativa em todos os
+            lugares — use para marcar empresas importantes.
+          </p>
+        </div>
+
         <div className="flex items-center gap-2">
           <span className="text-xs text-fg-muted">Prévia:</span>
           <span
-            className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium leading-none"
-            style={{ backgroundColor: bg, color: text }}
+            className={`inline-flex items-center rounded-full leading-none ${
+              highlight
+                ? "px-3.5 py-1.5 text-sm font-bold tracking-wide"
+                : "px-2.5 py-1 text-xs font-medium"
+            }`}
+            style={{
+              backgroundColor: bg,
+              color: text,
+              ...(highlight
+                ? { boxShadow: `0 0 0 2px ${bg}40, 0 2px 8px ${bg}59` }
+                : {}),
+            }}
           >
             {name.trim() || "Etiqueta"}
           </span>

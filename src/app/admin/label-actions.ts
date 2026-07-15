@@ -29,6 +29,7 @@ export async function createLabel(input: {
   name: string;
   bgColor: string;
   textColor: string;
+  highlight?: boolean;
 }): Promise<{ error: string | null; label?: Label }> {
   const name = input.name.trim();
   if (!name) return { error: "Informe o nome da etiqueta." };
@@ -42,9 +43,10 @@ export async function createLabel(input: {
       name,
       bg_color: normalizeColor(input.bgColor, "#2B333B"),
       text_color: normalizeColor(input.textColor, "#FFFFFF"),
+      highlight: !!input.highlight,
       created_by: user.id,
     })
-    .select("id, name, bg_color, text_color")
+    .select("id, name, bg_color, text_color, highlight")
     .single();
 
   if (error || !data) {
@@ -56,7 +58,7 @@ export async function createLabel(input: {
 
 export async function updateLabel(
   labelId: string,
-  input: { name: string; bgColor: string; textColor: string }
+  input: { name: string; bgColor: string; textColor: string; highlight?: boolean }
 ): Promise<{ error: string | null; label?: Label }> {
   const name = input.name.trim();
   if (!name) return { error: "Informe o nome da etiqueta." };
@@ -70,9 +72,10 @@ export async function updateLabel(
       name,
       bg_color: normalizeColor(input.bgColor, "#2B333B"),
       text_color: normalizeColor(input.textColor, "#FFFFFF"),
+      highlight: !!input.highlight,
     })
     .eq("id", labelId)
-    .select("id, name, bg_color, text_color")
+    .select("id, name, bg_color, text_color, highlight")
     .single();
 
   if (error || !data) {

@@ -13,6 +13,7 @@ import {
   norm,
   type SelectOption,
 } from "@/components/ListControls";
+import { ComboFilter } from "@/components/Combobox";
 import LabelChips from "@/components/LabelChips";
 import Person from "@/components/Person";
 import type { Label } from "@/lib/labels";
@@ -98,11 +99,12 @@ export default function TaskTemplateList({
           onChange={setQuery}
           placeholder="Buscar por título…"
         />
-        <SelectFilter
+        <ComboFilter
           value={companyId}
           onChange={setCompanyId}
           allLabel="Todas as empresas"
           ariaLabel="Filtrar por empresa"
+          searchPlaceholder="Buscar empresa…"
           options={companies}
         />
         <SelectFilter

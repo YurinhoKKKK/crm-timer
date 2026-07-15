@@ -7,6 +7,12 @@ import { STATUS_META } from "@/lib/status";
 import { formatDuration, formatDue } from "@/lib/format";
 import { ShowMore, usePaged } from "@/components/ListControls";
 import LabelChips from "@/components/LabelChips";
+import TaskGroupRow from "@/components/TaskGroupRow";
+import {
+  groupTasks,
+  type GroupStats,
+  type GroupedRow,
+} from "@/lib/task-grouping";
 import type { Label } from "@/lib/labels";
 
 export type TaskItem = {
@@ -14,6 +20,8 @@ export type TaskItem = {
   title: string;
   status: TaskStatus;
   due_at: string | null;
+  task_date: string;
+  templateId: string | null;
   total_seconds: number;
   created_at: string;
 };
@@ -26,40 +34,53 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "prazo", label: "Próximas do prazo" },
 ];
 
+// Tarefas do colaborador numa empresa, com AGRUPAMENTO por tarefa (template):
+// as ocorrências diárias condensam numa linha expansível; as abertas mais
+// recentes seguem soltas e destacadas (Atrasada/Vence em breve visíveis).
 export default function TaskList({
   companyId,
   tasks,
   labels = [],
+  groupStats,
+  totalCount,
 }: {
   companyId: string;
   tasks: TaskItem[];
   // Etiquetas da empresa — herdadas por todas as tarefas dela.
   labels?: Label[];
+  // Contagens por template (banco) para os cabeçalhos dos grupos.
+  groupStats?: GroupStats[];
+  // Total real de tarefas na empresa (contagem exata do banco).
+  totalCount?: number;
 }) {
   const [sort, setSort] = useState<SortKey>("prazo");
 
   const now = Date.now();
   const SOON_MS = 24 * 60 * 60 * 1000;
 
-  const sorted = useMemo(() => {
-    const copy = [...tasks];
-    copy.sort((a, b) => {
-      if (sort === "antiga") {
-        return a.created_at.localeCompare(b.created_at);
-      }
-      if (sort === "recente") {
-        return b.created_at.localeCompare(a.created_at);
-      }
+  const rows = useMemo(() => {
+    const { active, history } = groupTasks(tasks, groupStats, { nowMs: now });
+
+    active.sort((a, b) => {
+      if (sort === "antiga") return a.created_at.localeCompare(b.created_at);
+      if (sort === "recente") return b.created_at.localeCompare(a.created_at);
       // prazo: due_at ascendente, sem prazo por último
       if (!a.due_at && !b.due_at) return 0;
       if (!a.due_at) return 1;
       if (!b.due_at) return -1;
       return a.due_at.localeCompare(b.due_at);
     });
-    return copy;
-  }, [tasks, sort]);
+    if (sort === "antiga") history.reverse();
 
-  const { visible, hasMore, remaining, showMore } = usePaged(sorted);
+    const out: GroupedRow<TaskItem>[] = [
+      ...active.map((item) => ({ kind: "item" as const, item })),
+      ...history,
+    ];
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, groupStats, sort]);
+
+  const { visible, hasMore, remaining, showMore } = usePaged(rows);
 
   if (tasks.length === 0) {
     return (
@@ -69,11 +90,61 @@ export default function TaskList({
     );
   }
 
+  const count = totalCount ?? tasks.length;
+
+  function renderTask(t: TaskItem) {
+    const meta = STATUS_META[t.status];
+    const open = t.status !== "finalizada" && t.status !== "cancelada";
+    const dueMs = t.due_at ? new Date(t.due_at).getTime() : null;
+    const overdue = open && dueMs !== null && dueMs < now;
+    const dueSoon = open && !overdue && dueMs !== null && dueMs - now <= SOON_MS;
+
+    return (
+      <Link
+        href={`/colaborador/${companyId}/${t.id}`}
+        className="group block rounded-xl border border-line bg-surface p-4 shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate font-medium text-fg group-hover:text-risd">
+            {t.title}
+          </span>
+          <span
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${meta.badge}`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
+            {meta.label}
+          </span>
+        </div>
+
+        {labels.length > 0 && <LabelChips labels={labels} className="mt-2" />}
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-muted">
+          <span>Prazo: {formatDue(t.due_at)}</span>
+          <span>
+            Tempo:{" "}
+            <span className="font-mono tabular-nums">
+              {formatDuration(t.total_seconds)}
+            </span>
+          </span>
+          {overdue && (
+            <span className="font-medium text-red-600 dark:text-red-400">
+              Atrasada
+            </span>
+          )}
+          {dueSoon && (
+            <span className="font-medium text-amber-600 dark:text-amber-400">
+              Vence em breve
+            </span>
+          )}
+        </div>
+      </Link>
+    );
+  }
+
   return (
     <div>
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="text-sm font-medium text-fg-muted">
-          {tasks.length} tarefa{tasks.length === 1 ? "" : "s"}
+          {count} tarefa{count === 1 ? "" : "s"}
         </h2>
         <label className="flex items-center gap-2 text-sm text-fg-muted">
           Ordenar:
@@ -92,58 +163,18 @@ export default function TaskList({
       </div>
 
       <ul className="space-y-3">
-        {visible.map((t) => {
-          const meta = STATUS_META[t.status];
-          const open = t.status !== "finalizada" && t.status !== "cancelada";
-          const dueMs = t.due_at ? new Date(t.due_at).getTime() : null;
-          const overdue = open && dueMs !== null && dueMs < now;
-          const dueSoon =
-            open && !overdue && dueMs !== null && dueMs - now <= SOON_MS;
-
-          return (
-            <li key={t.id}>
-              <Link
-                href={`/colaborador/${companyId}/${t.id}`}
-                className="group block rounded-xl border border-line bg-surface p-4 shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="truncate font-medium text-fg group-hover:text-risd">
-                    {t.title}
-                  </span>
-                  <span
-                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${meta.badge}`}
-                  >
-                    <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
-                    {meta.label}
-                  </span>
-                </div>
-
-                {labels.length > 0 && (
-                  <LabelChips labels={labels} className="mt-2" />
-                )}
-                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-muted">
-                  <span>Prazo: {formatDue(t.due_at)}</span>
-                  <span>
-                    Tempo:{" "}
-                    <span className="font-mono tabular-nums">
-                      {formatDuration(t.total_seconds)}
-                    </span>
-                  </span>
-                  {overdue && (
-                    <span className="font-medium text-red-600 dark:text-red-400">
-                      Atrasada
-                    </span>
-                  )}
-                  {dueSoon && (
-                    <span className="font-medium text-amber-600 dark:text-amber-400">
-                      Vence em breve
-                    </span>
-                  )}
-                </div>
-              </Link>
+        {visible.map((row) =>
+          row.kind === "item" ? (
+            <li key={row.item.id}>{renderTask(row.item)}</li>
+          ) : (
+            <li key={`g-${row.group.templateId}`}>
+              <TaskGroupRow
+                group={row.group}
+                hrefFor={(e) => `/colaborador/${companyId}/${e.id}`}
+              />
             </li>
-          );
-        })}
+          )
+        )}
       </ul>
 
       {hasMore && <ShowMore remaining={remaining} onClick={showMore} />}

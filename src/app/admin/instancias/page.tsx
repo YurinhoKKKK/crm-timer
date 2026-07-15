@@ -31,6 +31,7 @@ type InstanceRow = {
   status: TaskStatus;
   due_at: string | null;
   task_date: string;
+  template_id: string | null;
   total_seconds: number;
   company_id: string;
   company: Joined<{ name: string }>;
@@ -76,7 +77,7 @@ export default async function InstanciasPage({
   let query = supabase
     .from("task_instances")
     .select(
-      "id, title, status, due_at, task_date, total_seconds, company_id, company:companies!task_instances_company_id_fkey(name), collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email, avatar_path)"
+      "id, title, status, due_at, task_date, template_id, total_seconds, company_id, company:companies!task_instances_company_id_fkey(name), collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email, avatar_path)"
     )
     .order("due_at", { ascending: true, nullsFirst: false })
     .limit(CAP + 1);
@@ -101,6 +102,8 @@ export default async function InstanciasPage({
     title: r.title,
     status: r.status,
     due_at: r.due_at,
+    task_date: r.task_date,
+    templateId: r.template_id,
     total_seconds: r.total_seconds,
     companyId: r.company_id,
     companyName: first(r.company)?.name ?? "(empresa removida)",

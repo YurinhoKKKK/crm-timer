@@ -18,6 +18,43 @@ import { norm } from "@/components/ListControls";
 
 export type ComboOption = { value: string; label: string; hint?: string };
 
+// Variante para BARRAS DE FILTRO: o mesmo Combobox com uma opção "todos"
+// (value vazio) no topo, substituindo o <select> nativo nos filtros de empresa
+// — que precisam de busca por qualquer trecho do nome, sem acentos, porque os
+// nomes começam com código interno (ex.: "315. WAGEN…").
+export function ComboFilter({
+  value,
+  onChange,
+  allLabel,
+  options,
+  ariaLabel,
+  searchPlaceholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  allLabel: string;
+  options: ComboOption[];
+  ariaLabel: string;
+  searchPlaceholder?: string;
+}) {
+  const opts = useMemo(
+    () => [{ value: "", label: allLabel }, ...options],
+    [allLabel, options]
+  );
+  return (
+    <div className="sm:w-64">
+      <Combobox
+        value={value}
+        onChange={onChange}
+        options={opts}
+        ariaLabel={ariaLabel}
+        placeholder={allLabel}
+        searchPlaceholder={searchPlaceholder}
+      />
+    </div>
+  );
+}
+
 const triggerClass =
   "flex w-full items-center justify-between gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-left text-sm text-fg shadow-sm transition hover:border-risd/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:cursor-not-allowed disabled:opacity-60";
 

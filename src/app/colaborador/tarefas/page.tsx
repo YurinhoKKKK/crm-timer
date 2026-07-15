@@ -14,6 +14,8 @@ type InstanceRow = {
   title: string;
   status: TaskStatus;
   due_at: string | null;
+  task_date: string;
+  template_id: string | null;
   total_seconds: number;
   company_id: string;
   collaborator_id: string;
@@ -27,8 +29,12 @@ function first<T>(value: Joined<T>): T | null {
 }
 
 // Teto de itens carregados por vez (Passo 18). Lista sem filtro de período,
-// cresce sem limite; buscamos CAP+1 para saber se há mais.
+// cresce sem limite; buscamos CAP+1 para saber se há mais. Abertas e fechadas
+// têm tetos separados: as fechadas viram GRUPOS por tarefa (contagens via RPC).
 const CAP = 300;
+
+const INSTANCE_SELECT =
+  "id, title, status, due_at, task_date, template_id, total_seconds, company_id, collaborator_id, company:companies!task_instances_company_id_fkey(name), template:task_templates!task_instances_template_id_fkey(kind)";
 
 export default async function ColaboradorTarefasPage() {
   const { supabase, profile } = await guardRole([
@@ -39,18 +45,30 @@ export default async function ColaboradorTarefasPage() {
 
   // Escopo explícito ao próprio colaborador (a RLS ti_select já garante, mas
   // deixamos a query clara). Nunca vê tarefas de outros colaboradores.
-  const { data, error } = await supabase
-    .from("task_instances")
-    .select(
-      "id, title, status, due_at, total_seconds, company_id, collaborator_id, company:companies!task_instances_company_id_fkey(name), template:task_templates!task_instances_template_id_fkey(kind)"
-    )
-    .eq("collaborator_id", profile.id)
-    .order("due_at", { ascending: true, nullsFirst: false })
-    .limit(CAP + 1);
+  const [openRes, closedRes, statsRes] = await Promise.all([
+    supabase
+      .from("task_instances")
+      .select(INSTANCE_SELECT)
+      .eq("collaborator_id", profile.id)
+      .in("status", ["a_fazer", "iniciada"])
+      .order("due_at", { ascending: true, nullsFirst: false })
+      .limit(CAP + 1),
+    supabase
+      .from("task_instances")
+      .select(INSTANCE_SELECT)
+      .eq("collaborator_id", profile.id)
+      .in("status", ["finalizada", "cancelada"])
+      .order("task_date", { ascending: false })
+      .limit(CAP + 1),
+    supabase.rpc("task_group_stats", { p_collaborator_id: profile.id }),
+  ]);
 
-  const allRows = (data as InstanceRow[]) ?? [];
-  const truncated = allRows.length > CAP;
-  const rows = truncated ? allRows.slice(0, CAP) : allRows;
+  const error = openRes.error ?? closedRes.error;
+  const openAll = (openRes.data as InstanceRow[]) ?? [];
+  const closedAll = (closedRes.data as InstanceRow[]) ?? [];
+  const truncated = openAll.length > CAP || closedAll.length > CAP;
+  const rows = [...openAll.slice(0, CAP), ...closedAll.slice(0, CAP)];
+  const groupStats = statsRes.data ?? [];
 
   const items: TaskInstanceItem[] = rows.map((r) => {
     const company = first(r.company);
@@ -59,6 +77,8 @@ export default async function ColaboradorTarefasPage() {
       title: r.title,
       status: r.status,
       due_at: r.due_at,
+      task_date: r.task_date,
+      templateId: r.template_id,
       total_seconds: r.total_seconds,
       kind: first(r.template)?.kind ?? null,
       companyId: r.company_id,
@@ -102,6 +122,7 @@ export default async function ColaboradorTarefasPage() {
           companies={companies}
           truncated={truncated}
           labelsByCompany={labelsByCompany}
+          groupStats={groupStats}
         />
       )}
     </AppShell>

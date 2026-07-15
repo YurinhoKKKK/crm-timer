@@ -12,6 +12,8 @@ export type Label = {
   name: string;
   bg_color: string;
   text_color: string;
+  // Etiqueta em destaque: renderiza maior/mais chamativa em todos os lugares.
+  highlight: boolean;
 };
 
 type Joined<T> = T | T[] | null;
@@ -27,7 +29,7 @@ export async function loadLabelCatalog(
 ): Promise<Label[]> {
   const { data } = await supabase
     .from("labels")
-    .select("id, name, bg_color, text_color")
+    .select("id, name, bg_color, text_color, highlight")
     .order("name", { ascending: true });
   return (data as Label[]) ?? [];
 }
@@ -39,7 +41,7 @@ export async function loadCompanyLabels(
 ): Promise<Label[]> {
   const { data } = await supabase
     .from("company_labels")
-    .select("label:labels(id, name, bg_color, text_color)")
+    .select("label:labels(id, name, bg_color, text_color, highlight)")
     .eq("company_id", companyId);
   const out: Label[] = [];
   for (const row of (data as { label: Joined<Label> }[]) ?? []) {
@@ -61,7 +63,7 @@ export async function loadLabelsByCompany(
 
   const { data } = await supabase
     .from("company_labels")
-    .select("company_id, label:labels(id, name, bg_color, text_color)")
+    .select("company_id, label:labels(id, name, bg_color, text_color, highlight)")
     .in("company_id", ids);
 
   for (const row of (data as { company_id: string; label: Joined<Label> }[]) ??
@@ -76,6 +78,10 @@ export async function loadLabelsByCompany(
   return map;
 }
 
+// Destaques primeiro (para se sobressaírem nas listas), depois por nome.
 function sortLabels(list: Label[]): Label[] {
-  return list.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  return list.sort((a, b) => {
+    if (a.highlight !== b.highlight) return a.highlight ? -1 : 1;
+    return a.name.localeCompare(b.name, "pt-BR");
+  });
 }

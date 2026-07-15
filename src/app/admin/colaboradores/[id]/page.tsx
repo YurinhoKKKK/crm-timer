@@ -21,6 +21,8 @@ type InstanceRow = {
   title: string;
   status: TaskStatus;
   due_at: string | null;
+  task_date: string;
+  template_id: string | null;
   total_seconds: number;
   company_id: string;
   company: Joined<{ name: string }>;
@@ -124,7 +126,7 @@ export default async function CollaboratorDetailPage({
   let instancesQuery = supabase
     .from("task_instances")
     .select(
-      "id, title, status, due_at, total_seconds, company_id, company:companies!task_instances_company_id_fkey(name)"
+      "id, title, status, due_at, task_date, template_id, total_seconds, company_id, company:companies!task_instances_company_id_fkey(name)"
     )
     .eq("collaborator_id", params.id)
     .order("due_at", { ascending: true, nullsFirst: false });
@@ -217,6 +219,9 @@ export default async function CollaboratorDetailPage({
     id: r.id,
     title: r.title,
     status: r.status,
+    due_at: r.due_at,
+    task_date: r.task_date,
+    templateId: r.template_id,
     total_seconds: r.total_seconds,
     companyId: r.company_id,
     companyName: first(r.company)?.name ?? "(empresa removida)",

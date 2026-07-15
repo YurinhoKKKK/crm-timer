@@ -2,9 +2,14 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { STATUS_META } from "@/lib/status";
+import {
+  STATUS_META,
+  STATUS_FILTER_OPTIONS,
+  matchesStatusFilter,
+} from "@/lib/status";
 import { formatDuration } from "@/lib/format";
 import type { TaskStatus } from "@/lib/types";
+import { ComboFilter } from "@/components/Combobox";
 import {
   FilterBar,
   SearchBox,
@@ -16,6 +21,8 @@ import {
   type SelectOption,
 } from "@/components/ListControls";
 import { inputClass, labelClass, btnPrimary, btnSecondary } from "@/lib/ui";
+import TaskGroupRow from "@/components/TaskGroupRow";
+import { groupTasks, type GroupedRow } from "@/lib/task-grouping";
 import { adjustTaskTime } from "./actions";
 
 export type Adjustment = {
@@ -30,6 +37,9 @@ export type AdjustItem = {
   id: string;
   title: string;
   status: TaskStatus;
+  due_at: string | null;
+  task_date: string;
+  templateId: string | null;
   companyId: string;
   companyName: string;
   total_seconds: number;
@@ -242,17 +252,29 @@ export default function AdjustableTaskList({
   const [companyId, setCompanyId] = useState("");
   const [status, setStatus] = useState("");
 
-  const filtered = useMemo(() => {
+  const rows = useMemo(() => {
     const q = norm(query.trim());
-    return items.filter((t) => {
+    const now = Date.now();
+    const filtered = items.filter((t) => {
       if (q && !norm(t.title).includes(q)) return false;
       if (companyId && t.companyId !== companyId) return false;
-      if (status && t.status !== status) return false;
+      if (!matchesStatusFilter(status, t.status, t.due_at, now)) return false;
       return true;
     });
+    // Agrupamento por tarefa (template). A página carrega o período inteiro,
+    // então as contagens saem das próprias linhas carregadas.
+    const { active, history } = groupTasks(filtered, undefined, {
+      useDbCounts: false,
+      nowMs: now,
+    });
+    const out: GroupedRow<AdjustItem>[] = [
+      ...active.map((item) => ({ kind: "item" as const, item })),
+      ...history,
+    ];
+    return out;
   }, [items, query, companyId, status]);
 
-  const { visible, hasMore, remaining, showMore } = usePaged(filtered);
+  const { visible, hasMore, remaining, showMore } = usePaged(rows);
 
   return (
     <>
@@ -262,11 +284,12 @@ export default function AdjustableTaskList({
           onChange={setQuery}
           placeholder="Buscar por título…"
         />
-        <SelectFilter
+        <ComboFilter
           value={companyId}
           onChange={setCompanyId}
           allLabel="Todas as empresas"
           ariaLabel="Filtrar por empresa"
+          searchPlaceholder="Buscar empresa…"
           options={companies}
         />
         <SelectFilter
@@ -274,24 +297,40 @@ export default function AdjustableTaskList({
           onChange={setStatus}
           allLabel="Todos os status"
           ariaLabel="Filtrar por status"
-          options={[
-            { value: "a_fazer", label: "A fazer" },
-            { value: "iniciada", label: "Iniciada" },
-            { value: "finalizada", label: "Finalizada" },
-            { value: "cancelada", label: "Cancelada" },
-          ]}
+          options={STATUS_FILTER_OPTIONS}
         />
       </FilterBar>
 
       {items.length === 0 ? (
         <EmptyState>Nenhuma tarefa no período.</EmptyState>
-      ) : filtered.length === 0 ? (
+      ) : rows.length === 0 ? (
         <EmptyState>Nenhuma tarefa corresponde aos filtros.</EmptyState>
       ) : (
         <ul className="space-y-3">
-          {visible.map((t) => (
-            <AdjustRow key={t.id} item={t} collaboratorId={collaboratorId} />
-          ))}
+          {visible.map((row) =>
+            row.kind === "item" ? (
+              <AdjustRow
+                key={row.item.id}
+                item={row.item}
+                collaboratorId={collaboratorId}
+              />
+            ) : (
+              <li key={`g-${row.group.templateId}`}>
+                <TaskGroupRow
+                  group={row.group}
+                  subtitle={row.group.items[0]?.companyName}
+                  canLoadMore={false}
+                  renderItem={(t) => (
+                    <AdjustRow
+                      key={t.id}
+                      item={t}
+                      collaboratorId={collaboratorId}
+                    />
+                  )}
+                />
+              </li>
+            )
+          )}
         </ul>
       )}
 

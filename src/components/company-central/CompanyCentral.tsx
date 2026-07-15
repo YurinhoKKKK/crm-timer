@@ -285,6 +285,7 @@ export default function CompanyCentral({
           tasks={data.tasks}
           truncated={data.tasksTruncated}
           labels={company.labels}
+          groupStats={data.groupStats}
         />
       </section>
 

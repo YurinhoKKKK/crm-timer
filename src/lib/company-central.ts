@@ -4,6 +4,7 @@ import { formatDuration } from "@/lib/format";
 import { avatarUrl } from "@/lib/avatar";
 import { withSelf } from "@/lib/people";
 import { loadCompanyLabels, type Label } from "@/lib/labels";
+import type { GroupStats } from "@/lib/task-grouping";
 import {
   resolvePeople,
   describeInstanceCreator,
@@ -23,6 +24,9 @@ export type Period = "hoje" | "7d" | "30d" | "tudo";
 
 // Teto de tarefas carregadas por vez; buscamos CAP+1 para saber se há mais.
 const TASK_CAP = 300;
+
+const CENTRAL_TASK_SELECT =
+  "id, title, status, due_at, task_date, template_id, created_at, total_seconds, completion_note, collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email, avatar_path), template:task_templates!task_instances_template_id_fkey(created_by, created_at, standard_task_id)";
 
 type Joined<T> = T | T[] | null;
 function first<T>(value: Joined<T>): T | null {
@@ -76,6 +80,8 @@ export type CentralTaskItem = {
   title: string;
   status: TaskStatus;
   due_at: string | null;
+  task_date: string;
+  templateId: string | null;
   created_at: string;
   total_seconds: number;
   collaboratorName: string;
@@ -123,6 +129,8 @@ export type CentralData = {
   overview: CentralOverview;
   tasks: CentralTaskItem[];
   tasksTruncated: boolean;
+  // Contagens por template (banco) para o agrupamento da lista de tarefas.
+  groupStats: GroupStats[];
   attention: CentralAttentionItem[];
   collaboratorRows: CentralCollaboratorRow[];
   activity: CentralActivityItem[];
@@ -146,7 +154,9 @@ export async function loadCompanyCentral(
     { data: consultantsData },
     { data: overviewData, error: overviewError },
     { data: collabData },
-    { data: tasksData, error: tasksError },
+    { data: openData, error: openError },
+    { data: closedData, error: closedError },
+    { data: statsData },
     { data: activityData },
     { data: standardData },
     { data: assignedData },
@@ -176,18 +186,35 @@ export async function loadCompanyCentral(
       p_company_id: companyId,
       p_start: start,
     }),
+    // Tarefas em duas leituras: abertas (todas, até o teto) e fechadas
+    // recentes — estas viram GRUPOS por tarefa na lista, com as contagens
+    // verdadeiras vindas da RPC task_group_stats (agregada no banco).
     (() => {
       let q = supabase
         .from("task_instances")
-        .select(
-          "id, title, status, due_at, created_at, total_seconds, completion_note, collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email, avatar_path), template:task_templates!task_instances_template_id_fkey(created_by, created_at, standard_task_id)"
-        )
+        .select(CENTRAL_TASK_SELECT)
         .eq("company_id", companyId)
+        .in("status", ["a_fazer", "iniciada"])
         .order("due_at", { ascending: true, nullsFirst: false })
         .limit(TASK_CAP + 1);
       if (start) q = q.gte("task_date", start);
       return q;
     })(),
+    (() => {
+      let q = supabase
+        .from("task_instances")
+        .select(CENTRAL_TASK_SELECT)
+        .eq("company_id", companyId)
+        .in("status", ["finalizada", "cancelada"])
+        .order("task_date", { ascending: false })
+        .limit(TASK_CAP + 1);
+      if (start) q = q.gte("task_date", start);
+      return q;
+    })(),
+    supabase.rpc("task_group_stats", {
+      p_company_id: companyId,
+      p_start: start ?? undefined,
+    }),
     (() => {
       let q = supabase
         .from("activity_log")
@@ -229,6 +256,7 @@ export async function loadCompanyCentral(
   if (!company) return { notFound: true };
 
   if (overviewError) return { notFound: false, error: overviewError.message };
+  const tasksError = openError ?? closedError;
   if (tasksError) return { notFound: false, error: tasksError.message };
 
   // --- Cabeçalho: consultores ---
@@ -267,12 +295,14 @@ export async function loadCompanyCentral(
         : 0,
   };
 
-  // --- Lista de tarefas (teto + "ver mais" no cliente) ---
-  const allTaskRows = (tasksData as {
+  // --- Lista de tarefas (abertas + fechadas recentes; teto em cada leitura) ---
+  type CentralTaskRow = {
     id: string;
     title: string;
     status: TaskStatus;
     due_at: string | null;
+    task_date: string;
+    template_id: string | null;
     created_at: string;
     total_seconds: number;
     completion_note: string | null;
@@ -282,9 +312,15 @@ export async function loadCompanyCentral(
       avatar_path: string | null;
     }>;
     template: Joined<InstanceTemplate>;
-  }[]) ?? [];
-  const tasksTruncated = allTaskRows.length > TASK_CAP;
-  const taskRows = tasksTruncated ? allTaskRows.slice(0, TASK_CAP) : allTaskRows;
+  };
+  const openRows = (openData as CentralTaskRow[]) ?? [];
+  const closedRows = (closedData as CentralTaskRow[]) ?? [];
+  const tasksTruncated =
+    openRows.length > TASK_CAP || closedRows.length > TASK_CAP;
+  const taskRows = [
+    ...openRows.slice(0, TASK_CAP),
+    ...closedRows.slice(0, TASK_CAP),
+  ];
 
   // Nome+foto de quem criou (empresa + tarefas), legíveis por qualquer cargo
   // via display_profiles. Uma única chamada em lote.
@@ -299,6 +335,8 @@ export async function loadCompanyCentral(
       title: r.title,
       status: r.status,
       due_at: r.due_at,
+      task_date: r.task_date,
+      templateId: r.template_id,
       created_at: r.created_at,
       total_seconds: r.total_seconds,
       collaboratorName:
@@ -416,6 +454,7 @@ export async function loadCompanyCentral(
       overview,
       tasks,
       tasksTruncated,
+      groupStats: (statsData as GroupStats[]) ?? [],
       attention,
       collaboratorRows,
       activity,

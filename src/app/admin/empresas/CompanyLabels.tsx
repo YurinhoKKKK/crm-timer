@@ -93,7 +93,11 @@ export default function CompanyLabels({
               type="button"
               onClick={() => toggle(l.id)}
               aria-pressed={checked}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+              className={`inline-flex items-center gap-1.5 rounded-full border transition ${
+                l.highlight
+                  ? "px-3 py-1.5 text-sm font-bold tracking-wide"
+                  : "px-2.5 py-1 text-xs font-medium"
+              } ${
                 checked
                   ? "border-transparent ring-2 ring-risd ring-offset-1 ring-offset-surface"
                   : "border-line opacity-70 hover:opacity-100"

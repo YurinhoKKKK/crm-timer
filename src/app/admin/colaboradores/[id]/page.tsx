@@ -7,6 +7,7 @@ import { formatDuration, formatDue } from "@/lib/format";
 import { STATUS_META } from "@/lib/status";
 import type { TaskStatus } from "@/lib/types";
 import type { SelectOption } from "@/components/ListControls";
+import TaskDetailLink from "@/components/TaskDetailLink";
 import AdjustableTaskList, {
   type AdjustItem,
   type Adjustment,
@@ -328,44 +329,47 @@ export default async function CollaboratorDetailPage({
                 {attention.map((t) => {
                   const meta = STATUS_META[t.status];
                   return (
-                    <li
-                      key={t.id}
-                      className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3 ${
-                        t.overdue
-                          ? "border-red-300/60 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10"
-                          : "border-line bg-surface-2/40"
-                      }`}
-                    >
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium text-fg">{t.title}</span>
-                          <span
-                            className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${meta.badge}`}
-                          >
-                            <span
-                              className={`h-1.5 w-1.5 rounded-full ${meta.dot}`}
-                            />
-                            {meta.label}
-                          </span>
-                          {t.overdue && (
-                            <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-500/15 dark:text-red-300">
-                              Atrasada
-                            </span>
-                          )}
-                        </div>
-                        <p className="mt-1 text-sm text-fg-muted">
-                          {t.companyName}
-                        </p>
-                      </div>
-                      <span
-                        className={`text-xs ${
+                    <li key={t.id}>
+                      {/* Clique abre o painel de detalhe unificado da tarefa. */}
+                      <TaskDetailLink
+                        taskId={t.id}
+                        className={`flex w-full flex-wrap items-center justify-between gap-2 rounded-xl border p-3 text-left transition hover:border-risd/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${
                           t.overdue
-                            ? "font-medium text-red-600 dark:text-red-400"
-                            : "text-fg-subtle"
+                            ? "border-red-300/60 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10"
+                            : "border-line bg-surface-2/40"
                         }`}
                       >
-                        Prazo: {formatDue(t.due_at)}
-                      </span>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium text-fg">{t.title}</span>
+                            <span
+                              className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${meta.badge}`}
+                            >
+                              <span
+                                className={`h-1.5 w-1.5 rounded-full ${meta.dot}`}
+                              />
+                              {meta.label}
+                            </span>
+                            {t.overdue && (
+                              <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-500/15 dark:text-red-300">
+                                Atrasada
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-1 text-sm text-fg-muted">
+                            {t.companyName}
+                          </p>
+                        </div>
+                        <span
+                          className={`text-xs ${
+                            t.overdue
+                              ? "font-medium text-red-600 dark:text-red-400"
+                              : "text-fg-subtle"
+                          }`}
+                        >
+                          Prazo: {formatDue(t.due_at)}
+                        </span>
+                      </TaskDetailLink>
                     </li>
                   );
                 })}

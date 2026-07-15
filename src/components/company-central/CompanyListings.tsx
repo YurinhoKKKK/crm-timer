@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { CompanyListingRow } from "@/lib/listing";
 import { MARKETPLACES, marketplaceLabel } from "@/lib/listing";
+import TaskDetailLink from "@/components/TaskDetailLink";
 import {
   FilterBar,
   SearchBox,
@@ -135,7 +136,13 @@ export default function CompanyListings({
                   </span>
                 )}
               </div>
-              <p className="mt-1 truncate text-xs text-fg-subtle">{r.taskTitle}</p>
+              {/* Tarefa de origem: abre o painel de detalhe unificado. */}
+              <TaskDetailLink
+                taskId={r.taskId}
+                className="mt-1 block max-w-full truncate text-left text-xs text-fg-subtle underline decoration-line underline-offset-2 transition hover:text-risd hover:decoration-risd/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
+              >
+                {r.taskTitle}
+              </TaskDetailLink>
             </li>
           ))}
         </ul>

@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import type { TaskKind, TaskStatus } from "@/lib/types";
 import {
   STATUS_META,
@@ -13,6 +12,7 @@ import { formatDuration, formatDue } from "@/lib/format";
 import { ComboFilter } from "@/components/Combobox";
 import LabelChips from "@/components/LabelChips";
 import Person from "@/components/Person";
+import TaskDetailLink from "@/components/TaskDetailLink";
 import TaskGroupRow from "@/components/TaskGroupRow";
 import {
   groupTasks,
@@ -52,8 +52,8 @@ export type TaskInstanceItem = {
 // (template): as ocorrências diárias da mesma tarefa condensam numa linha
 // expansível — as abertas mais recentes continuam soltas e destacadas no topo.
 // O escopo dos dados é garantido pela query/RLS de cada página; aqui só
-// filtramos/agrupamos em memória. `panel` define a rota ao clicar e se o nome
-// do colaborador aparece. No painel "admin" os itens não são clicáveis.
+// filtramos/agrupamos em memória. `panel` define se o nome do colaborador
+// aparece. TODO item abre o painel de detalhe unificado (TaskDetailSheet).
 export default function TaskInstanceList({
   items,
   panel,
@@ -116,11 +116,7 @@ export default function TaskInstanceList({
     const inner = (
       <>
         <div className="flex flex-wrap items-center gap-2">
-          <span
-            className={`font-medium text-fg ${
-              panel === "admin" ? "" : "group-hover:text-risd"
-            }`}
-          >
+          <span className="font-medium text-fg group-hover:text-risd">
             {t.title}
           </span>
           <span
@@ -165,17 +161,13 @@ export default function TaskInstanceList({
         </div>
       </>
     );
-    return panel === "admin" ? (
-      <div className="block rounded-xl border border-line bg-surface p-4 shadow-card">
-        {inner}
-      </div>
-    ) : (
-      <Link
-        href={`/${panel}/${t.companyId}/${t.id}`}
-        className="group block rounded-xl border border-line bg-surface p-4 shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+    return (
+      <TaskDetailLink
+        taskId={t.id}
+        className="group block w-full rounded-xl border border-line bg-surface p-4 text-left shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
       >
         {inner}
-      </Link>
+      </TaskDetailLink>
     );
   }
 
@@ -240,15 +232,7 @@ export default function TaskInstanceList({
             const sample = row.group.items[0];
             return (
               <li key={`g-${row.group.templateId}`}>
-                <TaskGroupRow
-                  group={row.group}
-                  subtitle={sample?.companyName}
-                  hrefFor={
-                    panel !== "admin" && sample
-                      ? (e) => `/${panel}/${sample.companyId}/${e.id}`
-                      : undefined
-                  }
-                />
+                <TaskGroupRow group={row.group} subtitle={sample?.companyName} />
               </li>
             );
           })}

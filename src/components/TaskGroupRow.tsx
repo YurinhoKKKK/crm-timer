@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import Link from "next/link";
 import { STATUS_META, isOverdue } from "@/lib/status";
 import { formatDuration } from "@/lib/format";
 import Person from "@/components/Person";
+import TaskDetailLink from "@/components/TaskDetailLink";
 import { loadGroupHistory, type GroupHistoryEntry } from "@/app/group-actions";
 import type { GroupEntry, TaskGroup } from "@/lib/task-grouping";
 
@@ -27,13 +27,8 @@ function formatTaskDate(d: string): string {
 }
 
 // Linha compacta de uma ocorrência dentro do grupo (data · status · tempo).
-function CompactEntry({
-  entry,
-  href,
-}: {
-  entry: EntryLike;
-  href?: string;
-}) {
+// Sempre clicável: abre o painel de detalhe unificado da tarefa.
+function CompactEntry({ entry }: { entry: EntryLike }) {
   const meta = STATUS_META[entry.status];
   const overdue = isOverdue(entry.status, entry.due_at);
   const inner = (
@@ -66,31 +61,25 @@ function CompactEntry({
       )}
     </div>
   );
-  if (href) {
-    return (
-      <Link
-        href={href}
-        className="block transition hover:bg-surface-2/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-risd"
-      >
-        {inner}
-      </Link>
-    );
-  }
-  return inner;
+  return (
+    <TaskDetailLink
+      taskId={entry.id}
+      className="block w-full text-left transition hover:bg-surface-2/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-risd"
+    >
+      {inner}
+    </TaskDetailLink>
+  );
 }
 
 export default function TaskGroupRow<T extends GroupEntry>({
   group,
   subtitle,
-  hrefFor,
   renderItem,
   canLoadMore = true,
 }: {
   group: TaskGroup<T>;
   // Ex.: nome da empresa, nas listas que misturam várias empresas.
   subtitle?: ReactNode;
-  // Torna as ocorrências clicáveis (rota da instância no painel da lista).
-  hrefFor?: (entry: EntryLike) => string;
   // Renderização customizada das instâncias CARREGADAS (ex.: linha com ajuste
   // de tempo no admin). As buscadas sob demanda usam sempre a linha compacta.
   renderItem?: (item: T) => ReactNode;
@@ -211,11 +200,7 @@ export default function TaskGroupRow<T extends GroupEntry>({
           ) : (
             <div className="divide-y divide-line/60">
               {group.items.map((it) => (
-                <CompactEntry
-                  key={it.id}
-                  entry={it}
-                  href={hrefFor?.(it)}
-                />
+                <CompactEntry key={it.id} entry={it} />
               ))}
             </div>
           )}
@@ -223,7 +208,7 @@ export default function TaskGroupRow<T extends GroupEntry>({
           {extra.length > 0 && (
             <div className="divide-y divide-line/60 border-t border-line/60">
               {extra.map((it) => (
-                <CompactEntry key={it.id} entry={it} href={hrefFor?.(it)} />
+                <CompactEntry key={it.id} entry={it} />
               ))}
             </div>
           )}

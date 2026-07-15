@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   STATUS_META,
   STATUS_FILTER_OPTIONS,
@@ -8,9 +8,9 @@ import {
   isOverdue,
 } from "@/lib/status";
 import { formatDuration, formatDue } from "@/lib/format";
-import CreatorMeta from "@/components/CreatorMeta";
 import LabelChips from "@/components/LabelChips";
 import Person from "@/components/Person";
+import TaskDetailLink from "@/components/TaskDetailLink";
 import TaskGroupRow from "@/components/TaskGroupRow";
 import {
   groupTasks,
@@ -40,13 +40,14 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
 // Lista de tarefas da central da empresa (Passo 19) com AGRUPAMENTO por tarefa:
 // as ocorrências diárias do mesmo template condensam numa linha expansível; as
 // abertas mais recentes seguem soltas e destacadas. Busca por título, filtro
-// por status (incl. Atrasada) e ordenação — controles compartilhados. Cada
-// item aberto expande o detalhe (responsável, tempo e o resumo da finalização).
+// por status (incl. Atrasada) e ordenação — controles compartilhados. Clicar
+// numa tarefa abre o painel de detalhe unificado (TaskDetailSheet).
 export default function CompanyTaskList({
   tasks,
   truncated,
   labels = [],
   groupStats,
+  initialStatus,
 }: {
   tasks: CentralTaskItem[];
   truncated: boolean;
@@ -54,11 +55,18 @@ export default function CompanyTaskList({
   labels?: Label[];
   // Contagens por template (banco) para os cabeçalhos dos grupos.
   groupStats?: GroupStats[];
+  // Filtro de status pré-aplicado (clique num card do funil da central).
+  initialStatus?: string;
 }) {
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState(initialStatus ?? "");
   const [sort, setSort] = useState<SortKey>("prazo");
-  const [openId, setOpenId] = useState<string | null>(null);
+
+  // Um novo clique no funil re-renderiza a página com outro initialStatus;
+  // sincroniza o filtro sem resetar busca/ordenação.
+  useEffect(() => {
+    setStatus(initialStatus ?? "");
+  }, [initialStatus]);
 
   const now = Date.now();
 
@@ -99,113 +107,44 @@ export default function CompanyTaskList({
 
   function renderTask(t: CentralTaskItem) {
     const meta = STATUS_META[t.status];
-    const open = openId === t.id;
     const overdue = isOverdue(t.status, t.due_at, now);
     return (
-      <div className="rounded-xl border border-line bg-surface shadow-card">
-        <button
-          type="button"
-          onClick={() => setOpenId(open ? null : t.id)}
-          aria-expanded={open}
-          className="flex w-full items-start justify-between gap-3 rounded-xl p-4 text-left transition hover:border-risd/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
-        >
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium text-fg">{t.title}</span>
-              <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${meta.badge}`}
-              >
-                <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
-                {meta.label}
-              </span>
-              {overdue && (
-                <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-500/15 dark:text-red-300">
-                  Atrasada
-                </span>
-              )}
-            </div>
-            {labels.length > 0 && <LabelChips labels={labels} className="mt-2" />}
-            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-subtle">
-              <Person
-                name={t.collaboratorName}
-                avatarUrl={t.collaboratorAvatarUrl}
-                size={16}
-              />
-              <span>Prazo: {formatDue(t.due_at)}</span>
-              <span>
-                Tempo:{" "}
-                <span className="font-mono tabular-nums">
-                  {formatDuration(t.total_seconds)}
-                </span>
-              </span>
-            </div>
-          </div>
-          <svg
-            className={`mt-1 shrink-0 text-fg-subtle transition-transform ${
-              open ? "rotate-180" : ""
-            }`}
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
+      <TaskDetailLink
+        taskId={t.id}
+        className="group block w-full rounded-xl border border-line bg-surface p-4 text-left shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-medium text-fg group-hover:text-risd">
+            {t.title}
+          </span>
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${meta.badge}`}
           >
-            <path d="m6 9 6 6 6-6" />
-          </svg>
-        </button>
-
-        {open && (
-          <div className="border-t border-line px-4 py-3 text-sm">
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-              <div>
-                <dt className="text-xs text-fg-subtle">Responsável</dt>
-                <dd className="text-fg">
-                  <Person
-                    name={t.collaboratorName}
-                    avatarUrl={t.collaboratorAvatarUrl}
-                    size={18}
-                  />
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-fg-subtle">Prazo</dt>
-                <dd className="text-fg">{formatDue(t.due_at)}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-fg-subtle">Tempo total</dt>
-                <dd className="font-mono tabular-nums text-fg">
-                  {formatDuration(t.total_seconds)}
-                </dd>
-              </div>
-            </dl>
-            {t.status === "finalizada" && (
-              <div className="mt-3 rounded-lg border border-line bg-surface-2/50 p-3">
-                <p className="text-xs font-medium text-fg-muted">
-                  Resumo da finalização
-                </p>
-                <p className="mt-1 whitespace-pre-wrap text-fg">
-                  {t.completionNote?.trim() || "(sem resumo registrado)"}
-                </p>
-              </div>
-            )}
-            <div className="mt-3 border-t border-line pt-3">
-              <CreatorMeta
-                label="Criada por"
-                who={t.creator.who}
-                whoAvatarUrl={t.creator.whoAvatarUrl}
-                whenISO={t.creator.whenISO}
-                fromStandard={t.creator.fromStandard}
-                systemGenerated={t.creator.systemGenerated}
-                hasOrigin={t.creator.hasOrigin}
-              />
-            </div>
-          </div>
-        )}
-      </div>
+            <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
+            {meta.label}
+          </span>
+          {overdue && (
+            <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-500/15 dark:text-red-300">
+              Atrasada
+            </span>
+          )}
+        </div>
+        {labels.length > 0 && <LabelChips labels={labels} className="mt-2" />}
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-subtle">
+          <Person
+            name={t.collaboratorName}
+            avatarUrl={t.collaboratorAvatarUrl}
+            size={16}
+          />
+          <span>Prazo: {formatDue(t.due_at)}</span>
+          <span>
+            Tempo:{" "}
+            <span className="font-mono tabular-nums">
+              {formatDuration(t.total_seconds)}
+            </span>
+          </span>
+        </div>
+      </TaskDetailLink>
     );
   }
 

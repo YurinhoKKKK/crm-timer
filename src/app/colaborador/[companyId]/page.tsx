@@ -137,7 +137,6 @@ export default async function ColaboradorEmpresaPage({
         </div>
       ) : (
         <TaskList
-          companyId={company.id}
           tasks={tasks}
           labels={labels}
           groupStats={statsData ?? []}

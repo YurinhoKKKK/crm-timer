@@ -11,6 +11,7 @@ import {
 } from "@/components/ListControls";
 import LabelChips from "@/components/LabelChips";
 import Person from "@/components/Person";
+import TaskDetailLink from "@/components/TaskDetailLink";
 import TaskGroupRow from "@/components/TaskGroupRow";
 import { groupTasks, type GroupedRow } from "@/lib/task-grouping";
 import type { Label } from "@/lib/labels";
@@ -61,9 +62,14 @@ export default function InstanceStatusList({
     const meta = STATUS_META[r.status];
     const overdue = isOverdue(r.status, r.due_at);
     return (
-      <div className="rounded-xl border border-line bg-surface p-4 shadow-card">
+      <TaskDetailLink
+        taskId={r.id}
+        className="group block w-full rounded-xl border border-line bg-surface p-4 text-left shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+      >
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium text-fg">{r.title}</span>
+          <span className="font-medium text-fg group-hover:text-risd">
+            {r.title}
+          </span>
           <span
             className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${meta.badge}`}
           >
@@ -97,7 +103,7 @@ export default function InstanceStatusList({
             </span>
           </span>
         </div>
-      </div>
+      </TaskDetailLink>
     );
   }
 

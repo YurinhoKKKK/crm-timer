@@ -1,12 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import type { TaskStatus } from "@/lib/types";
 import { STATUS_META } from "@/lib/status";
 import { formatDuration, formatDue } from "@/lib/format";
 import { ShowMore, usePaged } from "@/components/ListControls";
 import LabelChips from "@/components/LabelChips";
+import TaskDetailLink from "@/components/TaskDetailLink";
 import TaskGroupRow from "@/components/TaskGroupRow";
 import {
   groupTasks,
@@ -37,14 +37,14 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
 // Tarefas do colaborador numa empresa, com AGRUPAMENTO por tarefa (template):
 // as ocorrências diárias condensam numa linha expansível; as abertas mais
 // recentes seguem soltas e destacadas (Atrasada/Vence em breve visíveis).
+// Clicar numa tarefa abre o painel de detalhe unificado; de lá, a aberta tem
+// o botão "Abrir tarefa (executar)" para o timer.
 export default function TaskList({
-  companyId,
   tasks,
   labels = [],
   groupStats,
   totalCount,
 }: {
-  companyId: string;
   tasks: TaskItem[];
   // Etiquetas da empresa — herdadas por todas as tarefas dela.
   labels?: Label[];
@@ -100,9 +100,9 @@ export default function TaskList({
     const dueSoon = open && !overdue && dueMs !== null && dueMs - now <= SOON_MS;
 
     return (
-      <Link
-        href={`/colaborador/${companyId}/${t.id}`}
-        className="group block rounded-xl border border-line bg-surface p-4 shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+      <TaskDetailLink
+        taskId={t.id}
+        className="group block w-full rounded-xl border border-line bg-surface p-4 text-left shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
       >
         <div className="flex items-center justify-between gap-2">
           <span className="truncate font-medium text-fg group-hover:text-risd">
@@ -136,7 +136,7 @@ export default function TaskList({
             </span>
           )}
         </div>
-      </Link>
+      </TaskDetailLink>
     );
   }
 
@@ -168,10 +168,7 @@ export default function TaskList({
             <li key={row.item.id}>{renderTask(row.item)}</li>
           ) : (
             <li key={`g-${row.group.templateId}`}>
-              <TaskGroupRow
-                group={row.group}
-                hrefFor={(e) => `/colaborador/${companyId}/${e.id}`}
-              />
+              <TaskGroupRow group={row.group} />
             </li>
           )
         )}

@@ -21,6 +21,7 @@ import {
   type SelectOption,
 } from "@/components/ListControls";
 import { inputClass, labelClass, btnPrimary, btnSecondary } from "@/lib/ui";
+import TaskDetailLink from "@/components/TaskDetailLink";
 import TaskGroupRow from "@/components/TaskGroupRow";
 import { groupTasks, type GroupedRow } from "@/lib/task-grouping";
 import { adjustTaskTime } from "./actions";
@@ -118,7 +119,14 @@ function AdjustRow({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium text-fg">{item.title}</span>
+            {/* Abre o painel de detalhe unificado (o card tem o botão de
+                ajuste, então só o título é o gatilho). */}
+            <TaskDetailLink
+              taskId={item.id}
+              className="font-medium text-fg transition hover:text-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+            >
+              {item.title}
+            </TaskDetailLink>
             <span
               className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${meta.badge}`}
             >

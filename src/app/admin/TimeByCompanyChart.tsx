@@ -15,6 +15,7 @@ import {
 import { STATUS_META } from "@/lib/status";
 import { formatDuration } from "@/lib/format";
 import Person from "@/components/Person";
+import TaskDetailLink from "@/components/TaskDetailLink";
 import type { Period } from "./PeriodFilter";
 import {
   getCompanyTimeBreakdown,
@@ -180,41 +181,45 @@ function BreakdownPanel({
                 const share =
                   total > 0 ? Math.round((t.seconds / total) * 100) : 0;
                 return (
-                  <li
-                    key={t.id}
-                    className="rounded-xl border border-line bg-surface p-3"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate font-medium text-fg">
-                          {t.title}
-                        </p>
-                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-fg-muted">
-                          <span
-                            className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-medium ${meta.badge}`}
-                          >
+                  <li key={t.id}>
+                    {/* Clique abre o painel de detalhe unificado da tarefa
+                        (por cima deste, que é z-50 — o sheet usa z-60). */}
+                    <TaskDetailLink
+                      taskId={t.id}
+                      className="block w-full rounded-xl border border-line bg-surface p-3 text-left transition hover:border-risd/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-fg">
+                            {t.title}
+                          </p>
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-fg-muted">
                             <span
-                              className={`h-1.5 w-1.5 rounded-full ${meta.dot}`}
+                              className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-medium ${meta.badge}`}
+                            >
+                              <span
+                                className={`h-1.5 w-1.5 rounded-full ${meta.dot}`}
+                              />
+                              {meta.label}
+                            </span>
+                            <Person
+                              name={t.collaboratorName}
+                              avatarUrl={t.collaboratorAvatarUrl}
+                              size={16}
                             />
-                            {meta.label}
-                          </span>
-                          <Person
-                            name={t.collaboratorName}
-                            avatarUrl={t.collaboratorAvatarUrl}
-                            size={16}
-                          />
+                          </div>
                         </div>
+                        <span className="shrink-0 font-mono text-sm tabular-nums text-fg">
+                          {formatDuration(t.seconds)}
+                        </span>
                       </div>
-                      <span className="shrink-0 font-mono text-sm tabular-nums text-fg">
-                        {formatDuration(t.seconds)}
-                      </span>
-                    </div>
-                    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
-                      <div
-                        className="h-full rounded-full bg-risd"
-                        style={{ width: `${share}%` }}
-                      />
-                    </div>
+                      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+                        <div
+                          className="h-full rounded-full bg-risd"
+                          style={{ width: `${share}%` }}
+                        />
+                      </div>
+                    </TaskDetailLink>
                   </li>
                 );
               })}

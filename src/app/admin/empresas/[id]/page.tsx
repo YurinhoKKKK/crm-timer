@@ -8,12 +8,19 @@ import CompanyNotes from "@/components/company-central/CompanyNotes";
 import { loadCompanyCentral, type Period } from "@/lib/company-central";
 import { loadCompanyListings } from "@/lib/listing";
 import { loadCompanyNotes } from "@/lib/notes";
+import { STATUS_FILTER_OPTIONS } from "@/lib/status";
 
 const PERIODS: Period[] = ["hoje", "7d", "30d", "tudo"];
 
 function normalizePeriod(value: string | string[] | undefined): Period {
   const v = Array.isArray(value) ? value[0] : value;
   return PERIODS.includes(v as Period) ? (v as Period) : "30d";
+}
+
+// Filtro de status vindo do funil (?status=): só valores conhecidos passam.
+function normalizeStatus(value: string | string[] | undefined): string | undefined {
+  const v = Array.isArray(value) ? value[0] : value;
+  return STATUS_FILTER_OPTIONS.some((o) => o.value === v) ? v : undefined;
 }
 
 // Central da empresa (Passo 19) — visão completa + ações, para o admin (todas
@@ -23,10 +30,11 @@ export default async function EmpresaCentralPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { periodo?: string };
+  searchParams: { periodo?: string; status?: string };
 }) {
   const { supabase, profile } = await guardRole(["admin"]);
   const period = normalizePeriod(searchParams?.periodo);
+  const taskStatus = normalizeStatus(searchParams?.status);
 
   const res = await loadCompanyCentral(supabase, profile, params.id, period);
   if (res.notFound) notFound();
@@ -55,6 +63,7 @@ export default async function EmpresaCentralPage({
               data={res.data}
               period={period}
               editHref={`/admin/empresas/${params.id}/editar`}
+              taskStatus={taskStatus}
             />
           }
           listings={<CompanyListings rows={listings} />}

@@ -6,7 +6,8 @@ import CompanyStandardTasks from "@/components/CompanyStandardTasks";
 import CompanyTaskList from "./CompanyTaskList";
 import CreatorMeta from "@/components/CreatorMeta";
 import LabelChips from "@/components/LabelChips";
-import { STATUS_META } from "@/lib/status";
+import TaskDetailLink from "@/components/TaskDetailLink";
+import { STATUS_META, OVERDUE_FILTER } from "@/lib/status";
 import { formatDuration, formatDue } from "@/lib/format";
 import { btnSecondary } from "@/lib/ui";
 import type { CentralData } from "@/lib/company-central";
@@ -28,20 +29,23 @@ function formatDateTime(value: string): string {
   });
 }
 
-// Card numérico dos indicadores (block 2).
+// Card numérico dos indicadores (block 2). Com `href`, vira link: leva à
+// lista de tarefas (âncora #tarefas) já filtrada pelo status do card.
 function StatCard({
   label,
   value,
   dot,
   tone = "text-fg",
+  href,
 }: {
   label: string;
   value: number | string;
   dot?: string;
   tone?: string;
+  href?: string;
 }) {
-  return (
-    <div className="rounded-xl border border-line bg-surface p-4 shadow-card">
+  const inner = (
+    <>
       <div className="flex items-center gap-2">
         {dot && <span className={`h-2 w-2 rounded-full ${dot}`} />}
         <p className="text-xs text-fg-muted">{label}</p>
@@ -49,6 +53,24 @@ function StatCard({
       <p className={`mt-1.5 font-mono text-2xl font-semibold tabular-nums ${tone}`}>
         {value}
       </p>
+    </>
+  );
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className="group rounded-xl border border-line bg-surface p-4 shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+      >
+        {inner}
+        <p className="mt-1.5 text-[11px] text-fg-subtle transition group-hover:text-risd">
+          Ver tarefas →
+        </p>
+      </Link>
+    );
+  }
+  return (
+    <div className="rounded-xl border border-line bg-surface p-4 shadow-card">
+      {inner}
     </div>
   );
 }
@@ -60,13 +82,22 @@ export default function CompanyCentral({
   data,
   period,
   editHref,
+  taskStatus,
 }: {
   data: CentralData;
   period: Period;
   // Link para a tela de edição de dados/vínculos (admin). Ausente no consultor.
   editHref?: string;
+  // Filtro de status vindo da URL (clique num card do funil) — pré-aplica o
+  // recorte na lista de tarefas.
+  taskStatus?: string;
 }) {
   const { company, consultants, overview: o } = data;
+
+  // Clique num card do funil → lista de tarefas filtrada (mesma página, via
+  // querystring + âncora; o período atual é preservado).
+  const taskHref = (status?: string) =>
+    `?periodo=${period}${status ? `&status=${status}` : ""}#tarefas`;
 
   return (
     <>
@@ -140,37 +171,42 @@ export default function CompanyCentral({
         />
       )}
 
-      {/* 2. Indicadores */}
+      {/* 2. Indicadores (clicáveis: abrem a lista filtrada pelo status) */}
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <StatCard label="Total" value={o.total} />
+        <StatCard label="Total" value={o.total} href={taskHref()} />
         <StatCard
           label="A fazer"
           value={o.a_fazer}
           dot={STATUS_META.a_fazer.dot}
+          href={taskHref("a_fazer")}
         />
         <StatCard
           label="Em andamento"
           value={o.iniciada}
           dot={STATUS_META.iniciada.dot}
           tone="text-risd"
+          href={taskHref("iniciada")}
         />
         <StatCard
           label="Finalizadas"
           value={o.finalizada}
           dot={STATUS_META.finalizada.dot}
           tone="text-emerald-600 dark:text-emerald-400"
+          href={taskHref("finalizada")}
         />
         <StatCard
           label="Atrasadas"
           value={o.overdue}
           dot={o.overdue > 0 ? "bg-red-500" : "bg-fg-subtle"}
           tone={o.overdue > 0 ? "text-red-600 dark:text-red-400" : "text-fg"}
+          href={taskHref(OVERDUE_FILTER)}
         />
         <StatCard
           label="Canceladas"
           value={o.cancelada}
           dot={STATUS_META.cancelada.dot}
           tone="text-fg-muted"
+          href={taskHref("cancelada")}
         />
       </div>
 
@@ -228,47 +264,50 @@ export default function CompanyCentral({
             {data.attention.slice(0, 8).map((t) => {
               const meta = STATUS_META[t.status];
               return (
-                <li
-                  key={t.id}
-                  className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3 ${
-                    t.overdue
-                      ? "border-red-300/60 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10"
-                      : "border-line bg-surface-2/40"
-                  }`}
-                >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-fg">{t.title}</span>
-                      <span
-                        className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${meta.badge}`}
-                      >
-                        <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
-                        {meta.label}
-                      </span>
-                      {t.overdue && (
-                        <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-500/15 dark:text-red-300">
-                          Atrasada
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-1 flex items-center gap-1.5 text-sm text-fg-muted">
-                      <Avatar
-                        name={t.collaboratorName}
-                        url={t.collaboratorAvatarUrl}
-                        size={18}
-                      />
-                      {t.collaboratorName}
-                    </p>
-                  </div>
-                  <span
-                    className={`text-xs ${
+                <li key={t.id}>
+                  {/* Clique abre o painel de detalhe unificado da tarefa. */}
+                  <TaskDetailLink
+                    taskId={t.id}
+                    className={`flex w-full flex-wrap items-center justify-between gap-2 rounded-xl border p-3 text-left transition hover:border-risd/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${
                       t.overdue
-                        ? "font-medium text-red-600 dark:text-red-400"
-                        : "text-fg-subtle"
+                        ? "border-red-300/60 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10"
+                        : "border-line bg-surface-2/40"
                     }`}
                   >
-                    Prazo: {formatDue(t.due_at)}
-                  </span>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-fg">{t.title}</span>
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${meta.badge}`}
+                        >
+                          <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
+                          {meta.label}
+                        </span>
+                        {t.overdue && (
+                          <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-500/15 dark:text-red-300">
+                            Atrasada
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1 flex items-center gap-1.5 text-sm text-fg-muted">
+                        <Avatar
+                          name={t.collaboratorName}
+                          url={t.collaboratorAvatarUrl}
+                          size={18}
+                        />
+                        {t.collaboratorName}
+                      </p>
+                    </div>
+                    <span
+                      className={`text-xs ${
+                        t.overdue
+                          ? "font-medium text-red-600 dark:text-red-400"
+                          : "text-fg-subtle"
+                      }`}
+                    >
+                      Prazo: {formatDue(t.due_at)}
+                    </span>
+                  </TaskDetailLink>
                 </li>
               );
             })}
@@ -276,8 +315,12 @@ export default function CompanyCentral({
         )}
       </section>
 
-      {/* 5. Lista de tarefas */}
-      <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
+      {/* 5. Lista de tarefas (âncora dos cards do funil; scroll-mt para o
+          título não ficar colado no topo ao navegar pela âncora) */}
+      <section
+        id="tarefas"
+        className="mb-6 scroll-mt-20 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6"
+      >
         <h3 className="mb-4 text-sm font-semibold text-fg">
           Tarefas {PERIOD_LABEL[period]}
         </h3>
@@ -286,6 +329,7 @@ export default function CompanyCentral({
           truncated={data.tasksTruncated}
           labels={company.labels}
           groupStats={data.groupStats}
+          initialStatus={taskStatus}
         />
       </section>
 

@@ -7,18 +7,21 @@
    O acento da marca (risd/chrysler) é fixo nos dois temas.
 --------------------------------------------------------------------------- */
 :root {
-  --canvas: #f1f1ef;
+  /* Tema claro com contraste real: fundo levemente cinza (na família do
+     Platinum #DFDCDB da marca) para os cards brancos se destacarem, bordas
+     visíveis e textos secundários escuros o bastante para leitura. */
+  --canvas: #eae8e5;
   --surface: #ffffff;
-  --surface-2: #f7f7f5;
-  --line: #e4e2df;
-  --line-strong: #d4d1cd;
+  --surface-2: #f3f1ee;
+  --line: #d6d2cd;
+  --line-strong: #b9b4ad;
   --fg: #1c222a;
-  --fg-muted: #5b636c;
-  --fg-subtle: #8c939c;
+  --fg-muted: #4d545e;
+  --fg-subtle: #6e7681;
   --brand-tint: #e9ecff; /* fundo suave para chips/realces da marca */
 
-  --shadow-card: 0 1px 2px rgba(20, 24, 28, 0.04),
-    0 6px 16px -8px rgba(20, 24, 28, 0.1);
+  --shadow-card: 0 1px 2px rgba(20, 24, 28, 0.05),
+    0 6px 16px -8px rgba(20, 24, 28, 0.14);
   --shadow-pop: 0 12px 32px -8px rgba(20, 24, 28, 0.18);
 
   /* Rail da sidebar — gradiente da marca */
@@ -87,6 +90,16 @@ body {
   .sidebar-link[data-active="true"] {
     color: #fff;
     background-color: var(--sidebar-active);
+  }
+
+  /* Hero do portal do cliente — gradiente da marca (mesmas vars do rail,
+     então já se adapta aos dois temas). */
+  .portal-hero {
+    background-image: linear-gradient(
+      135deg,
+      var(--sidebar-from) 0%,
+      var(--sidebar-to) 100%
+    );
   }
 }
 

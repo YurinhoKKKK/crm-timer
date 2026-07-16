@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Logo from "@/components/Logo";
+import ThemeToggle from "@/components/ThemeToggle";
 import { inputClass, labelClass } from "@/lib/ui";
 import { clientPortalLogin } from "../actions";
 
@@ -29,8 +30,17 @@ export default function ClientPortalLogin({ token }: { token: string }) {
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-canvas px-4">
-      <div className="w-full max-w-sm">
+    <main className="relative grid min-h-screen place-items-center overflow-hidden bg-canvas px-4">
+      {/* Toggle de tema no canto — mesma preferência persistida do sistema */}
+      <div className="absolute right-4 top-4">
+        <ThemeToggle />
+      </div>
+      {/* Brilho decorativo da marca atrás do cartão */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute left-1/2 top-1/3 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-risd/10 blur-3xl"
+      />
+      <div className="relative w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
           <Logo variant="auto" className="mb-4 h-12 w-auto max-w-[220px]" />
           <h1 className="text-2xl font-semibold tracking-tight text-fg">

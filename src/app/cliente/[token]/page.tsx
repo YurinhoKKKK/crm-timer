@@ -4,7 +4,12 @@ import { createClient } from "@/lib/supabase-server";
 import Logo from "@/components/Logo";
 import ThemeToggle from "@/components/ThemeToggle";
 import { sanitizeNoteHtml } from "@/lib/notes";
-import { CLIENT_SESSION_COOKIE, type PortalData } from "@/lib/client-portal";
+import {
+  CLIENT_SESSION_COOKIE,
+  PORTAL_PROGRESS_PAGE,
+  type PortalData,
+  type PortalProgress,
+} from "@/lib/client-portal";
 import ClientPortalLogin from "./ClientPortalLogin";
 import PortalLogoutButton from "./PortalLogoutButton";
 import PortalContent from "./PortalContent";
@@ -30,13 +35,25 @@ export default async function ClientePortalPage({
   const secret = cookies().get(CLIENT_SESSION_COOKIE)?.value ?? null;
 
   let data: PortalData | null = null;
+  let progress: PortalProgress | null = null;
   if (secret) {
     const supabase = await createClient();
-    const { data: raw } = await supabase.rpc("client_portal_data", {
-      p_token: params.token,
-      p_session: secret,
-    });
-    data = (raw as PortalData | null) ?? null;
+    // Conteúdo + primeira página do Andamento (paginado no servidor), ambos
+    // derivados da MESMA sessão validada — nenhuma outra fonte de dados.
+    const [dataRes, progressRes] = await Promise.all([
+      supabase.rpc("client_portal_data", {
+        p_token: params.token,
+        p_session: secret,
+      }),
+      supabase.rpc("client_portal_progress", {
+        p_token: params.token,
+        p_session: secret,
+        p_limit: PORTAL_PROGRESS_PAGE,
+        p_offset: 0,
+      }),
+    ]);
+    data = (dataRes.data as PortalData | null) ?? null;
+    progress = (progressRes.data as PortalProgress | null) ?? null;
   }
 
   // Sem sessão válida PARA ESTE token (expirada, revogada ou de outra
@@ -86,8 +103,13 @@ export default async function ClientePortalPage({
           </p>
         </header>
 
-        {/* Conteúdo em abas: Listagens e Atualizações do projeto */}
-        <PortalContent listings={data.listings} updates={updates} />
+        {/* Conteúdo em abas: Listagens, Andamento (se houver) e Atualizações */}
+        <PortalContent
+          token={params.token}
+          listings={data.listings}
+          progress={progress ?? { total: 0, items: [] }}
+          updates={updates}
+        />
 
         <footer className="mt-8 pb-4 text-center text-xs text-fg-subtle">
           Monvatti · acesso exclusivo do cliente

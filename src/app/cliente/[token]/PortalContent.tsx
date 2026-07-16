@@ -1,43 +1,67 @@
 "use client";
 
 import { useState } from "react";
-import type { PortalListing, PortalUpdate } from "@/lib/client-portal";
+import type {
+  PortalListing,
+  PortalProgress,
+  PortalUpdate,
+} from "@/lib/client-portal";
 import PortalListings from "./PortalListings";
 import PortalUpdates from "./PortalUpdates";
+import PortalProgressFeed from "./PortalProgressFeed";
 
-// Corpo do portal do cliente em duas abas: Listagens e Atualizações do
-// projeto. Componente PRÓPRIO do portal (self-contained): recebe pronto o
-// conteúdo curado que a página server buscou em client_portal_data — aqui
+// Corpo do portal do cliente em abas: Listagens, Andamento (só aparece se o
+// feed curado tiver ao menos 1 item) e Atualizações do projeto. Componente
+// PRÓPRIO do portal (self-contained): recebe pronto o conteúdo curado que a
+// página server buscou (client_portal_data / client_portal_progress) — aqui
 // não existe nenhuma consulta, só apresentação.
 
-type Tab = "listagens" | "atualizacoes";
+type Tab = "listagens" | "andamento" | "atualizacoes";
 
 export default function PortalContent({
+  token,
   listings,
+  progress,
   updates,
 }: {
+  token: string;
   listings: PortalListing[];
+  progress: PortalProgress;
   updates: PortalUpdate[];
 }) {
   const [tab, setTab] = useState<Tab>("listagens");
+  const showProgress = progress.total > 0;
+
+  // Se a aba ativa deixou de existir (feed esvaziou entre renders), volta
+  // para Listagens.
+  const active: Tab = tab === "andamento" && !showProgress ? "listagens" : tab;
 
   return (
     <div>
       <div
         role="tablist"
         aria-label="Seções do portal"
-        className="mb-5 flex gap-1 border-b border-line"
+        className="mb-5 flex flex-wrap gap-1 border-b border-line"
       >
         <TabButton
           id="tab-listagens"
-          active={tab === "listagens"}
+          active={active === "listagens"}
           onClick={() => setTab("listagens")}
           label="Listagens"
           count={listings.length}
         />
+        {showProgress && (
+          <TabButton
+            id="tab-andamento"
+            active={active === "andamento"}
+            onClick={() => setTab("andamento")}
+            label="Andamento"
+            count={progress.total}
+          />
+        )}
         <TabButton
           id="tab-atualizacoes"
-          active={tab === "atualizacoes"}
+          active={active === "atualizacoes"}
           onClick={() => setTab("atualizacoes")}
           label="Atualizações do projeto"
           count={updates.length}
@@ -46,12 +70,14 @@ export default function PortalContent({
 
       <div
         role="tabpanel"
-        aria-labelledby={tab === "listagens" ? "tab-listagens" : "tab-atualizacoes"}
+        aria-labelledby={`tab-${active}`}
         className="animate-fade-in"
-        key={tab}
+        key={active}
       >
-        {tab === "listagens" ? (
+        {active === "listagens" ? (
           <PortalListings listings={listings} />
+        ) : active === "andamento" ? (
+          <PortalProgressFeed token={token} initial={progress} />
         ) : (
           <PortalUpdates updates={updates} />
         )}

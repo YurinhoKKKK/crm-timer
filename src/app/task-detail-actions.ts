@@ -68,6 +68,10 @@ export type TaskDetail = {
   listing: ListingDetails | null;
   listingResults: ListingResultView[];
   actions: TaskDetailAction[];
+  // Passo 25.1 — controle "ocultar do cliente": estado atual e se o painel
+  // deve mostrar o toggle (tarefa elegível ao feed + cargo admin/consultor).
+  clientHidden: boolean;
+  canToggleClientHidden: boolean;
 };
 
 type InstanceRow = {
@@ -83,6 +87,7 @@ type InstanceRow = {
   total_seconds: number;
   completion_note: string | null;
   note_sent_whatsapp: boolean;
+  client_hidden: boolean;
   company_id: string;
   collaborator_id: string;
   template_id: string | null;
@@ -118,7 +123,7 @@ export async function getTaskDetail(
       supabase
         .from("task_instances")
         .select(
-          "id, title, description, instructions, status, due_at, task_date, created_at, finished_at, total_seconds, completion_note, note_sent_whatsapp, company_id, collaborator_id, template_id, company:companies!task_instances_company_id_fkey(name), template:task_templates!task_instances_template_id_fkey(kind, template_type, created_by, created_at, standard_task_id)"
+          "id, title, description, instructions, status, due_at, task_date, created_at, finished_at, total_seconds, completion_note, note_sent_whatsapp, client_hidden, company_id, collaborator_id, template_id, company:companies!task_instances_company_id_fkey(name), template:task_templates!task_instances_template_id_fkey(kind, template_type, created_by, created_at, standard_task_id)"
         )
         .eq("id", taskId)
         .maybeSingle(),
@@ -208,6 +213,20 @@ export async function getTaskDetail(
     }
   }
 
+  // Elegível ao feed "Andamento" do portal (passo 25.1): única comum, fora
+  // do catálogo de padrão e não cancelada (cancelada nunca entra no feed).
+  // O toggle só aparece para admin/consultor — se um consultor consegue LER
+  // a tarefa, a ti_select garante que a empresa é dele; colaborador não vê
+  // o controle (e o gatilho guard_client_hidden barra no banco de todo modo).
+  const feedEligible =
+    !!template &&
+    template.kind === "unica" &&
+    template.template_type === "padrao" &&
+    !template.standard_task_id &&
+    task.status !== "cancelada";
+  const canToggleClientHidden =
+    feedEligible && (role === "admin" || role === "consultor");
+
   return {
     error: null,
     detail: {
@@ -233,6 +252,35 @@ export async function getTaskDetail(
       listing,
       listingResults,
       actions,
+      clientHidden: task.client_hidden,
+      canToggleClientHidden,
     },
   };
+}
+
+// Passo 25.1 — oculta/mostra a tarefa no feed "Andamento" do portal do
+// cliente. UPDATE direto com a proteção no banco: a RLS escopa a linha
+// (admin/consultor da empresa) e o gatilho guard_client_hidden garante que
+// SÓ esses cargos mudam a coluna (colaborador é barrado mesmo sendo dono da
+// tarefa; o portal do cliente nem tem caminho de escrita).
+export async function setTaskClientHidden(
+  taskId: string,
+  hidden: boolean
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Sessão expirada. Faça login novamente." };
+
+  const { data, error } = await supabase
+    .from("task_instances")
+    .update({ client_hidden: hidden })
+    .eq("id", taskId)
+    .select("id");
+
+  if (error) return { error: "Sem permissão para alterar a visibilidade." };
+  if (!data || data.length === 0)
+    return { error: "Tarefa não encontrada (ou sem acesso a ela)." };
+  return { error: null };
 }

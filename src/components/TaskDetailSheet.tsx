@@ -11,7 +11,11 @@ import LabelChips from "@/components/LabelChips";
 import CreatorMeta from "@/components/CreatorMeta";
 import ListingResultsView from "@/components/ListingResultsView";
 import { marketplaceLabel } from "@/lib/listing";
-import { getTaskDetail, type TaskDetail } from "@/app/task-detail-actions";
+import {
+  getTaskDetail,
+  setTaskClientHidden,
+  type TaskDetail,
+} from "@/app/task-detail-actions";
 
 // Painel de detalhe da TAREFA — o destino unificado de qualquer clique em
 // tarefa no sistema. Modo LEITURA por padrão: mostra tudo (empresa,
@@ -275,6 +279,19 @@ export default function TaskDetailSheet({
                 </div>
               )}
 
+              {/* Portal do cliente (passo 25.1): opt-out do feed Andamento.
+                  Só aparece em tarefa elegível ao feed e para admin/consultor
+                  (calculado no servidor); colaborador nunca vê. */}
+              {detail.canToggleClientHidden && (
+                <ClientVisibilityToggle
+                  taskId={detail.id}
+                  hidden={detail.clientHidden}
+                  onChange={(hidden) =>
+                    setDetail((d) => (d ? { ...d, clientHidden: hidden } : d))
+                  }
+                />
+              )}
+
               {/* Transparência de criação */}
               <div className="border-t border-line pt-3">
                 <CreatorMeta
@@ -307,6 +324,62 @@ export default function TaskDetailSheet({
       </aside>
     </div>,
     document.body
+  );
+}
+
+// Toggle "Ocultar do cliente / Mostrar ao cliente" (passo 25.1). Grava
+// task_instances.client_hidden via server action; a autorização real está no
+// banco (RLS + gatilho guard_client_hidden).
+function ClientVisibilityToggle({
+  taskId,
+  hidden,
+  onChange,
+}: {
+  taskId: string;
+  hidden: boolean;
+  onChange: (hidden: boolean) => void;
+}) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function toggle() {
+    if (pending) return;
+    setPending(true);
+    setError(null);
+    const res = await setTaskClientHidden(taskId, !hidden);
+    if (res.error) setError(res.error);
+    else onChange(!hidden);
+    setPending(false);
+  }
+
+  return (
+    <div className="rounded-lg border border-line bg-surface-2/50 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-fg">Portal do cliente</p>
+          <p className="mt-0.5 text-xs text-fg-muted">
+            {hidden
+              ? "Oculta do cliente — não aparece no Andamento do portal."
+              : "Visível no Andamento do portal (quando iniciada ou finalizada)."}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={toggle}
+          disabled={pending}
+          className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-medium text-fg shadow-sm transition hover:border-risd/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd disabled:opacity-60"
+        >
+          {pending
+            ? "Salvando…"
+            : hidden
+              ? "Mostrar ao cliente"
+              : "Ocultar do cliente"}
+        </button>
+      </div>
+      {error && (
+        <p className="mt-2 text-xs text-red-600 dark:text-red-400">{error}</p>
+      )}
+    </div>
   );
 }
 

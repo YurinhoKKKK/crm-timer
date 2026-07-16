@@ -29,6 +29,24 @@ export type PortalData = {
   updates: PortalUpdate[];
 };
 
+// Aba "Andamento" (passo 25.1) — formato devolvido por client_portal_progress.
+// Estado JÁ CURADO no banco ('em_andamento' | 'entregue'); done_on é SÓ a
+// data (YYYY-MM-DD, fuso de Brasília), calculada no SQL — hora, tempo, prazo
+// e responsável nunca saem do banco.
+export type PortalProgressItem = {
+  title: string;
+  state: "em_andamento" | "entregue";
+  done_on: string | null;
+};
+
+export type PortalProgress = {
+  total: number;
+  items: PortalProgressItem[];
+};
+
+// Página do feed (paginação no servidor — o portal nunca carrega tudo).
+export const PORTAL_PROGRESS_PAGE = 20;
+
 // Estado do acesso, para a gestão interna (admin/consultor na central).
 export type ClientAccessInfo = {
   token: string;

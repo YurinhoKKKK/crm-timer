@@ -835,9 +835,11 @@ de quem/quando; marcar uma como visível ao cliente e outra como interna.
 
 ---
 
-## PASSO 25 — Acesso do cliente (visão pública segura e CURADA) ⚠️ CUIDADO MÁXIMO
+## PASSO 25 — Acesso do cliente (visão pública segura e CURADA) ⚠️ CUIDADO MÁXIMO (Feito)
 
-Mecânica: um link protegido por senha que dá ao cliente acesso SOMENTE à
+
+Mecânica: um link protegido por senha que dá ao cliente 
+acesso SOMENTE à
 própria empresa, sem conta, sem navegação. A tela é CURADA para mostrar valor
 entregue e comunicação — NÃO expõe tarefas, tempo, atrasos ou operação
 interna. É o passo mais sensível — segurança e curadoria acima de tudo.

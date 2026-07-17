@@ -7,6 +7,11 @@ import type { ListingBrandRef, ListingResultView } from "@/lib/listing";
 import { marketplaceLabel } from "@/lib/listing";
 import ListingResultsView from "@/components/ListingResultsView";
 import {
+  TIMER_SYNC_EVENT,
+  emitTimerSync,
+  type TimerSyncDetail,
+} from "@/lib/timer-sync";
+import {
   startTimer,
   pauseTimer,
   finishTask,
@@ -101,6 +106,21 @@ export default function Timer({
   const elapsed =
     base + (running && startedAtMs ? (nowMs - startedAtMs) / 1000 : 0);
 
+  // Se o indicador global pausar ESTA tarefa (pill no rodapé), sincroniza o
+  // cronômetro da tela na hora — sem isso ele continuaria correndo visualmente.
+  useEffect(() => {
+    function onSync(e: Event) {
+      const detail = (e as CustomEvent<TimerSyncDetail>).detail;
+      if (!detail || detail.taskId !== taskId || detail.source === "page") return;
+      if (detail.action === "pause") {
+        if (typeof detail.totalSeconds === "number") setBase(detail.totalSeconds);
+        setStartedAtMs(null);
+      }
+    }
+    window.addEventListener(TIMER_SYNC_EVENT, onSync);
+    return () => window.removeEventListener(TIMER_SYNC_EVENT, onSync);
+  }, [taskId]);
+
   const finalized = localStatus === "finalizada";
   const canceled = localStatus === "cancelada";
 
@@ -115,6 +135,7 @@ export default function Timer({
     }
     setStartedAtMs(startedAt ? Date.parse(startedAt) : Date.now());
     setLocalStatus("iniciada");
+    emitTimerSync({ taskId, action: "start", source: "page" });
     startTransition(() => router.refresh());
   }
 
@@ -129,6 +150,7 @@ export default function Timer({
     }
     if (typeof total === "number") setBase(total);
     setStartedAtMs(null);
+    emitTimerSync({ taskId, action: "pause", totalSeconds: total, source: "page" });
     startTransition(() => router.refresh());
   }
 
@@ -151,6 +173,7 @@ export default function Timer({
     setLocalStatus("finalizada");
     setFinishing(false);
     if (warn) setWarning(warn);
+    emitTimerSync({ taskId, action: "finish", totalSeconds: total, source: "page" });
     startTransition(() => router.refresh());
   }
 
@@ -188,6 +211,7 @@ export default function Timer({
     setLocalStatus("finalizada");
     setFinishing(false);
     if (warn) setWarning(warn);
+    emitTimerSync({ taskId, action: "finish", totalSeconds: total, source: "page" });
     startTransition(() => router.refresh());
   }
 

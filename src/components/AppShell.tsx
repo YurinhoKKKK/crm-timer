@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import ThemeToggle from "./ThemeToggle";
 import Avatar from "./Avatar";
 import Logo from "./Logo";
+import ActiveTimerIndicator from "./ActiveTimerIndicator";
 
 type Role = "admin" | "consultor" | "colaborador";
 
@@ -274,6 +275,9 @@ export default function AppShell({
           {children}
         </main>
       </div>
+
+      {/* Lembrete global de timer rodando — todos os cargos executam tarefas */}
+      <ActiveTimerIndicator />
     </div>
   );
 }

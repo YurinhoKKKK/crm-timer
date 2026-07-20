@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { guardRole } from "@/components/guardRole";
+import { perfRoute } from "@/lib/perf";
 import AppShell from "@/components/AppShell";
 import type { TaskStatus } from "@/lib/types";
 import PeriodFilter, { type Period } from "./PeriodFilter";
@@ -92,18 +93,23 @@ export default async function AdminPage({
     .select("company_id, collaborator_id, status, due_at, total_seconds");
   if (start) instancesQuery = instancesQuery.gte("task_date", start);
 
+  const perf = perfRoute("/admin (dashboard)");
   const [
     { data: instancesData, error: instancesError },
     { data: companiesData },
     { data: collaboratorsData },
   ] = await Promise.all([
-    instancesQuery,
-    supabase.from("companies").select("id, name"),
+    perf.timed("task_instances (todas do período, sem limit)", instancesQuery),
+    perf.timed("companies", supabase.from("companies").select("id, name")),
     // Todos os perfis (não só role=colaborador): admin/consultor que executam
     // tarefas também contam como responsáveis pelo tempo (Passo 14). Os que não
     // executaram nada são filtrados adiante por `total > 0`.
-    supabase.from("profiles").select("id, full_name, email, avatar_path"),
+    perf.timed(
+      "profiles",
+      supabase.from("profiles").select("id, full_name, email, avatar_path")
+    ),
   ]);
+  perf.done();
 
   const instances = (instancesData as InstanceRow[]) ?? [];
   const companies = (companiesData as Named[]) ?? [];

@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase-server";
 import Logo from "@/components/Logo";
 import ThemeToggle from "@/components/ThemeToggle";
-import { sanitizeNoteHtml } from "@/lib/notes";
+import { getNoteSanitizer } from "@/lib/notes";
 import {
   CLIENT_SESSION_COOKIE,
   PORTAL_PROGRESS_PAGE,
@@ -63,11 +63,16 @@ export default async function ClientePortalPage({
   }
 
   // Ponto ÚNICO de sanitização do HTML das atualizações: no servidor, antes
-  // de qualquer render (sanitizeNoteHtml/DOMPurify). O client só exibe.
-  const updates = data.updates.map((u) => ({
-    ...u,
-    html: sanitizeNoteHtml(u.html),
-  }));
+  // de qualquer render (DOMPurify). O client só exibe.
+  // O sanitizador é carregado sob demanda (ver lib/notes) e só quando existe
+  // atualização de fato — portal sem atualizações não carrega o jsdom.
+  const updates =
+    data.updates.length === 0
+      ? []
+      : await (async () => {
+          const sanitize = await getNoteSanitizer();
+          return data!.updates.map((u) => ({ ...u, html: sanitize(u.html) }));
+        })();
 
   return (
     <main className="min-h-screen bg-canvas">

@@ -5,6 +5,7 @@ import CompanySummaryGrid, {
   type CompanyCardItem,
 } from "@/components/CompanySummaryGrid";
 import { loadLabelsByCompany } from "@/lib/labels";
+import { perfRoute } from "@/lib/perf";
 
 type InstanceRow = {
   id: string;
@@ -36,12 +37,16 @@ export default async function ColaboradorPage() {
     "consultor",
   ]);
 
-  const { data, error } = await supabase
-    .from("task_instances")
-    .select(
-      "id, company_id, status, due_at, company:companies!task_instances_company_id_fkey(name)"
-    )
-    .eq("collaborator_id", profile.id);
+  const perf = perfRoute("/colaborador (Meu Trabalho)");
+  const { data, error } = await perf.timed(
+    "task_instances do usuário (join companies)",
+    supabase
+      .from("task_instances")
+      .select(
+        "id, company_id, status, due_at, company:companies!task_instances_company_id_fkey(name)"
+      )
+      .eq("collaborator_id", profile.id)
+  );
 
   const rows = (data as InstanceRow[]) ?? [];
 
@@ -81,10 +86,15 @@ export default async function ColaboradorPage() {
   );
 
   // Etiquetas herdadas da empresa (uma consulta em lote para todos os cards).
-  const labelsByCompany = await loadLabelsByCompany(
-    supabase,
-    companies.map((c) => c.id)
+  // WATERFALL: depende dos company_id apurados acima.
+  const labelsByCompany = await perf.timed(
+    "company_labels (WATERFALL — 2ª onda)",
+    loadLabelsByCompany(
+      supabase,
+      companies.map((c) => c.id)
+    )
   );
+  perf.done();
 
   return (
     <AppShell

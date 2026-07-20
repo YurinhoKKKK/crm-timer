@@ -10,6 +10,7 @@ import StandardTaskList, { type StandardItem } from "./StandardTaskList";
 import { withSelf } from "@/lib/people";
 import { loadLabelsByCompany, type Label } from "@/lib/labels";
 import { avatarUrl } from "@/lib/avatar";
+import { perfRoute } from "@/lib/perf";
 
 type Option = { id: string; name: string };
 type PersonOption = { id: string; full_name: string; email: string };
@@ -41,6 +42,7 @@ function first<T>(value: T | T[] | null): T | null {
 export default async function TarefasPage() {
   const { supabase, profile } = await guardRole(["admin"]);
 
+  const perf = perfRoute("/admin/tarefas");
   const [
     { data: companiesData },
     { data: collaboratorsData },
@@ -48,31 +50,46 @@ export default async function TarefasPage() {
     { data: standardData, error: standardError },
     { data: usageData },
   ] = await Promise.all([
-    supabase.from("companies").select("id, name").order("name", { ascending: true }),
-    supabase
-      .from("profiles")
-      .select("id, full_name, email")
-      // Admins também podem ser responsáveis de tarefas.
-      .in("role", ["colaborador", "admin"])
-      .order("full_name", { ascending: true }),
-    supabase
-      .from("task_templates")
-      .select(
-        "id, title, kind, template_type, due_time, weekdays, start_date, active, created_at, company_id, collaborator_id, company:companies!task_templates_company_id_fkey(name), collaborator:profiles!task_templates_collaborator_id_fkey(full_name, email, avatar_path)"
-      )
-      .order("created_at", { ascending: false }),
+    perf.timed(
+      "companies",
+      supabase.from("companies").select("id, name").order("name", { ascending: true })
+    ),
+    perf.timed(
+      "profiles (seletor de responsável)",
+      supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        // Admins também podem ser responsáveis de tarefas.
+        .in("role", ["colaborador", "admin"])
+        .order("full_name", { ascending: true })
+    ),
+    perf.timed(
+      "task_templates (lista, sem limit, join companies+profiles)",
+      supabase
+        .from("task_templates")
+        .select(
+          "id, title, kind, template_type, due_time, weekdays, start_date, active, created_at, company_id, collaborator_id, company:companies!task_templates_company_id_fkey(name), collaborator:profiles!task_templates_collaborator_id_fkey(full_name, email, avatar_path)"
+        )
+        .order("created_at", { ascending: false })
+    ),
     // Catálogo de tarefas padrão (Passo 15).
-    supabase
-      .from("standard_tasks")
-      .select("id, title, description, instructions, kind, due_time, weekdays")
-      .order("created_at", { ascending: false }),
+    perf.timed(
+      "standard_tasks (catálogo)",
+      supabase
+        .from("standard_tasks")
+        .select("id, title, description, instructions, kind, due_time, weekdays")
+        .order("created_at", { ascending: false })
+    ),
     // Templates ativos ligados a padrões: contam o uso e, agora, dizem em quais
     // empresas (com qual responsável) cada padrão está atribuída (Direção 1).
-    supabase
-      .from("task_templates")
-      .select("standard_task_id, company_id, collaborator_id")
-      .eq("active", true)
-      .not("standard_task_id", "is", null),
+    perf.timed(
+      "task_templates (uso das padrões)",
+      supabase
+        .from("task_templates")
+        .select("standard_task_id, company_id, collaborator_id")
+        .eq("active", true)
+        .not("standard_task_id", "is", null)
+    ),
   ]);
 
   const companies = (companiesData as Option[]) ?? [];
@@ -107,10 +124,15 @@ export default async function TarefasPage() {
   const canCreate = companies.length > 0 && collaborators.length > 0;
 
   // Etiquetas herdadas por empresa (herança exibida em cada tarefa da lista).
-  const labelsMap = await loadLabelsByCompany(
-    supabase,
-    templates.map((t) => t.companyId)
+  // WATERFALL: depende dos company_id da lista de templates acima.
+  const labelsMap = await perf.timed(
+    "company_labels (WATERFALL — 2ª onda)",
+    loadLabelsByCompany(
+      supabase,
+      templates.map((t) => t.companyId)
+    )
   );
+  perf.done();
   const labelsByCompany = Object.fromEntries(labelsMap) as Record<
     string,
     Label[]

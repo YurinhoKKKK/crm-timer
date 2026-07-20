@@ -6,6 +6,7 @@ import { withSelf } from "@/lib/people";
 import { loadCompanyLabels, type Label } from "@/lib/labels";
 import type { GroupStats } from "@/lib/task-grouping";
 import type { ClientAccessInfo } from "@/lib/client-portal";
+import { perfRoute } from "@/lib/perf";
 import {
   resolvePeople,
   describeInstanceCreator,
@@ -153,6 +154,7 @@ export async function loadCompanyCentral(
   const start = periodStart(period);
   const month = monthStart();
 
+  const perf = perfRoute("central da empresa (loadCompanyCentral)");
   const [
     { data: companyData },
     { data: consultantsData },
@@ -169,90 +171,126 @@ export async function loadCompanyCentral(
     { data: clientAccessData },
   ] = await Promise.all([
     // companies_select (RLS) só devolve a empresa se o usuário tiver acesso.
-    supabase
-      .from("companies")
-      .select(
-        "id, name, whatsapp_group_name, whatsapp_contact_id, created_at, created_by"
-      )
-      .eq("id", companyId)
-      .maybeSingle(),
-    supabase
-      .from("company_consultants")
-      .select(
-        "consultant:profiles!company_consultants_consultant_id_fkey(full_name, email, avatar_path)"
-      )
-      .eq("company_id", companyId),
-    supabase.rpc("company_overview", {
-      p_company_id: companyId,
-      p_start: start,
-      p_month_start: month,
-    }),
-    supabase.rpc("company_collaborator_summary", {
-      p_company_id: companyId,
-      p_start: start,
-    }),
+    perf.timed(
+      "companies (cabeçalho)",
+      supabase
+        .from("companies")
+        .select(
+          "id, name, whatsapp_group_name, whatsapp_contact_id, created_at, created_by"
+        )
+        .eq("id", companyId)
+        .maybeSingle()
+    ),
+    perf.timed(
+      "company_consultants",
+      supabase
+        .from("company_consultants")
+        .select(
+          "consultant:profiles!company_consultants_consultant_id_fkey(full_name, email, avatar_path)"
+        )
+        .eq("company_id", companyId)
+    ),
+    perf.timed(
+      "rpc company_overview",
+      supabase.rpc("company_overview", {
+        p_company_id: companyId,
+        p_start: start,
+        p_month_start: month,
+      })
+    ),
+    perf.timed(
+      "rpc company_collaborator_summary",
+      supabase.rpc("company_collaborator_summary", {
+        p_company_id: companyId,
+        p_start: start,
+      })
+    ),
     // Tarefas em duas leituras: abertas (todas, até o teto) e fechadas
     // recentes — estas viram GRUPOS por tarefa na lista, com as contagens
     // verdadeiras vindas da RPC task_group_stats (agregada no banco).
-    (() => {
-      let q = supabase
-        .from("task_instances")
-        .select(CENTRAL_TASK_SELECT)
+    perf.timed(
+      "task_instances abertas (join profiles+templates)",
+      (() => {
+        let q = supabase
+          .from("task_instances")
+          .select(CENTRAL_TASK_SELECT)
+          .eq("company_id", companyId)
+          .in("status", ["a_fazer", "iniciada"])
+          .order("due_at", { ascending: true, nullsFirst: false })
+          .limit(TASK_CAP + 1);
+        if (start) q = q.gte("task_date", start);
+        return q;
+      })()
+    ),
+    perf.timed(
+      "task_instances fechadas (join profiles+templates)",
+      (() => {
+        let q = supabase
+          .from("task_instances")
+          .select(CENTRAL_TASK_SELECT)
+          .eq("company_id", companyId)
+          .in("status", ["finalizada", "cancelada"])
+          .order("task_date", { ascending: false })
+          .limit(TASK_CAP + 1);
+        if (start) q = q.gte("task_date", start);
+        return q;
+      })()
+    ),
+    perf.timed(
+      "rpc task_group_stats",
+      supabase.rpc("task_group_stats", {
+        p_company_id: companyId,
+        p_start: start ?? undefined,
+      })
+    ),
+    perf.timed(
+      "activity_log (30)",
+      (() => {
+        let q = supabase
+          .from("activity_log")
+          .select(
+            "id, message, seconds_spent, sent_whatsapp, created_at, collaborator:profiles!activity_log_collaborator_id_fkey(full_name, email, avatar_path)"
+          )
+          .eq("company_id", companyId)
+          .order("created_at", { ascending: false })
+          .limit(30);
+        if (start) q = q.gte("created_at", `${start}T00:00:00`);
+        return q;
+      })()
+    ),
+    perf.timed(
+      "standard_tasks (catálogo)",
+      supabase
+        .from("standard_tasks")
+        .select("id, title, kind")
+        .order("title", { ascending: true })
+    ),
+    perf.timed(
+      "task_templates (padrões atribuídas)",
+      supabase
+        .from("task_templates")
+        .select("standard_task_id, collaborator_id")
         .eq("company_id", companyId)
-        .in("status", ["a_fazer", "iniciada"])
-        .order("due_at", { ascending: true, nullsFirst: false })
-        .limit(TASK_CAP + 1);
-      if (start) q = q.gte("task_date", start);
-      return q;
-    })(),
-    (() => {
-      let q = supabase
-        .from("task_instances")
-        .select(CENTRAL_TASK_SELECT)
+        .eq("active", true)
+        .not("standard_task_id", "is", null)
+    ),
+    perf.timed(
+      "profiles (seletor de responsável)",
+      supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("role", ["colaborador", "admin"])
+        .order("full_name", { ascending: true })
+    ),
+    perf.timed("company_labels", loadCompanyLabels(supabase, companyId)),
+    perf.timed(
+      "client_portal_access",
+      supabase
+        .from("client_portal_access")
+        .select("token, active, updated_at")
         .eq("company_id", companyId)
-        .in("status", ["finalizada", "cancelada"])
-        .order("task_date", { ascending: false })
-        .limit(TASK_CAP + 1);
-      if (start) q = q.gte("task_date", start);
-      return q;
-    })(),
-    supabase.rpc("task_group_stats", {
-      p_company_id: companyId,
-      p_start: start ?? undefined,
-    }),
-    (() => {
-      let q = supabase
-        .from("activity_log")
-        .select(
-          "id, message, seconds_spent, sent_whatsapp, created_at, collaborator:profiles!activity_log_collaborator_id_fkey(full_name, email, avatar_path)"
-        )
-        .eq("company_id", companyId)
-        .order("created_at", { ascending: false })
-        .limit(30);
-      if (start) q = q.gte("created_at", `${start}T00:00:00`);
-      return q;
-    })(),
-    supabase
-      .from("standard_tasks")
-      .select("id, title, kind")
-      .order("title", { ascending: true }),
-    supabase
-      .from("task_templates")
-      .select("standard_task_id, collaborator_id")
-      .eq("company_id", companyId)
-      .eq("active", true)
-      .not("standard_task_id", "is", null),
-    supabase
-      .from("profiles")
-      .select("id, full_name, email")
-      .in("role", ["colaborador", "admin"])
-      .order("full_name", { ascending: true }),
-    loadCompanyLabels(supabase, companyId),
-    supabase
-      .from("client_portal_access")
-      .select("token, active, updated_at")
-      .eq("company_id", companyId)
-      .maybeSingle(),
+        .maybeSingle()
+    ),
   ]);
 
   const company = companyData as {
@@ -336,7 +374,13 @@ export async function loadCompanyCentral(
   // via display_profiles. Uma única chamada em lote.
   const creatorIds: (string | null | undefined)[] = [company.created_by];
   for (const r of taskRows) creatorIds.push(first(r.template)?.created_by);
-  const people = await resolvePeople(supabase, creatorIds);
+  // WATERFALL: só começa depois que TODAS as 13 acima terminaram, porque
+  // depende dos created_by vindos das tarefas.
+  const people = await perf.timed(
+    "rpc display_profiles (WATERFALL — 2ª onda)",
+    resolvePeople(supabase, creatorIds)
+  );
+  perf.done();
 
   const tasks: CentralTaskItem[] = taskRows.map((r) => {
     const collab = first(r.collaborator);

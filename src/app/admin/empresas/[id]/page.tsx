@@ -28,15 +28,17 @@ export default async function EmpresaCentralPage({
   const { supabase, profile } = await guardRole(["admin"]);
   const period = normalizePeriod(searchParams?.periodo);
 
-  const res = await loadCompanyCentral(supabase, profile, params.id, period);
+  // As três leituras são independentes entre si — listagens e anotações não
+  // dependem de nada que a central devolve. Antes rodavam em cascata (uma onda
+  // de rede a mais); agora vão juntas. Cada uma é escopada pela RLS por conta
+  // própria, então disparar as três em paralelo não amplia o que o usuário
+  // enxerga: sem acesso à empresa, todas voltam vazias.
+  const [res, listings, notes] = await Promise.all([
+    loadCompanyCentral(supabase, profile, params.id, period),
+    loadCompanyListings(supabase, params.id),
+    loadCompanyNotes(supabase, params.id),
+  ]);
   if (res.notFound) notFound();
-
-  const [listings, notes] = res.data
-    ? await Promise.all([
-        loadCompanyListings(supabase, params.id),
-        loadCompanyNotes(supabase, params.id),
-      ])
-    : [[], []];
 
   return (
     <AppShell

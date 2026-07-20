@@ -8,7 +8,7 @@ import TarefasTabs from "./TarefasTabs";
 import NewStandardTaskForm from "./NewStandardTaskForm";
 import StandardTaskList, { type StandardItem } from "./StandardTaskList";
 import { withSelf } from "@/lib/people";
-import { loadLabelsByCompany, type Label } from "@/lib/labels";
+import { loadAllLabelsByCompany, type Label } from "@/lib/labels";
 import { avatarUrl } from "@/lib/avatar";
 import { perfRoute } from "@/lib/perf";
 
@@ -49,6 +49,7 @@ export default async function TarefasPage() {
     { data: templatesData, error: templatesError },
     { data: standardData, error: standardError },
     { data: usageData },
+    labelsMap,
   ] = await Promise.all([
     perf.timed(
       "companies",
@@ -90,6 +91,9 @@ export default async function TarefasPage() {
         .eq("active", true)
         .not("standard_task_id", "is", null)
     ),
+    // Etiquetas herdadas por empresa (exibidas em cada tarefa da lista). Sem
+    // filtro por id, entra nesta mesma onda em vez de esperar os templates.
+    perf.timed("company_labels (paralela)", loadAllLabelsByCompany(supabase)),
   ]);
 
   const companies = (companiesData as Option[]) ?? [];
@@ -123,15 +127,6 @@ export default async function TarefasPage() {
 
   const canCreate = companies.length > 0 && collaborators.length > 0;
 
-  // Etiquetas herdadas por empresa (herança exibida em cada tarefa da lista).
-  // WATERFALL: depende dos company_id da lista de templates acima.
-  const labelsMap = await perf.timed(
-    "company_labels (WATERFALL — 2ª onda)",
-    loadLabelsByCompany(
-      supabase,
-      templates.map((t) => t.companyId)
-    )
-  );
   perf.done();
   const labelsByCompany = Object.fromEntries(labelsMap) as Record<
     string,

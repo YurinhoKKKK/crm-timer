@@ -78,6 +78,38 @@ export async function loadLabelsByCompany(
   return map;
 }
 
+// Etiquetas de TODAS as empresas que o usuário pode ver, em uma query só.
+//
+// Existe para quebrar um waterfall: `loadLabelsByCompany` precisa dos
+// company_id, que só ficam conhecidos DEPOIS da consulta de tarefas/templates,
+// o que forçava uma segunda onda de rede. Sem o filtro `.in()`, esta consulta
+// pode rodar em paralelo com todas as outras da tela.
+//
+// O escopo NÃO é enfraquecido: a policy `cl_select` de company_labels já
+// restringe as linhas a admin (todas), às empresas do consultor ou às empresas
+// do colaborador. Quem faz o recorte é a RLS, não o filtro da query — o
+// resultado é o mesmo conjunto de antes.
+export async function loadAllLabelsByCompany(
+  supabase: SupabaseServer
+): Promise<Map<string, Label[]>> {
+  const map = new Map<string, Label[]>();
+
+  const { data } = await supabase
+    .from("company_labels")
+    .select("company_id, label:labels(id, name, bg_color, text_color, highlight)");
+
+  for (const row of (data as { company_id: string; label: Joined<Label> }[]) ??
+    []) {
+    const l = first(row.label);
+    if (!l) continue;
+    const list = map.get(row.company_id) ?? [];
+    list.push(l);
+    map.set(row.company_id, list);
+  }
+  map.forEach((list, key) => map.set(key, sortLabels(list)));
+  return map;
+}
+
 // Destaques primeiro (para se sobressaírem nas listas), depois por nome.
 function sortLabels(list: Label[]): Label[] {
   return list.sort((a, b) => {

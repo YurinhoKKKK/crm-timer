@@ -30,15 +30,15 @@ export default async function ConsultorEmpresaPage({
   const { supabase, profile } = await guardRole(["consultor"]);
   const period = normalizePeriod(searchParams?.periodo);
 
-  const res = await loadCompanyCentral(supabase, profile, params.companyId, period);
+  // Mesma paralelização da central do admin: as três leituras são
+  // independentes e cada uma é escopada pela RLS por conta própria (aqui, às
+  // empresas deste consultor). Antes rodavam em cascata.
+  const [res, listings, notes] = await Promise.all([
+    loadCompanyCentral(supabase, profile, params.companyId, period),
+    loadCompanyListings(supabase, params.companyId),
+    loadCompanyNotes(supabase, params.companyId),
+  ]);
   if (res.notFound) notFound();
-
-  const [listings, notes] = res.data
-    ? await Promise.all([
-        loadCompanyListings(supabase, params.companyId),
-        loadCompanyNotes(supabase, params.companyId),
-      ])
-    : [[], []];
 
   return (
     <AppShell

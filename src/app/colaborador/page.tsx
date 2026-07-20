@@ -4,7 +4,7 @@ import type { TaskStatus } from "@/lib/types";
 import CompanySummaryGrid, {
   type CompanyCardItem,
 } from "@/components/CompanySummaryGrid";
-import { loadLabelsByCompany } from "@/lib/labels";
+import { loadAllLabelsByCompany } from "@/lib/labels";
 import { perfRoute } from "@/lib/perf";
 
 type InstanceRow = {
@@ -38,15 +38,23 @@ export default async function ColaboradorPage() {
   ]);
 
   const perf = perfRoute("/colaborador (Meu Trabalho)");
-  const { data, error } = await perf.timed(
-    "task_instances do usuário (join companies)",
-    supabase
-      .from("task_instances")
-      .select(
-        "id, company_id, status, due_at, company:companies!task_instances_company_id_fkey(name)"
-      )
-      .eq("collaborator_id", profile.id)
-  );
+  // As duas leituras rodam juntas. As etiquetas antes esperavam a lista de
+  // tarefas só para saber quais company_id filtrar; agora vêm todas as que a
+  // RLS (cl_select) permite a este usuário — exatamente as empresas onde ele
+  // tem tarefa, que é o mesmo conjunto de antes.
+  const [{ data, error }, labelsByCompany] = await Promise.all([
+    perf.timed(
+      "task_instances do usuário (join companies)",
+      supabase
+        .from("task_instances")
+        .select(
+          "id, company_id, status, due_at, company:companies!task_instances_company_id_fkey(name)"
+        )
+        .eq("collaborator_id", profile.id)
+    ),
+    perf.timed("company_labels (paralela)", loadAllLabelsByCompany(supabase)),
+  ]);
+  perf.done();
 
   const rows = (data as InstanceRow[]) ?? [];
 
@@ -84,17 +92,6 @@ export default async function ColaboradorPage() {
   const companies = Array.from(byCompany.values()).sort((a, b) =>
     a.name.localeCompare(b.name, "pt-BR")
   );
-
-  // Etiquetas herdadas da empresa (uma consulta em lote para todos os cards).
-  // WATERFALL: depende dos company_id apurados acima.
-  const labelsByCompany = await perf.timed(
-    "company_labels (WATERFALL — 2ª onda)",
-    loadLabelsByCompany(
-      supabase,
-      companies.map((c) => c.id)
-    )
-  );
-  perf.done();
 
   return (
     <AppShell

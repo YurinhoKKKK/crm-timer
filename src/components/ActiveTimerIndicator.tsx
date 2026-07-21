@@ -10,14 +10,22 @@ import {
   emitTimerSync,
   type TimerSyncDetail,
 } from "@/lib/timer-sync";
+import {
+  formatElapsedCompact,
+  parseStartedAt,
+  taskElapsedSeconds,
+} from "@/lib/timer";
 
 /* -------------------------------------------------------------------------- */
 /* Indicador global de timer ativo (passo do lembrete de timer esquecido).    */
 /* Vive no AppShell, então aparece em TODAS as telas autenticadas. Mostra     */
 /* apenas os time_entries ABERTOS do PRÓPRIO usuário logado (nunca de         */
-/* terceiros, mesmo sendo admin). O tempo corre no cliente a partir do        */
-/* started_at; o banco só é consultado ao montar, num poll leve e ao voltar   */
-/* o foco para a aba.                                                         */
+/* terceiros, mesmo sendo admin). O banco só é consultado ao montar, num poll  */
+/* leve e ao voltar o foco para a aba.                                        */
+/*                                                                            */
+/* O tempo mostrado é o TOTAL da tarefa (total_seconds + intervalo aberto),    */
+/* exatamente o mesmo número da tela da tarefa, derivado a cada tick pelo      */
+/* helper compartilhado lib/timer.ts — nunca acumulado (ver passo 28.1).      */
 /* -------------------------------------------------------------------------- */
 
 type OpenTimer = {
@@ -26,6 +34,8 @@ type OpenTimer = {
   companyId: string;
   title: string;
   startedAtMs: number;
+  // Tempo já fechado no banco, antes do intervalo aberto.
+  totalSeconds: number;
 };
 
 const COLLAPSE_KEY = "crm-timer-indicator-collapsed";
@@ -47,13 +57,12 @@ function applyDocTitle(next: string | null) {
   document.title = next;
 }
 
-function formatElapsed(ms: number): string {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`;
+// Tempo exibido de um timer aberto: SEMPRE recalculado do zero a partir do que
+// veio do banco (nunca acumulado), pelo mesmo helper da tela da tarefa.
+function display(t: OpenTimer, nowMs: number): string {
+  return formatElapsedCompact(
+    taskElapsedSeconds(t.totalSeconds, t.startedAtMs, nowMs)
+  );
 }
 
 function taskHref(t: OpenTimer): string {
@@ -125,30 +134,37 @@ export default function ActiveTimerIndicator() {
     const { data, error: err } = await supabase
       .from("time_entries")
       .select(
-        "id, started_at, task_id, task:task_instances!inner(id, title, company_id, collaborator_id)"
+        "id, started_at, task_id, task:task_instances!inner(id, title, company_id, collaborator_id, total_seconds)"
       )
       .is("ended_at", null)
       .eq("collaborator_id", uid);
     if (err) return; // poll silencioso; a próxima tentativa corrige
 
+    type TaskRow = {
+      id: string;
+      title: string;
+      company_id: string;
+      collaborator_id: string;
+      total_seconds: number;
+    };
     const list: OpenTimer[] = [];
     for (const row of (data ?? []) as {
       id: string;
       started_at: string;
       task_id: string;
-      task:
-        | { id: string; title: string; company_id: string; collaborator_id: string }
-        | { id: string; title: string; company_id: string; collaborator_id: string }[]
-        | null;
+      task: TaskRow | TaskRow[] | null;
     }[]) {
       const task = Array.isArray(row.task) ? row.task[0] : row.task;
       if (!task || task.collaborator_id !== uid) continue;
+      const startedAtMs = parseStartedAt(row.started_at);
+      if (startedAtMs === null) continue;
       list.push({
         entryId: row.id,
         taskId: row.task_id,
         companyId: task.company_id,
         title: task.title,
-        startedAtMs: Date.parse(row.started_at),
+        startedAtMs,
+        totalSeconds: task.total_seconds ?? 0,
       });
     }
     list.sort((a, b) => a.startedAtMs - b.startedAtMs);
@@ -164,9 +180,13 @@ export default function ActiveTimerIndicator() {
       if (document.visibilityState === "visible") fetchOpen();
     };
     document.addEventListener("visibilitychange", onVisible);
+    // Ao reconectar, ressincroniza: durante a queda o timer pode ter sido
+    // pausado/finalizado em outro lugar.
+    window.addEventListener("online", fetchOpen);
     return () => {
       window.clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", fetchOpen);
     };
   }, [fetchOpen]);
 
@@ -210,7 +230,7 @@ export default function ActiveTimerIndicator() {
     ? null
     : multi
       ? `▶ ${timers.length} tarefas ativas`
-      : `▶ ${formatElapsed(nowMs - timers[0].startedAtMs)} · ${timers[0].title}`;
+      : `▶ ${display(timers[0], nowMs)} · ${timers[0].title}`;
   useEffect(() => {
     applyDocTitle(tabTitle);
   }, [tabTitle]);
@@ -266,7 +286,7 @@ export default function ActiveTimerIndicator() {
                     {t.title}
                   </span>
                   <span className="font-mono text-sm tabular-nums text-risd">
-                    {formatElapsed(nowMs - t.startedAtMs)}
+                    {display(t, nowMs)}
                   </span>
                 </Link>
                 <button
@@ -299,7 +319,7 @@ export default function ActiveTimerIndicator() {
           <span className="font-mono text-sm tabular-nums text-fg">
             {multi
               ? `${timers.length} ativas`
-              : formatElapsed(nowMs - first.startedAtMs)}
+              : display(first, nowMs)}
           </span>
         </button>
       ) : (
@@ -333,7 +353,7 @@ export default function ActiveTimerIndicator() {
                   {first.title}
                 </span>
                 <span className="font-mono text-sm tabular-nums text-risd">
-                  {formatElapsed(nowMs - first.startedAtMs)}
+                  {display(first, nowMs)}
                 </span>
               </Link>
               <button

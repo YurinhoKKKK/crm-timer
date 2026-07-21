@@ -904,6 +904,593 @@ tudo bloqueado.
 - No 24, confirme que "interna" é o padrão, para nada vazar por engano no 25.
 
 
+---
+
+# FRENTE: PORTAL DO CLIENTE MADURO + OPERAÇÃO (Passos 26 a 32)
+
+Objetivo comum: transformar o Portal do Cliente de uma vitrine crua numa
+superfície de relacionamento — visual à altura, conteúdo curado, e por fim
+comunicação de mão dupla. Junto vieram melhorias operacionais internas
+(indicador de timer, performance).
+
+⚠️ Regra da frente: o portal é a tela mais sensível do sistema. Todo passo que
+o toca precisa reconfirmar ISOLAMENTO (um cliente jamais vê outra empresa) e
+CURADORIA (nenhum dado operacional interno aparece).
+
+---
+
+## PASSO 26 — Reforma visual e de conteúdo do Portal do Cliente (Feito)
+
+Contexto: o portal do passo 25 estava cru e com terminologia errada. Este passo
+é SÓ visual/terminologia — não toca segurança nem muda o conjunto de dados que
+o cliente vê.
+
+Decisões de produto tomadas antes de codar:
+- "Publicação/publicada" era vocabulário nosso, não do cliente. O certo é
+  "listagem/listada".
+- O par binário "Publicada / Não publicada" soava como "feito × não feito", o
+  que é FALSO: não enviamos uma listagem quando a marca não tem relevância ou
+  tem pouca saída. Vira uma decisão de curadoria, não uma pendência.
+- Os contadores "X/Y publicadas" e "N marketplaces" saíram: o de marketplaces
+  é trivial (nunca passa de 3) e a fração reintroduz a lógica de completude que
+  queremos evitar.
+- Sem logos oficiais dos marketplaces (decisão consciente de risco de marca) —
+  só cor + ícone genérico, centralizados num mapa único para trocar fácil depois.
+
+```
+Vamos reformular o PORTAL DO CLIENTE (a tela externa e blindada do Passo 25),
+somente na parte VISUAL e de CONTEÚDO/TERMINOLOGIA. Regras inegociáveis deste
+passo:
+- NÃO altere segurança, RLS, token, senha nem a CURADORIA. O conjunto de dados
+  que o cliente vê continua EXATAMENTE o mesmo (listagens + anotações marcadas
+  "visível ao cliente"). Não adicione nenhuma nova fonte de dados aqui.
+- Mantenha o portal SELF-CONTAINED e blindado: não importe componentes das
+  telas internas que possam carregar dados internos. Se precisar do visual de
+  algum controle interno (ex: abas, busca/filtro), replique o visual, sem puxar
+  a lógica interna junto.
+- Mantenha o toggle de tema claro/escuro e a responsividade.
+
+MUDANÇAS:
+
+1. TERMINOLOGIA: troque "publicação/publicada" por "listagem/listada" em TODO o
+   portal. "Ver publicação" vira "Ver listagem".
+
+2. REFRAME DO STATUS (ponto importante de curadoria): hoje mostra o par binário
+   "Publicada / Não publicada", que soa como "feito × não feito". Troque por:
+   - Quando há link: rótulo "Listada" (verde discreto) + o link.
+   - Quando não há link: rótulo "Não listada" em tom NEUTRO (nada de amarelo/
+     alerta), seguido do MOTIVO como uma nota editorial (ex: "marca sem saída
+     relevante"). Não é falha nem pendência — é uma decisão de curadoria.
+
+3. CONTADORES: remova os cards de contagem do topo "X/Y publicadas" e
+   "N marketplaces". Substitua por dois números que agregam valor: "Marcas"
+   (total de marcas) e "Listagens ativas" (total de resultados COM link).
+   Remova também o subtítulo "X de Y publicadas" de cada marca.
+
+4. RUÍDO DO BOTÃO: o botão "Ver listagem" cheio se repete dezenas de vezes e
+   polui. Rebaixe-o para um LINK discreto com seta (ou torne a linha inteira
+   clicável), reservando o azul risd cheio para no máximo uma ação principal
+   por bloco.
+
+5. DUAS ABAS: separe o conteúdo do portal em duas abas — "Listagens" e
+   "Atualizações do projeto" (as anotações visíveis ao cliente).
+
+6. BUSCA E FILTROS na aba Listagens: barra de busca por marca + filtros por
+   marketplace e por status (listada / não listada). Reaproveite o VISUAL dos
+   controles de lista já usados internamente (ListControls), mas filtrando
+   apenas sobre os dados já escopados do cliente. Pense em paginação.
+
+7. LIGHTBOX NAS IMAGENS (aba Atualizações): ao clicar numa imagem, abra uma
+   visualização ampliada (modal via React PORTAL para o z-index ficar por cima
+   de tudo). NÃO enfraqueça a sanitização: o DOMPurify no ponto único de
+   leitura continua igual; o lightbox age só na camada de render.
+
+8. CONTRASTE DO TEMA CLARO: o modo escuro está ótimo; o claro tem pouco
+   contraste e não dá para ver onde começam/terminam as áreas. Ajuste os
+   tokens: cards brancos sobre fundo levemente cinza, bordas platinum
+   VISÍVEIS, texto com contraste adequado.
+
+9. IDENTIDADE DOS MARKETPLACES: cor da marca no "pill" + ícone GENÉRICO de
+   loja/etiqueta (NÃO use logos oficiais de terceiros). Centralize as cores num
+   mapa único:
+   - Mercado Livre: fundo #FFE600, texto #2D3277
+   - Shopee: fundo #EE4D2D, texto #FFFFFF
+   - Amazon: fundo #232F3E, texto #FFFFFF, acento #FF9900
+
+Ao terminar, me mostre o portal nos dois temas e confirme que NADA de operação
+interna (tarefas, tempo, atrasos) foi exposto e que o conjunto de dados do
+cliente continua o mesmo de antes. Depois faça commit + push.
+```
+
+---
+
+## PASSO 27 — Aba "Andamento" no Portal do Cliente (Feito)
+
+Mecânica: dar ao cliente a sensação de movimento ("estamos trabalhando nisto" +
+"isto foi entregue") SEM abrir a operação interna. É a primeira NOVA fonte de
+dados no portal desde o passo 25 — por isso é passo próprio, não polimento.
+
+Decisões de produto tomadas antes de codar:
+- Fora as tarefas PADRÃO e DIÁRIAS: são internas e repetitivas, criariam um
+  mural de repetição inútil para o cliente.
+- Fora as de LISTAGEM: já vivem na aba Listagens, duplicariam.
+- Só `iniciada` e `finalizada` — nada da fila "a fazer", atrasadas ou canceladas.
+- Só título + data de conclusão. Zero tempo, prazo, atraso ou responsável.
+- OPT-OUT automático: os títulos das tarefas já são escritos pensando que serão
+  lidos por clientes, então o feed aparece sozinho, com um botão "ocultar do
+  cliente" por exceção. (Descartamos o opt-in por atrito desnecessário.)
+
+```
+Vamos adicionar uma aba "Andamento" ao PORTAL DO CLIENTE (a tela externa e
+blindada do Passo 25). É a superfície mais sensível do sistema — priorize
+ISOLAMENTO e CURADORIA acima de tudo. Leia docs/ESPECIFICACAO.md (Passo 25)
+antes de começar.
+
+REGRAS INEGOCIÁVEIS:
+- A blindagem fica no BACKEND/RLS, não só na interface. A consulta do
+  Andamento só pode retornar tarefas da EMPRESA DO TOKEN. Trocar token/URL não
+  pode vazar outra empresa.
+- Mantenha o portal SELF-CONTAINED: NÃO reutilize componentes das telas
+  internas de tarefa (eles carregam campos internos). Crie um render próprio e
+  enxuto para o cliente, selecionando SOMENTE as colunas curadas abaixo.
+- O cliente NUNCA vê: tempo gasto, prazo, atraso, quem executou, o resumo de
+  finalização (completion_note), a fila "a fazer", canceladas, nem qualquer
+  contagem operacional.
+
+MIGRATION (pequena e segura):
+- Adicione a coluna task_instances.client_hidden boolean NOT NULL default false.
+- RLS: apenas ADMIN e CONSULTOR da empresa da tarefa podem dar UPDATE nessa
+  coluna (reaproveite is_admin() / my_consultant_companies()). Colaborador NÃO
+  altera. Ninguém do portal do cliente altera.
+
+QUE TAREFAS ENTRAM NO FEED (filtro exato):
+- kind = 'unica' (exclui diárias)
+- standard_task_id IS NULL (exclui as vindas do catálogo de tarefas padrão)
+- template_type = 'padrao' (exclui as de listagem)
+- status IN ('iniciada','finalizada')
+- client_hidden = false
+- e escopadas à empresa do token.
+
+O QUE O CLIENTE VÊ DE CADA ITEM (só isto):
+- Título da tarefa.
+- Para finalizada: a DATA de conclusão (finished_at, fuso de Brasília). Sem
+  hora, sem tempo gasto.
+- Para iniciada: um marcador neutro "Em andamento". Sem data, sem prazo.
+- NADA de completion_note, responsável, tempo, prazo ou atraso.
+
+LAYOUT DA ABA:
+- Nova aba "Andamento" ao lado de "Listagens" e "Atualizações do projeto".
+- A aba SÓ aparece se houver ao menos 1 item visível.
+- Timeline curada: "Em andamento" no topo, depois os "Entregues" em ordem
+  cronológica reversa.
+- ESCALA: use a paginação no servidor já existente ("ver mais").
+- Tema claro/escuro e responsividade, no padrão visual do portal reformulado.
+
+CONTROLE "OCULTAR DO CLIENTE" (lado interno, opt-out por exceção):
+- Na tela de detalhe da tarefa (interna), para as tarefas ELEGÍVEIS ao feed,
+  um toggle "Ocultar do cliente / Mostrar ao cliente" que grava client_hidden.
+- Só admin/consultor da empresa veem e usam. Colaborador não.
+- Não mostre o controle em tarefas que nunca entrariam no feed (diária, padrão,
+  listagem) — evita ruído.
+
+VALIDAÇÃO FINAL (obrigatória):
+1. Me EXPLIQUE qual é a camada real de isolamento e como os campos
+   operacionais ficam de fora por construção (não por esconder na tela).
+2. Depois me deixe testar: conferir que NÃO aparece nenhuma diária/padrão/
+   listagem, nenhuma a_fazer/atrasada/cancelada, nenhum tempo/prazo/
+   responsável; ocultar uma tarefa pelo lado interno e confirmar que some do
+   portal; tentar burlar (trocar token, senha errada) e continuar bloqueado.
+
+Ao final, commit + push.
+```
+
+---
+
+## PASSO 28 — Indicador global de timer ativo (Feito)
+
+Problema que originou: usuários esqueciam tarefas com o timer rodando ao sair
+para o intervalo ou no fim do expediente. Até então o sistema só tinha o
+REMÉDIO (correção de tempo com auditoria, passo 16) — faltava a PREVENÇÃO.
+
+Decisões de produto:
+- Vale para os TRÊS cargos (admin e consultor também executam via "Meu
+  Trabalho" desde o passo 14).
+- O indicador não só leva à tarefa: tem "Pausar" embutido, senão a pessoa ainda
+  precisa navegar para resolver. "Finalizar" fica na tela da tarefa (exige o
+  resumo).
+- 2+ timers simultâneos contam tempo EM DOBRO — o indicador sinaliza isso com
+  destaque, porque quase sempre é engano.
+- O título da aba do navegador também mostra o timer, para denunciar mesmo com
+  a aba em segundo plano.
+
+```
+Quero adicionar um INDICADOR GLOBAL DE TIMER ATIVO, visível em todas as telas
+autenticadas, para prevenir que usuários esqueçam tarefas com o timer rodando.
+
+ONDE E PARA QUEM:
+- Num shell/layout compartilhado por TODOS os painéis autenticados (admin,
+  consultor, colaborador e "Meu Trabalho"). Todos os cargos executam tarefas.
+- Deve persistir ao navegar entre telas.
+
+QUANDO APARECE:
+- Somente quando o USUÁRIO LOGADO tem um ou mais time_entries ABERTOS
+  (ended_at IS NULL). Se não houver nenhum, não aparece.
+- ESCOPO ESTRITO: apenas os timers do próprio usuário (não confie só no RLS —
+  um admin poderia enxergar timers de terceiros).
+
+TEMPO AO VIVO (sem martelar o banco):
+- Busque os time_entries abertos e os started_at UMA vez ao montar; calcule no
+  CLIENTE, com tick de 1s. Não faça query por segundo.
+- Reatualize ao trocar de rota e com um poll leve (30-60s), para capturar
+  timers iniciados/pausados em outra aba.
+
+COMPORTAMENTO:
+- 1 timer ativo: "pill" flutuante compacto com ponto pulsante (risd), título da
+  tarefa, tempo correndo; clicar no corpo LEVA à tarefa; botão "Pausar" pausa
+  ali mesmo (reaproveite a lógica de pause existente, sem duplicar regra).
+- 2+ timers: mostra "N tarefas ativas" e expande a lista (título + tempo +
+  "Pausar" por linha). Como rodar 2 timers juntos conta tempo em DOBRO,
+  sinalize com destaque visual de atenção (discreto, não alarmista).
+
+VISUAL (não intrusivo):
+- Base da tela: desktop centralizado embaixo; mobile acima da navegação
+  inferior, respeitando safe-areas. Nunca cobrindo ações importantes.
+- Pode COLAPSAR para um chip mínimo, mas NÃO permita esconder totalmente
+  enquanto há timer ativo — o objetivo é lembrar.
+- Paleta da marca, tema claro/escuro, responsivo, sem emojis em botão.
+
+REFORÇO NO TÍTULO DA ABA:
+- Enquanto houver timer ativo, atualize o document.title ("▶ 01:23 · <tarefa>"
+  ou "▶ N tarefas ativas"). Restaure ao não haver nenhum.
+
+Teste: iniciar e ver o indicador contar em todas as telas; navegar e confirmar
+que persiste; pausar pelo indicador; abrir um segundo timer e conferir o modo
+"2+ ativas"; conferir mobile e os dois temas.
+
+Ao final, commit + push.
+```
+
+### PASSO 28.1 — Correção: tempo do indicador divergindo do timer real (Feito)
+
+Sintomas observados em produção: pill marcando 02:11 enquanto o timer principal
+marcava 02:26 (atraso progressivo), e pill zerando para 00:00 ao navegar
+enquanto o timer real estava em 06:10.
+
+Causa suspeitada: o pill ACUMULARIA ticks a partir do momento em que montou, em
+vez de DERIVAR o tempo do `started_at` do banco.
+
+**Causa REAL (achada na investigação, diferente da suspeita):** o pill já
+derivava de `started_at` — o que faltava era o `total_seconds`. Ele exibia
+apenas o INTERVALO ABERTO (`agora − started_at`), enquanto a tela da tarefa
+exibe o TOTAL (`total_seconds + intervalo aberto`). Por isso o pill marcava
+00:00 logo após retomar uma tarefa com 6h10 já registradas, e por isso a
+diferença parecia um atraso progressivo quando na verdade era o offset fixo do
+tempo anterior. Um indicador que SUBESTIMA o tempo é pior que nenhum —
+tranquiliza justamente quem deveria estar sendo lembrado.
+
+APLICADO: helper compartilhado `src/lib/timer.ts` (`taskElapsedSeconds`,
+`formatClock`, `formatElapsedCompact`, `parseStartedAt`) como fonte de verdade
+única, usado pelo `Timer` da tela da tarefa e pelo `ActiveTimerIndicator`. O
+pill passou a buscar `task_instances.total_seconds` junto do `time_entry`
+aberto. O `parseStartedAt` marca a string como UTC caso venha sem offset (sem
+isso, o fuso de Brasília deslocaria o tempo em 3h). Somado a isso, o pill
+ressincroniza também no evento `online` (reconexão), além do `visibilitychange`
+e do poll que já existiam.
+
+```
+BUG no indicador global de timer ativo (o pill flutuante): o tempo mostrado não
+bate com o timer da tela da tarefa. Dois sintomas: atraso progressivo (~15s) e
+volta para 00:00 ao navegar.
+
+CAUSA PROVÁVEL: o pill ACUMULA ticks a partir da montagem, em vez de DERIVAR do
+started_at vindo do banco. Confirme antes de corrigir.
+
+CORREÇÃO — regra única:
+- O tempo exibido NUNCA é acumulado. A cada tick, RECALCULE do zero:
+  tempo = total_seconds (do banco) + (Date.now() - started_at do time_entry
+  aberto). O setInterval serve apenas para disparar o re-render.
+- Assim, remontar, trocar de rota ou perder ticks não afeta o número — ele se
+  autocorrige a cada segundo.
+- Garanta que started_at é interpretado como UTC/timestamptz (não parseie como
+  hora local).
+
+CONSISTÊNCIA COM O TIMER PRINCIPAL:
+- O pill deve mostrar EXATAMENTE o mesmo número da tela da tarefa: o tempo
+  TOTAL da tarefa (total_seconds + intervalo aberto), não só a sessão atual.
+- Se os dois têm lógicas separadas, EXTRAIA para um único helper compartilhado
+  (ex: lib/timer.ts) e use nos dois. Uma fonte de verdade só.
+
+ROBUSTEZ:
+- Ao voltar o foco para a aba (visibilitychange) e ao reconectar, ressincronize
+  buscando os time_entries abertos, para capturar pausas de outra aba.
+- Se foi pausado/finalizado em outro lugar, o pill deve sumir, não continuar
+  contando um timer que não existe mais.
+
+TESTE: comparar pill × timer principal por alguns minutos (devem bater ao
+segundo); navegar e confirmar que não zera; deixar a aba em segundo plano 2-3
+minutos e confirmar a autocorreção; pausar pelo pill.
+
+Ao final, commit + push.
+```
+
+---
+
+## PASSO 29 — Otimização de performance: navegação lenta (Feito)
+
+Sintoma relatado: lentidão ao transitar entre telas, com a Vercel um pouco mais
+lenta que o build de produção local (`next start`).
+
+Diagnóstico (o achado importante): **o gargalo NÃO era query nem falta de
+índice**. O banco é pequeno (398 task_instances) e o Postgres responde
+instantaneamente. O custo era: (a) número de idas ao Supabase × latência de
+cada ida, e (b) — o maior de todos — `isomorphic-dompurify` (jsdom) importado
+no topo de `src/lib/notes.ts`, custando ~1,5s de carregamento a cada COLD START
+em 4 rotas, incluindo o portal do cliente. Local o processo fica vivo e paga
+uma vez; na Vercel paga a cada cold start. Isso explicava exatamente o
+"intermitente" e o "Vercel mais lenta que local".
+
+APLICADO:
+- ✅ jsdom fora do caminho de render (carregador preguiçoso memoizado em
+  `getNoteSanitizer`). Medido: 739ms → 105ms de carregamento do módulo da rota
+  (−634ms por cold start). Versão do isomorphic-dompurify mantida em **2.26.0**
+  — 2.27+ derruba a produção com ERR_REQUIRE_ESM.
+- ✅ Região das funções da Vercel alinhada para **gru1 (São Paulo)**, junto do
+  Supabase em sa-east-1. Corta ~60% da latência de cada ida ao banco. Feito
+  pelo painel; NÃO há `vercel.json` (decisão consciente: evitar duas fontes de
+  verdade).
+- ✅ `guardRole` memoizado com `cache()` do React — deduplica a validação
+  dentro do mesmo request, sem enfraquecer autorização (cada página continua
+  fazendo a própria checagem).
+- ✅ Waterfalls desfeitos: central da empresa (loadCompanyCentral +
+  loadCompanyListings + loadCompanyNotes em Promise.all, 3 ondas → 1);
+  `/admin/tarefas` e `/colaborador` com labels em paralelo.
+
+RECUSADO / ADIADO (decisões conscientes, não esquecimento):
+- ❌ **Middleware repassando `user.id` via header** para matar a validação
+  duplicada de auth: RECUSADO. Economizaria ~110ms, mas transformaria um header
+  de request em fonte de verdade de identidade, num sistema com tela pública de
+  cliente. Risco não compensa.
+- ❌ **Join direto do criador da tarefa** (em vez da RPC `display_profiles`):
+  RECUSADO. A policy `profiles_select` não deixa um consultor ler perfil de
+  OUTRO consultor — o join devolveria null e o "criada por [nome]" sumiria
+  SILENCIOSAMENTE de 64 tarefas na central do consultor, para ganhar 41ms. O
+  caminho seguro seria uma RPC SECURITY DEFINER com o nome embutido; é mudança
+  de modelagem, merece passo próprio.
+- ⏸️ **Layout por área (`layout.tsx`) para a sidebar parar de piscar**: ADIADO
+  por decisão de produto. O ganho é de aparência, não de velocidade, e o custo
+  é refatoração estrutural em todas as páginas. Se um dia for feito, a opção
+  escolhida foi a **2 — título/subtítulo/voltar descem para o conteúdo da
+  página** (mantém tudo server-rendered, sem flicker de título e sem duplicar a
+  árvore de rotas como exigiria parallel routes).
+- ⏸️ **Índices novos**: NÃO criar agora. Com 398 linhas o seq scan é mais
+  rápido; `idx_task_instances_status` inclusive é quase inútil (baixa
+  cardinalidade). Revisitar quando o volume justificar.
+
+Instrumentação: `PERF_LOG=1` liga tabelas `[perf]` por tela (desligada por
+padrão, custo zero em produção; funciona também nos Runtime Logs da Vercel).
+
+---
+
+## PASSO 30 — Governança do acesso do cliente + "Ver como cliente" 
+
+⚠️ Este passo é PRÉ-REQUISITO do passo 31 (mensagens). A garantia de que um
+funcionário não forja mensagem de cliente depende desta base: se a senha do
+portal for legível por gente de dentro, qualquer regra de autoria é aparência.
+
+Decisões de produto tomadas antes de codar:
+- Só ADMIN vê/gera/revoga/redefine link e senha. Consultor e colaborador perdem
+  esse acesso por completo — não por proibição, mas porque a credencial nunca
+  passa perto deles.
+- A senha é hasheada e revelada UMA ÚNICA VEZ, na geração. Nem o admin recupera
+  depois. Assim, se passar pelo cliente exige REDEFINIR a senha — o que derruba
+  o acesso do cliente e deixa rastro em auditoria (deixa de ser golpe
+  silencioso).
+- Entrega do acesso ao cliente: **manual, pelo admin, por fora do sistema**
+  (opção A). O sistema NÃO envia e-mail hoje (a mensageria existente é Digisac/
+  WhatsApp, e credencial em grupo de WhatsApp não é adequado). Integrar
+  provedor de e-mail fica para o futuro, se necessário.
+- Consultor/colaborador NÃO precisam do portal: a conversa e os dados vivem no
+  banco, e eles acessam pela central da empresa com a própria conta. O portal é
+  só a janela de quem não tem conta.
+- Limite honesto e consciente: o ADMIN vê a senha no instante em que a gera.
+  Admins seguem sendo a fronteira de confiança. Eliminar isso exigiria abandonar
+  senha fixa e usar link mágico por e-mail.
+
+```
+Vamos reformular a GOVERNANÇA DO ACESSO DO CLIENTE (o link + senha do Passo 25)
+e adicionar um "Ver como cliente" para a equipe. Isso é pré-requisito de um
+recurso de mensagens que vem depois. Leia docs/ESPECIFICACAO.md (Passo 25)
+antes de começar.
+
+PARTE 0 — DIAGNÓSTICO (faça primeiro e me REPORTE antes de mudar):
+- Como a senha do portal está armazenada hoje? Texto puro, hash fraco ou hash
+  forte? E ela é exibida em alguma tela depois de criada?
+- Quem hoje consegue ver/gerar/revogar link e senha (admin, consultor)?
+Se for texto puro, isso é o item mais urgente.
+
+PARTE 1 — SÓ ADMIN GERENCIA O ACESSO:
+- Ver, gerar, revogar e redefinir link/senha passa a ser exclusivo de ADMIN.
+- Reforce no BANCO (RLS), não só escondendo botão: nenhuma query de consultor/
+  colaborador pode retornar o token nem o hash da senha.
+
+PARTE 2 — SENHA HASHEADA E REVELADA UMA ÚNICA VEZ:
+- Guardar com HASH FORTE (bcrypt ou pgcrypto), nunca recuperável. Migre o que
+  existe hoje.
+- Ao gerar/redefinir, a senha em claro é exibida UMA ÚNICA VEZ ao admin, com
+  botão de copiar e aviso claro. Depois disso, nenhuma tela e nenhuma query
+  devolve a senha — nem para admin.
+- Se o cliente perder, o caminho é REDEFINIR, nunca consultar.
+- A verificação continua no servidor, com o rate limit já existente.
+
+PARTE 3 — AUDITORIA:
+- Registre toda geração, redefinição e revogação: quem, quando, qual empresa,
+  qual ação. Reaproveite o padrão de auditoria já usado no projeto.
+- Mostre o histórico ao admin na tela de gestão do acesso.
+
+PARTE 4 — "VER COMO CLIENTE" (pré-visualização autenticada):
+- Admin e consultor (este só nas empresas dele) abrem uma PRÉ-VISUALIZAÇÃO
+  somente-leitura da tela do cliente, pela PRÓPRIA CONTA — sem token e sem
+  senha.
+- SEGURANÇA: não pode usar nem revelar o token/senha, e não cria sessão de
+  portal. É rota interna que reaproveita os COMPONENTES de apresentação do
+  portal, alimentados por consulta escopada e autorizada pelo cargo.
+- Somente LEITURA: nenhuma ação de escrita nesse modo.
+- Deixe inequívoco que é pré-visualização (faixa discreta no topo,
+  "Pré-visualização — é isto que o cliente vê", com botão de sair).
+
+UX/UI — padrão alto (requisito, não detalhe):
+- Tela de gestão do acesso clara e tranquilizadora: estado (ativo/revogado),
+  data de criação, quem gerou, link com copiar, e ações separadas por peso —
+  gerar/copiar discretas, REVOGAR e REDEFINIR com confirmação explícita.
+- O momento de revelar a senha merece cuidado: bloco bem desenhado, senha
+  legível, copiar em um clique, aviso de "só desta vez" claro sem ser alarmista.
+- Identidade da marca, tema claro/escuro, responsivo, foco de teclado visível.
+
+VALIDAÇÃO (me deixe testar):
+- Consultor e colaborador não obtêm token/senha por tela NEM por query direta.
+- Gerar senha: aparece uma vez, some depois, e o acesso funciona.
+- Redefinir: o acesso antigo para de funcionar e fica na auditoria.
+- "Ver como cliente": consultor abre só as empresas dele; tela idêntica à do
+  cliente, somente leitura, sem expor credencial.
+
+Ao final, me EXPLIQUE qual é a garantia real de que um funcionário não consegue
+se passar pelo cliente — e qual é o limite honesto dessa garantia. Depois
+commit + push. As MENSAGENS vêm no próximo passo; não faça agora.
+```
+
+---
+
+## PASSO 31 — Mensagens cliente ↔ equipe (planejado, depende do 30)
+
+⚠️ É a primeira vez que o portal RECEBE ESCRITA — até aqui era só leitura, o
+que simplificava muito a blindagem. Só comece depois do passo 30 validado.
+
+Decisões de produto:
+- O cliente escreve SEM criar conta, pela sessão do portal que já existe.
+- A equipe responde pela central da empresa, com a conta autenticada — nunca
+  pelo portal. Uma conversa, duas janelas.
+- Autoria é carimbada no SERVIDOR pela sessão, nunca vinda do navegador.
+- Mensagens IMUTÁVEIS: ninguém edita nem apaga, nem admin.
+- Texto puro (sem HTML) — mantém a rota do portal leve, sem jsdom.
+
+```
+Vamos adicionar MENSAGENS entre o cliente e a equipe. É a primeira vez que o
+PORTAL DO CLIENTE recebe ESCRITA. Trate com o mesmo rigor do Passo 25. Leia
+docs/ESPECIFICACAO.md (Passos 25 e 30) antes de começar. O passo 30
+(governança do acesso: só admin, senha hasheada e revelada uma vez) precisa
+estar aplicado — a integridade da autoria depende dele.
+
+MODELO DE DADOS (migration):
+- Tabela company_messages: company_id, body (TEXTO PURO, sem HTML),
+  author_type ('cliente' | 'interno'), author_id (uuid, NULL quando cliente),
+  created_at, e metadados de proveniência para mensagens de cliente (hash do
+  IP, user agent, id da sessão do portal).
+- MENSAGENS SÃO IMUTÁVEIS: não crie policy de UPDATE nem de DELETE para
+  ninguém — nem admin.
+- Limite de tamanho do body (ex: 2000 caracteres), validado no servidor.
+
+INTEGRIDADE DE AUTORIA (requisito central):
+- author_type e author_id NUNCA vêm do navegador. São carimbados no SERVIDOR:
+  · Sessão do portal -> author_type='cliente', author_id NULL.
+  · Usuário logado  -> author_type='interno', author_id = auth.uid().
+- RLS: nenhum usuário autenticado pode inserir linha com author_type='cliente'.
+  Nenhuma tela interna oferece caminho para escrever como cliente.
+- Me EXPLIQUE ao final a garantia real de autoria e o LIMITE honesto dela.
+
+ESCRITA DO CLIENTE (no portal):
+- Campo de mensagem, sem criar conta — usa a sessão do portal existente.
+- TEXTO PURO apenas. Escape na exibição. NÃO passe por DOMPurify/jsdom
+  (mantemos essa rota leve, como otimizado no passo 29).
+- Sem anexos nesta etapa.
+- RATE LIMIT no envio, reaproveitando o padrão do rate limit da senha.
+- ISOLAMENTO: a consulta só retorna mensagens da empresa do token, garantido no
+  BACKEND/RLS.
+
+RESPOSTA INTERNA:
+- Na central da empresa (admin e consultor) e na tela da empresa do
+  colaborador, aba/seção "Mensagens" com a conversa em ordem cronológica e o
+  campo de resposta.
+- Visualmente ÓBVIO quem falou: cliente vs. equipe (com o nome de quem
+  respondeu, do lado interno).
+- O cliente vê as respostas no portal, mas NUNCA nada operacional — a curadoria
+  do Passo 25 continua valendo.
+- Escopo: consultor só nas empresas dele; admin em todas.
+
+Identidade visual, tema claro/escuro, responsividade nos dois lados. Escala:
+paginação/"ver mais" na conversa.
+
+VALIDAÇÃO: cliente envia e equipe responde; tentar burlar (trocar token, senha
+errada, enviar para outra empresa, forjar author_type pelo payload) — tudo
+bloqueado; ninguém edita nem apaga mensagem (nem admin); cliente segue sem ver
+nada operacional.
+
+Ao final, commit + push. A caixa de entrada vem no próximo passo.
+```
+
+---
+
+## PASSO 32 — Caixa de entrada de mensagens + badge de não lidas (planejado)
+
+Requisito que originou: consultores e colaboradores NÃO podem ser obrigados a
+abrir o portal (nem a central) de cada cliente para descobrir se há mensagem.
+Tem que ser prático e imediato.
+
+Decisão pendente antes de codar: colaboradores também recebem notificação? O
+vínculo deles com a empresa é DERIVADO (têm tarefa lá), então tende a ser
+barulhento. Sugestão: notificar **consultores da empresa + admins**; o
+colaborador vê a conversa ao abrir a empresa, sem badge próprio.
+
+```
+Adicione uma CAIXA DE ENTRADA única de mensagens, para que ninguém precise
+abrir empresa por empresa para saber se um cliente escreveu.
+
+- Item na sidebar (visível de qualquer tela) com BADGE de não lidas.
+- Tela de caixa de entrada listando as conversas com mensagem não lida
+  primeiro: nome da empresa, trecho da última mensagem, data. Clicar leva
+  direto à conversa daquela empresa.
+- Escopo: admin vê todas; consultor só as empresas dele. Confirme no RLS.
+- Marcação de lido por USUÁRIO (uma tabela de leitura por usuário/empresa), não
+  global — se o admin lê, o consultor não pode perder a notificação.
+- Pense em custo: o badge não pode disparar consulta pesada a cada navegação.
+- Identidade visual, tema claro/escuro, responsivo.
+
+Teste: cliente envia mensagem e o badge aparece para o consultor certo; ler
+zera o badge só de quem leu; consultor não vê conversa de empresa que não é
+dele.
+```
+
+---
+
+# ITENS ARQUIVADOS E DECISÕES EM ABERTO
+
+Registro do que foi CONSCIENTEMENTE deixado de lado, para não parecer
+esquecimento numa retomada futura:
+
+- **Consultor/admin atribuindo tarefa a outro CONSULTOR** — prompt foi
+  escrito e depois ARQUIVADO por decisão do Mauricio ("vou dar pra trás").
+  Hoje os seletores de responsável listam colaborador + admin. Se retomar,
+  o cuidado central é: o consultor que RECEBE a tarefa deve poder executá-la
+  sem ganhar acesso ao resto da empresa de outro consultor.
+- **Agregado do dashboard via RPC** — PENDÊNCIA CONHECIDA e não é só
+  performance: `/admin` busca todas as task_instances do período sem `.limit()`
+  e agrega em JavaScript. Com o volume crescendo (recorrência diária × 118
+  empresas), o teto padrão de linhas do PostgREST pode fazer os números do
+  dashboard ficarem **silenciosamente errados** — sem erro, sem aviso. O
+  caminho é agregar no banco, como já se faz em `company_overview`.
+- **Impedir dois timers simultâneos** — em aberto. Hoje o passo 28 apenas
+  TORNA VISÍVEL que há mais de um rodando (o que conta tempo em dobro). Falta
+  decidir se o sistema deve pausar o anterior automaticamente ao iniciar outro.
+- **Layout por área / sidebar que pisca** — adiado (ver passo 29).
+- **Sistema de notificações completo** (in-app + WhatsApp + e-mail, 4 camadas)
+  — adiado desde antes; o passo 32 resolve só a fatia de mensagens.
+- **Módulo estilo Monday** (quadros/colunas flexíveis, faturamento por cliente)
+  — existe plano detalhado em PLANO_FASE2_QUADROS.md, sem decisão.
+- **Logos oficiais dos marketplaces** — decidido NÃO usar (passo 26). Se um dia
+  mudar, as cores estão centralizadas num mapa único.
+- **Envio automático do acesso por e-mail** — o sistema não manda e-mail hoje.
+  Entrega segue manual pelo admin (passo 30).
+
+
 ## Dicas gerais ao usar o Claude Code
 
 - **Teste cada passo no navegador** antes de avançar. Se algo quebrar, 

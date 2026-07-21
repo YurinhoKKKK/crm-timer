@@ -130,7 +130,10 @@
       "Bash(cp src/lib/notes.ts /tmp/notes-depois.ts)",
       "Bash(git stash *)",
       "PowerShell($c = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue; if \\($c\\) { $c | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Write-Output \"matando PID $_\"; Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } } else { Write-Output \"porta 3000 livre\" })",
-      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} em %{time_total}s\\\\n\" http://localhost:3000/login)"
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} em %{time_total}s\\\\n\" http://localhost:3000/login)",
+      "Bash(awk *)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:3000/login)",
+      "PowerShell(git *)"
     ]
   }
 }

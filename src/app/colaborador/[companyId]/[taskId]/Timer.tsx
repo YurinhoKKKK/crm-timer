@@ -11,6 +11,8 @@ import {
   emitTimerSync,
   type TimerSyncDetail,
 } from "@/lib/timer-sync";
+// Mesmos helpers do indicador global: uma fonte de verdade só (passo 28.1).
+import { formatClock, parseStartedAt, taskElapsedSeconds } from "@/lib/timer";
 import {
   startTimer,
   pauseTimer,
@@ -18,15 +20,6 @@ import {
   finishListingTask,
   type ListingResultInput,
 } from "../../actions";
-
-function formatClock(totalSeconds: number): string {
-  const s = Math.max(0, Math.floor(totalSeconds));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(h)}:${pad(m)}:${pad(sec)}`;
-}
 
 function comboKey(brandId: string, mk: ListingMarketplace): string {
   return `${brandId}|${mk}`;
@@ -58,8 +51,8 @@ export default function Timer({
   const isListing = !!listing;
   const [localStatus, setLocalStatus] = useState<TaskStatus>(status);
   const [base, setBase] = useState(totalSeconds);
-  const [startedAtMs, setStartedAtMs] = useState<number | null>(
-    openStartedAt ? Date.parse(openStartedAt) : null
+  const [startedAtMs, setStartedAtMs] = useState<number | null>(() =>
+    parseStartedAt(openStartedAt)
   );
   const running = startedAtMs !== null;
 
@@ -103,8 +96,8 @@ export default function Timer({
     return () => window.clearInterval(id);
   }, [running]);
 
-  const elapsed =
-    base + (running && startedAtMs ? (nowMs - startedAtMs) / 1000 : 0);
+  // Derivado a cada tick, nunca acumulado (passo 28.1).
+  const elapsed = taskElapsedSeconds(base, startedAtMs, nowMs);
 
   // Se o indicador global pausar ESTA tarefa (pill no rodapé), sincroniza o
   // cronômetro da tela na hora — sem isso ele continuaria correndo visualmente.
@@ -133,7 +126,7 @@ export default function Timer({
       setError(err);
       return;
     }
-    setStartedAtMs(startedAt ? Date.parse(startedAt) : Date.now());
+    setStartedAtMs(parseStartedAt(startedAt) ?? Date.now());
     setLocalStatus("iniciada");
     emitTimerSync({ taskId, action: "start", source: "page" });
     startTransition(() => router.refresh());

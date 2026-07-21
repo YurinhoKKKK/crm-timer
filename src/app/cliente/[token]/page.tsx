@@ -6,7 +6,9 @@ import { getNoteSanitizer } from "@/lib/notes";
 import {
   CLIENT_SESSION_COOKIE,
   PORTAL_PROGRESS_PAGE,
+  PORTAL_MESSAGES_PAGE,
   type PortalData,
+  type PortalMessages,
   type PortalProgress,
 } from "@/lib/client-portal";
 import ClientPortalLogin from "./ClientPortalLogin";
@@ -35,11 +37,13 @@ export default async function ClientePortalPage({
 
   let data: PortalData | null = null;
   let progress: PortalProgress | null = null;
+  let messages: PortalMessages | null = null;
   if (secret) {
     const supabase = await createClient();
-    // Conteúdo + primeira página do Andamento (paginado no servidor), ambos
-    // derivados da MESMA sessão validada — nenhuma outra fonte de dados.
-    const [dataRes, progressRes] = await Promise.all([
+    // Conteúdo + primeira página do Andamento e das Mensagens (paginados no
+    // servidor), todos derivados da MESMA sessão validada — nenhuma outra
+    // fonte de dados. Em paralelo: são independentes entre si.
+    const [dataRes, progressRes, messagesRes] = await Promise.all([
       supabase.rpc("client_portal_data", {
         p_token: params.token,
         p_session: secret,
@@ -50,9 +54,16 @@ export default async function ClientePortalPage({
         p_limit: PORTAL_PROGRESS_PAGE,
         p_offset: 0,
       }),
+      supabase.rpc("client_portal_messages", {
+        p_token: params.token,
+        p_session: secret,
+        p_limit: PORTAL_MESSAGES_PAGE,
+        p_offset: 0,
+      }),
     ]);
     data = (dataRes.data as PortalData | null) ?? null;
     progress = (progressRes.data as PortalProgress | null) ?? null;
+    messages = (messagesRes.data as PortalMessages | null) ?? null;
   }
 
   // Sem sessão válida PARA ESTE token (expirada, revogada ou de outra
@@ -81,6 +92,7 @@ export default async function ClientePortalPage({
       listings={data.listings}
       progress={progress ?? { total: 0, items: [] }}
       updates={updates}
+      messages={messages ?? { total: 0, items: [] }}
       source={{ mode: "portal", token: params.token }}
       actions={
         <>

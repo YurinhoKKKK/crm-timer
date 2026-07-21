@@ -2,20 +2,23 @@
 
 import { useState, type ReactNode } from "react";
 
-type Tab = "overview" | "listings" | "notes";
+type Tab = "overview" | "listings" | "notes" | "messages";
 
 // Alterna entre "Visão geral" (a central completa do passo 19), "Minhas
-// Listagens" (as entregas de listagem da empresa, passo 23) e "Anotações"
-// (rich text, passo 24). Os conteúdos são renderizados no servidor e passados
-// como slots; aqui só escolhemos a aba.
+// Listagens" (as entregas de listagem da empresa, passo 23), "Anotações"
+// (rich text, passo 24) e "Mensagens" (conversa com o cliente, passo 31). Os
+// conteúdos são renderizados no servidor e passados como slots; aqui só
+// escolhemos a aba.
 export default function CompanyCentralTabs({
   overview,
   listings,
   notes,
+  messages,
 }: {
   overview: ReactNode;
   listings: ReactNode;
   notes: ReactNode;
+  messages: ReactNode;
 }) {
   const [tab, setTab] = useState<Tab>("overview");
 
@@ -30,6 +33,7 @@ export default function CompanyCentralTabs({
     { key: "overview", label: "Visão geral", content: overview },
     { key: "listings", label: "Minhas Listagens", content: listings },
     { key: "notes", label: "Anotações", content: notes },
+    { key: "messages", label: "Mensagens", content: messages },
   ];
 
   return (

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type {
   PortalListing,
+  PortalMessages,
   PortalProgress,
   PortalSource,
   PortalUpdate,
@@ -10,6 +11,7 @@ import type {
 import PortalListings from "./PortalListings";
 import PortalUpdates from "./PortalUpdates";
 import PortalProgressFeed from "./PortalProgressFeed";
+import PortalMessagesTab from "./PortalMessages";
 
 // Corpo do portal do cliente em abas: Listagens, Andamento (só aparece se o
 // feed curado tiver ao menos 1 item) e Atualizações do projeto. Componente
@@ -17,18 +19,20 @@ import PortalProgressFeed from "./PortalProgressFeed";
 // página server buscou (client_portal_data / client_portal_progress) — aqui
 // não existe nenhuma consulta, só apresentação.
 
-type Tab = "listagens" | "andamento" | "atualizacoes";
+type Tab = "listagens" | "andamento" | "atualizacoes" | "mensagens";
 
 export default function PortalContent({
   source,
   listings,
   progress,
   updates,
+  messages,
 }: {
   source: PortalSource;
   listings: PortalListing[];
   progress: PortalProgress;
   updates: PortalUpdate[];
+  messages: PortalMessages;
 }) {
   const [tab, setTab] = useState<Tab>("listagens");
   const showProgress = progress.total > 0;
@@ -67,6 +71,16 @@ export default function PortalContent({
           label="Atualizações do projeto"
           count={updates.length}
         />
+        {/* Diferente de Andamento, esta aba aparece SEMPRE, mesmo vazia: se ela
+            só surgisse depois da primeira mensagem, o cliente nunca
+            descobriria que pode falar com a equipe. */}
+        <TabButton
+          id="tab-mensagens"
+          active={active === "mensagens"}
+          onClick={() => setTab("mensagens")}
+          label="Mensagens"
+          count={messages.total}
+        />
       </div>
 
       <div
@@ -79,6 +93,8 @@ export default function PortalContent({
           <PortalListings listings={listings} />
         ) : active === "andamento" ? (
           <PortalProgressFeed source={source} initial={progress} />
+        ) : active === "mensagens" ? (
+          <PortalMessagesTab source={source} initial={messages} />
         ) : (
           <PortalUpdates updates={updates} />
         )}

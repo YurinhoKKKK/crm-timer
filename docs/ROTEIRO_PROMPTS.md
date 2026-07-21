@@ -1427,7 +1427,56 @@ fixa e adotar link mágico por e-mail — o sistema não envia e-mail hoje.
 
 ---
 
-## PASSO 31 — Mensagens cliente ↔ equipe (planejado, depende do 30)
+## PASSO 31 — Mensagens cliente ↔ equipe (Feito)
+
+**Decisões tomadas na implementação:**
+- **Colaborador também responde** (como o roteiro previa), nas empresas em que
+  tem tarefa — o mesmo vínculo derivado que a RLS já usa. Foi uma escolha
+  consciente: a alternativa era deixá-lo só ler, para que a voz com o cliente
+  ficasse com consultor/admin.
+- Aba **"Mensagens" sempre visível** no portal, mesmo vazia — diferente da aba
+  Andamento, que só aparece se houver itens. Se ela só surgisse depois da
+  primeira mensagem, o cliente nunca descobriria que pode falar.
+- Do lado do cliente, a resposta da equipe é assinada com o **primeiro nome**
+  de quem respondeu. É uma conversa, e assinar constrói relação; nada de
+  cargo, e-mail ou id.
+- Rate limit: **10 mensagens por empresa a cada 10 minutos**, no mesmo espírito
+  da trava de senha do passo 25.
+- **IP guardado só como hash** (sha256), junto de user agent e id da sessão —
+  o suficiente para distinguir origens em caso de abuso, sem coletar o IP.
+
+### Validação executada no banco (transações revertidas)
+
+| Tentativa | Resultado |
+|---|---|
+| Consultor responde na empresa dele | permitido |
+| Consultor responde em empresa de outro | bloqueado pela RLS |
+| Consultor **forja mensagem como cliente** | bloqueado pela RLS |
+| Consultor assina por outra pessoa da equipe | bloqueado pela RLS |
+| Consultor edita / apaga a própria mensagem | bloqueado (0 linhas) |
+| **Admin** edita / apaga / forja como cliente | bloqueado |
+| Cliente envia com segredo de sessão forjado | recusado |
+| 11ª mensagem em 10 min | recusada (rate limit) |
+| Corpo com 2500 caracteres | recusado |
+| Mensagem de outra empresa aparece ao cliente? | não |
+| IP em claro no banco? | não, só hash sha256 |
+
+**Garantia real de autoria — e o limite honesto.** `author_type` e `author_id`
+nunca vêm do navegador, e os dois caminhos de escrita são disjuntos: o portal
+só escreve por uma função SECURITY DEFINER que deriva a empresa da sessão e
+grava `'cliente'` com `author_id` NULL; o lado interno escreve por INSERT
+direto, com a policy exigindo `author_type='interno'` **e**
+`author_id = auth.uid()`. Como não existe WITH CHECK que aceite `'cliente'`
+vindo de um usuário autenticado, ninguém de dentro forja uma fala do cliente —
+nem admin, e nem montando o payload à mão. **O limite:** quem tiver a senha do
+portal pode escrever como o cliente, porque é exatamente isso que ser o cliente
+significa aqui. Por isso o passo 30 era pré-requisito — a senha não é
+recuperável e só o admin a gera, então usá-la exige redefinir, o que derruba o
+acesso do cliente e deixa rastro na auditoria.
+
+---
+
+## PASSO 31 (prompt original)
 
 ⚠️ É a primeira vez que o portal RECEBE ESCRITA — até aqui era só leitura, o
 que simplificava muito a blindagem. Só comece depois do passo 30 validado.
@@ -1493,6 +1542,63 @@ nada operacional.
 
 Ao final, commit + push. A caixa de entrada vem no próximo passo.
 ```
+
+---
+
+### PASSO 31.1 — Mensagens em tempo real (Feito)
+
+Sintoma: as mensagens só apareciam ao atualizar a página, às vezes só depois de
+trocar de tela algumas vezes. Duas causas, tratadas em separado:
+
+**CAUSA A — cache de navegação.** As rotas já eram dinâmicas no servidor (usam
+cookies); o "trocar de tela algumas vezes" era o **Router Cache do cliente**
+(Next reaproveita o payload da rota por ~30s ao navegar). Correção escolhida:
+as DUAS janelas da conversa **se ressincronizam sozinhas ao montar, ao voltar o
+foco (visibilitychange) e ao reconectar (online)** — a conversa nunca fica
+presa num payload velho. Zerar o `staleTimes` global foi CONSCIENTEMENTE
+evitado: puniria a navegação inteira para consertar uma tela (disciplina do
+passo 29).
+
+**CAUSA B — sem assinatura em tempo real.** Dois canais, um por lado:
+
+- **Lado interno (equipe): Supabase Realtime** direto na tabela (migration
+  `0034`: `company_messages` na publication `supabase_realtime` — é a primeira
+  tabela do projeto com Realtime). A conexão usa o JWT do usuário, então a
+  ENTREGA passa pelo RLS: o servidor de Realtime avalia a policy `cm_select`
+  por assinante antes de entregar — o filtro por `company_id` no canal é
+  eficiência, a segurança é a policy. O canal só existe com a tela de
+  mensagens montada (a central monta só a aba ativa), nada de canal aberto em
+  todas as telas.
+- **Lado do cliente (portal): SSE**, rota própria
+  `/cliente/[token]/events`. O cliente NÃO ganha assinatura de banco (não tem
+  conta e não vai ganhar credencial por isso): o navegador dele fala só com a
+  nossa rota, que valida a sessão (cookie HttpOnly + token) e consulta
+  `client_portal_messages_since` (SECURITY DEFINER, escopo derivado DA SESSÃO)
+  a cada 3s, empurrando novidades. A sessão é revalidada A CADA consulta —
+  senha trocada/acesso revogado encerra o stream na hora (evento `end`, o
+  navegador não reconecta). Heartbeat a cada ~21s contra proxies; conexão
+  fechada com a aba oculta; reconexão automática do EventSource quando o teto
+  da função derruba o stream (`maxDuration 300`). Plano B (polling 5s) **não
+  foi necessário**.
+
+**Princípio comum (o mesmo do passo 28.1):** o evento é só um SINAL. A tela
+sempre se reconstrói buscando a página mais recente e fazendo **merge por id**
+(`lib/use-conversation.ts`, hook compartilhado). Evento perdido, duplicado ou
+fora de ordem não corrompe nada — a próxima ressincronização corrige.
+
+**Experiência:** envio otimista ("Enviando…", erro marca a bolha com
+"descartar"), deduplicação por id, "ver mais" convivendo com o tempo real, e
+rolagem que só acompanha mensagem nova se o usuário já estiver no fim da
+conversa (sentinela com IntersectionObserver — nunca arrasta quem lê o
+histórico). Segurança inalterada: autoria carimbada no servidor, mensagens
+imutáveis, isolamento por empresa também no canal.
+
+Validado no banco: `client_portal_messages_since` devolve só as novas da
+empresa da sessão (a de outra empresa não vazou), recusa segredo forjado e
+retorna null após revogação (o stream encerraria). ⚠️ O teste de que um
+CONSULTOR não recebe evento Realtime de empresa alheia exige navegador com
+duas contas — está no checklist manual; a mecânica é o RLS aplicado por
+assinante, verificado na policy por SQL.
 
 ---
 

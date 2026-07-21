@@ -1,7 +1,12 @@
 "use server";
 
 import { createClient } from "@/lib/supabase-server";
-import { PORTAL_PROGRESS_PAGE, type PortalProgress } from "@/lib/client-portal";
+import {
+  PORTAL_PROGRESS_PAGE,
+  PORTAL_MESSAGES_PAGE,
+  type PortalProgress,
+  type PortalMessages,
+} from "@/lib/client-portal";
 
 // "Ver como cliente" (passo 30) — paginação do Andamento na pré-visualização.
 //
@@ -31,4 +36,27 @@ export async function clientPreviewProgressPage(
   });
   if (error) return null;
   return (data as PortalProgress | null) ?? null;
+}
+
+// Conversa na pré-visualização — SOMENTE LEITURA. Não existe caminho de envio
+// pelo preview: a equipe responde pela central, com a conta autenticada.
+export async function clientPreviewMessagesPage(
+  companyId: string,
+  offset: number
+): Promise<PortalMessages | null> {
+  if (!companyId) return null;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data, error } = await supabase.rpc("client_portal_preview_messages", {
+    p_company: companyId,
+    p_limit: PORTAL_MESSAGES_PAGE,
+    p_offset: Math.max(0, Math.floor(offset)),
+  });
+  if (error) return null;
+  return (data as PortalMessages | null) ?? null;
 }

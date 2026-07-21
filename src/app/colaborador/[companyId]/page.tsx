@@ -6,6 +6,8 @@ import LabelChips from "@/components/LabelChips";
 import CompanyNotes from "@/components/company-central/CompanyNotes";
 import { loadCompanyLabels } from "@/lib/labels";
 import { loadCompanyNotes } from "@/lib/notes";
+import { loadCompanyMessages } from "@/lib/messages";
+import CompanyMessages from "@/components/company-central/CompanyMessages";
 import TaskList, { type TaskItem } from "./TaskList";
 
 type CompanyRow = { id: string; name: string };
@@ -74,9 +76,10 @@ export default async function ColaboradorEmpresaPage({
   const company = companyData as CompanyRow | null;
   if (!company) notFound();
 
-  const [labels, notes] = await Promise.all([
+  const [labels, notes, messages] = await Promise.all([
     loadCompanyLabels(supabase, companyId),
     loadCompanyNotes(supabase, companyId),
+    loadCompanyMessages(supabase, companyId),
   ]);
 
   type TaskRow = Omit<TaskItem, "templateId"> & { template_id: string | null };
@@ -153,6 +156,17 @@ export default async function ColaboradorEmpresaPage({
           userId={profile.id}
           isAdmin={profile.role === "admin"}
           notes={notes}
+        />
+      </section>
+
+      {/* Mensagens do cliente (passo 31): o colaborador lê e responde nas
+          empresas em que tem tarefa — o vínculo derivado que a RLS já usa. */}
+      <section className="mt-8">
+        <h2 className="mb-4 text-base font-semibold text-fg">Mensagens</h2>
+        <CompanyMessages
+          companyId={company.id}
+          companyName={company.name}
+          initial={messages}
         />
       </section>
     </AppShell>

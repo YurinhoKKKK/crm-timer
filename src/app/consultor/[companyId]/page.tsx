@@ -8,6 +8,8 @@ import CompanyNotes from "@/components/company-central/CompanyNotes";
 import { loadCompanyCentral, type Period } from "@/lib/company-central";
 import { loadCompanyListings } from "@/lib/listing";
 import { loadCompanyNotes } from "@/lib/notes";
+import { loadCompanyMessages } from "@/lib/messages";
+import CompanyMessages from "@/components/company-central/CompanyMessages";
 
 const PERIODS: Period[] = ["hoje", "7d", "30d", "tudo"];
 
@@ -33,10 +35,11 @@ export default async function ConsultorEmpresaPage({
   // Mesma paralelização da central do admin: as três leituras são
   // independentes e cada uma é escopada pela RLS por conta própria (aqui, às
   // empresas deste consultor). Antes rodavam em cascata.
-  const [res, listings, notes] = await Promise.all([
+  const [res, listings, notes, messages] = await Promise.all([
     loadCompanyCentral(supabase, profile, params.companyId, period, false),
     loadCompanyListings(supabase, params.companyId),
     loadCompanyNotes(supabase, params.companyId),
+    loadCompanyMessages(supabase, params.companyId),
   ]);
   if (res.notFound) notFound();
 
@@ -67,6 +70,13 @@ export default async function ConsultorEmpresaPage({
               userId={profile.id}
               isAdmin={false}
               notes={notes}
+            />
+          }
+          messages={
+            <CompanyMessages
+              companyId={params.companyId}
+              companyName={res.data.company.name}
+              initial={messages}
             />
           }
         />

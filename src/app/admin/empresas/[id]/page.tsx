@@ -8,6 +8,8 @@ import CompanyNotes from "@/components/company-central/CompanyNotes";
 import { loadCompanyCentral, type Period } from "@/lib/company-central";
 import { loadCompanyListings } from "@/lib/listing";
 import { loadCompanyNotes } from "@/lib/notes";
+import { loadCompanyMessages } from "@/lib/messages";
+import CompanyMessages from "@/components/company-central/CompanyMessages";
 
 const PERIODS: Period[] = ["hoje", "7d", "30d", "tudo"];
 
@@ -33,10 +35,11 @@ export default async function EmpresaCentralPage({
   // de rede a mais); agora vão juntas. Cada uma é escopada pela RLS por conta
   // própria, então disparar as três em paralelo não amplia o que o usuário
   // enxerga: sem acesso à empresa, todas voltam vazias.
-  const [res, listings, notes] = await Promise.all([
+  const [res, listings, notes, messages] = await Promise.all([
     loadCompanyCentral(supabase, profile, params.id, period, true),
     loadCompanyListings(supabase, params.id),
     loadCompanyNotes(supabase, params.id),
+    loadCompanyMessages(supabase, params.id),
   ]);
   if (res.notFound) notFound();
 
@@ -68,6 +71,13 @@ export default async function EmpresaCentralPage({
               userId={profile.id}
               isAdmin
               notes={notes}
+            />
+          }
+          messages={
+            <CompanyMessages
+              companyId={params.id}
+              companyName={res.data.company.name}
+              initial={messages}
             />
           }
         />

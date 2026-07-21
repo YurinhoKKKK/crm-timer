@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase-server";
-import Logo from "@/components/Logo";
 import ThemeToggle from "@/components/ThemeToggle";
 import { getNoteSanitizer } from "@/lib/notes";
 import {
@@ -12,7 +11,7 @@ import {
 } from "@/lib/client-portal";
 import ClientPortalLogin from "./ClientPortalLogin";
 import PortalLogoutButton from "./PortalLogoutButton";
-import PortalContent from "./PortalContent";
+import PortalView from "./PortalView";
 
 // Página com token na URL: nunca indexar nem seguir.
 export const metadata: Metadata = {
@@ -74,52 +73,21 @@ export default async function ClientePortalPage({
           return data!.updates.map((u) => ({ ...u, html: sanitize(u.html) }));
         })();
 
+  // A casca (hero + abas) é a MESMA do "Ver como cliente" (passo 30), para
+  // que a pré-visualização não possa divergir do que o cliente enxerga.
   return (
-    <main className="min-h-screen bg-canvas">
-      <div className="mx-auto max-w-3xl px-4 py-6 sm:py-10">
-        {/* Barra superior: logo + ações (tema e sair) */}
-        <div className="mb-6 flex items-center justify-between gap-3">
-          <Logo variant="auto" className="h-8 w-auto max-w-[160px]" />
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <PortalLogoutButton />
-          </div>
-        </div>
-
-        {/* Hero de boas-vindas com o gradiente da marca */}
-        <header className="portal-hero relative mb-8 overflow-hidden rounded-2xl p-6 shadow-pop sm:p-8">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full bg-white/10 blur-2xl"
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -bottom-28 -left-12 h-56 w-56 rounded-full bg-white/[0.07] blur-2xl"
-          />
-          <p className="relative text-xs font-semibold uppercase tracking-[0.22em] text-white/70">
-            Portal do cliente
-          </p>
-          <h1 className="relative mt-2 text-3xl font-bold tracking-tight text-white sm:text-4xl">
-            {data.company_name}
-          </h1>
-          <p className="relative mt-3 max-w-xl text-sm leading-relaxed text-white/85">
-            Bem-vindo! Aqui você acompanha as entregas e as novidades do seu
-            projeto com a Monvatti.
-          </p>
-        </header>
-
-        {/* Conteúdo em abas: Listagens, Andamento (se houver) e Atualizações */}
-        <PortalContent
-          token={params.token}
-          listings={data.listings}
-          progress={progress ?? { total: 0, items: [] }}
-          updates={updates}
-        />
-
-        <footer className="mt-8 pb-4 text-center text-xs text-fg-subtle">
-          Monvatti · acesso exclusivo do cliente
-        </footer>
-      </div>
-    </main>
+    <PortalView
+      companyName={data.company_name}
+      listings={data.listings}
+      progress={progress ?? { total: 0, items: [] }}
+      updates={updates}
+      source={{ mode: "portal", token: params.token }}
+      actions={
+        <>
+          <ThemeToggle />
+          <PortalLogoutButton />
+        </>
+      }
+    />
   );
 }

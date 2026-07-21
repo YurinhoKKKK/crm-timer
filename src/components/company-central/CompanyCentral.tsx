@@ -84,6 +84,7 @@ export default function CompanyCentral({
   period,
   editHref,
   tasksHref,
+  previewHref,
 }: {
   data: CentralData;
   period: Period;
@@ -92,6 +93,8 @@ export default function CompanyCentral({
   // Base da tela dedicada de tarefas da empresa (drill-down do funil) — muda
   // por painel: /admin/empresas/[id]/tarefas ou /consultor/[companyId]/tarefas.
   tasksHref: string;
+  // "Ver como cliente" (passo 30), também por painel.
+  previewHref: string;
 }) {
   const { company, consultants, overview: o } = data;
 
@@ -408,7 +411,8 @@ export default function CompanyCentral({
         )}
       </section>
 
-      {/* 8. Acesso do cliente (passo 25): link + senha do portal externo */}
+      {/* 8. Acesso do cliente (passos 25 e 30): link + senha do portal externo.
+          A gestão é só do admin; o consultor vê o estado e a pré-visualização. */}
       <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
         <h3 className="mb-1 font-semibold text-fg">Acesso do cliente</h3>
         <p className="mb-4 text-sm text-fg-muted">
@@ -416,7 +420,11 @@ export default function CompanyCentral({
           entregas (listagens) e as atualizações do projeto — sem ver nada da
           operação interna.
         </p>
-        <ClientAccessManager companyId={company.id} access={data.clientAccess} />
+        <ClientAccessManager
+          companyId={company.id}
+          view={data.clientAccess}
+          previewHref={previewHref}
+        />
       </section>
 
       {/* 9. Tarefas padrão desta empresa */}

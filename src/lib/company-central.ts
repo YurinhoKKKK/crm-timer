@@ -5,7 +5,12 @@ import { avatarUrl } from "@/lib/avatar";
 import { withSelf } from "@/lib/people";
 import { loadCompanyLabels, type Label } from "@/lib/labels";
 import type { GroupStats } from "@/lib/task-grouping";
-import type { ClientAccessInfo } from "@/lib/client-portal";
+import type {
+  ClientAccessAuditEntry,
+  ClientAccessInfo,
+  ClientAccessStatus,
+  ClientAccessView,
+} from "@/lib/client-portal";
 import { perfRoute } from "@/lib/perf";
 import {
   resolvePeople,
@@ -140,16 +145,20 @@ export type CentralData = {
   standards: StandardOption[];
   currentStandardTasks: { standardId: string; collaboratorId: string }[];
   collaborators: PersonOption[];
-  // Acesso do cliente (passo 25): estado atual do link, para a gestão na
-  // central. null = nunca criado. RLS: só admin/consultor da empresa leem.
-  clientAccess: ClientAccessInfo | null;
+  // Acesso do cliente (passo 30): o que vem aqui depende do CARGO — admin
+  // recebe credencial + histórico; consultor recebe apenas se existe/está
+  // ativo. Ver ClientAccessView.
+  clientAccess: ClientAccessView;
 };
 
 export async function loadCompanyCentral(
   supabase: SupabaseServer,
   self: { id: string; full_name: string },
   companyId: string,
-  period: Period
+  period: Period,
+  // Decide QUAL consulta de acesso do cliente roda (não é filtro de exibição:
+  // a do consultor não tem como devolver token nem hash).
+  isAdmin: boolean
 ): Promise<{ notFound: boolean; error?: string; data?: CentralData }> {
   const start = periodStart(period);
   const month = monthStart();
@@ -283,13 +292,15 @@ export async function loadCompanyCentral(
         .order("full_name", { ascending: true })
     ),
     perf.timed("company_labels", loadCompanyLabels(supabase, companyId)),
+    // Acesso do cliente (passo 30): a consulta MUDA por cargo. Admin recebe
+    // estado + histórico; consultor recebe só dois booleanos, por uma função
+    // que nem seleciona o token. Não é a tela que esconde — é a query que não
+    // tem como trazer.
     perf.timed(
-      "client_portal_access",
-      supabase
-        .from("client_portal_access")
-        .select("token, active, updated_at")
-        .eq("company_id", companyId)
-        .maybeSingle()
+      "acesso do cliente",
+      isAdmin
+        ? supabase.rpc("client_portal_admin_view", { p_company: companyId })
+        : supabase.rpc("client_portal_status", { p_company: companyId })
     ),
   ]);
 
@@ -487,19 +498,26 @@ export async function loadCompanyCentral(
     self
   );
 
-  // --- Acesso do cliente (passo 25) ---
-  const rawAccess = clientAccessData as {
-    token: string;
-    active: boolean;
-    updated_at: string;
-  } | null;
-  const clientAccess: ClientAccessInfo | null = rawAccess
-    ? {
-        token: rawAccess.token,
-        active: rawAccess.active,
-        updatedAt: rawAccess.updated_at,
-      }
-    : null;
+  // --- Acesso do cliente (passo 30) ---
+  const clientAccess: ClientAccessView = isAdmin
+    ? (() => {
+        const v = clientAccessData as {
+          access: ClientAccessInfo | null;
+          audit: ClientAccessAuditEntry[];
+        } | null;
+        return {
+          role: "admin" as const,
+          access: v?.access ?? null,
+          audit: v?.audit ?? [],
+        };
+      })()
+    : {
+        role: "consultor" as const,
+        status: (clientAccessData as ClientAccessStatus | null) ?? {
+          exists: false,
+          active: false,
+        },
+      };
 
   return {
     notFound: false,

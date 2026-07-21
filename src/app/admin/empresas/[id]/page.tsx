@@ -34,7 +34,7 @@ export default async function EmpresaCentralPage({
   // própria, então disparar as três em paralelo não amplia o que o usuário
   // enxerga: sem acesso à empresa, todas voltam vazias.
   const [res, listings, notes] = await Promise.all([
-    loadCompanyCentral(supabase, profile, params.id, period),
+    loadCompanyCentral(supabase, profile, params.id, period, true),
     loadCompanyListings(supabase, params.id),
     loadCompanyNotes(supabase, params.id),
   ]);
@@ -58,6 +58,7 @@ export default async function EmpresaCentralPage({
               period={period}
               editHref={`/admin/empresas/${params.id}/editar`}
               tasksHref={`/admin/empresas/${params.id}/tarefas`}
+              previewHref={`/admin/empresas/${params.id}/ver-como-cliente`}
             />
           }
           listings={<CompanyListings rows={listings} />}

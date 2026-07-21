@@ -1271,7 +1271,26 @@ padrão, custo zero em produção; funciona também nos Runtime Logs da Vercel).
 
 ---
 
-## PASSO 30 — Governança do acesso do cliente + "Ver como cliente" 
+## PASSO 30 — Governança do acesso do cliente + "Ver como cliente" (Feito)
+
+**Resultado da PARTE 0 (diagnóstico), antes de qualquer mudança:**
+- A senha JÁ estava com hash forte (`crypt(..., gen_salt('bf'))` — bcrypt). O
+  item que o prompt temia como mais urgente (texto puro) **não existia**.
+- Nenhuma tela devolvia a senha depois de criada.
+- **O furo real era outro:** a senha era ESCOLHIDA E DIGITADA pelo admin ou
+  consultor. Ou seja, quem criava sabia a senha para sempre — e "revelar uma
+  única vez" não significa nada quando a pessoa é quem inventou a senha.
+- Gestão liberada para admin **ou consultor** da empresa (funções e policy).
+- Volume a migrar: 2 acessos, ambos ativos, ambos criados por admin.
+
+**Decisões tomadas na retomada (além das já registradas abaixo):**
+- Consultor mantém um **status somente-leitura** (existe / está ativo) e o
+  "Ver como cliente". Ele precisa saber se o cliente já tem portal para
+  conduzir a relação; a credencial é que nunca passa perto dele.
+- As 2 senhas existentes **continuam valendo** — o hash já era forte e
+  invalidá-las derrubaria clientes sem ganho real. Elas ficam marcadas como
+  do modelo antigo (`password_generated=false`), e a tela sugere a troca.
+- "Ver como cliente" em **rota própria em tela cheia**, não modal.
 
 ⚠️ Este passo é PRÉ-REQUISITO do passo 31 (mensagens). A garantia de que um
 funcionário não forja mensagem de cliente depende desta base: se a senha do
@@ -1357,6 +1376,54 @@ Ao final, me EXPLIQUE qual é a garantia real de que um funcionário não conseg
 se passar pelo cliente — e qual é o limite honesto dessa garantia. Depois
 commit + push. As MENSAGENS vêm no próximo passo; não faça agora.
 ```
+
+### O que foi aplicado (migration 0032)
+
+- **Gestão exclusiva de admin**, reforçada no banco em DOIS lugares: a policy
+  `cpa_select` passou a exigir `is_admin()` e as funções de escrita idem.
+- **Senha sorteada pelo banco** (`client_portal_gen_password`, 16 caracteres de
+  um alfabeto de 32 sem ambiguidade — sem i/l/o/1, porque um humano transcreve
+  isso; ~80 bits, em grupos de 4 para ser ditável por telefone). Devolvida em
+  claro **uma única vez**, no retorno de `client_portal_set`.
+- **Auditoria** em `client_portal_audit` (criado / senha_redefinida /
+  link_girado / revogado), sem policy de UPDATE nem DELETE — ninguém edita nem
+  apaga o próprio rastro. `client_portal_admin_view` traz estado + histórico
+  numa ida só (disciplina do passo 29).
+- **"Ver como cliente"** em `/admin/empresas/[id]/ver-como-cliente` e
+  `/consultor/[companyId]/ver-como-cliente`: sem AppShell, faixa de
+  pré-visualização, somente leitura, sem token, sem senha e sem criar sessão
+  de portal.
+- **Curadoria fatorada** (a decisão de arquitetura que mais importa): o
+  conteúdo do portal virou `client_portal_payload` /
+  `client_portal_progress_payload`, chamadas pelos DOIS caminhos (sessão do
+  cliente e preview). E a casca visual virou `PortalView`, usada pelas duas
+  telas. Assim a pré-visualização **não tem como divergir** do que o cliente
+  vê — nem no dado nem na forma.
+
+### Validação executada no banco (simulando cada cargo)
+
+| Tentativa (como consultor) | Resultado |
+|---|---|
+| `SELECT` direto em `client_portal_access` | 0 linhas |
+| `SELECT` direto na auditoria / nas sessões | 0 linhas |
+| Gerar senha / girar link / revogar | bloqueado |
+| Ler token pela visão de admin | bloqueado |
+| Preview de empresa que **não** é dele | bloqueado |
+| Preview e status da empresa **dele** | permitido |
+
+Como admin (em transação revertida): senha sorteada abre o portal; senha
+errada e token forjado respondem `invalid` igualmente; a senha em claro não
+fica em lugar nenhum (só o hash bcrypt); a auditoria registrou a ação.
+
+**Garantia real de autoria — e o limite honesto.** Um consultor ou colaborador
+não consegue se passar pelo cliente: a senha nunca esteve ao alcance dele
+(nem por tela nem por query), e o preview é uma rota interna que não cria
+sessão de portal. O **admin**, porém, vê a senha no instante em que a gera —
+ele é, e segue sendo, a fronteira de confiança. O que o passo 30 acrescenta é
+que usar a senha do cliente deixa de ser silencioso: como ela não é
+recuperável, quem perdeu precisa REDEFINIR, o que derruba o acesso do cliente
+e grava uma linha na auditoria. Eliminar esse resíduo exigiria abandonar senha
+fixa e adotar link mágico por e-mail — o sistema não envia e-mail hoje.
 
 ---
 

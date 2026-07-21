@@ -47,12 +47,63 @@ export type PortalProgress = {
 // Página do feed (paginação no servidor — o portal nunca carrega tudo).
 export const PORTAL_PROGRESS_PAGE = 20;
 
-// Estado do acesso, para a gestão interna (admin/consultor na central).
+// De onde o "ver mais" do Andamento puxa a próxima página. São dois caminhos
+// com autorizações DIFERENTES, e por isso explicitados no tipo:
+//  · portal  — sessão do cliente (token + segredo no cookie HttpOnly).
+//  · preview — usuário logado, autorizado pelo cargo ("Ver como cliente").
+// O conteúdo devolvido é idêntico: ambos caem na mesma curadoria no banco.
+export type PortalSource =
+  | { mode: "portal"; token: string }
+  | { mode: "preview"; companyId: string };
+
+// --- Gestão do acesso (passo 30) ------------------------------------------
+// A gestão é EXCLUSIVA DE ADMIN. O consultor não alcança token nem senha —
+// nem por tela nem por query: a policy de client_portal_access exige
+// is_admin() e as funções de escrita também.
+
+// O que o ADMIN vê do acesso. Note o que NÃO está aqui: a senha. Ela existe
+// em claro uma única vez, no retorno de generateClientAccess, e nunca mais.
 export type ClientAccessInfo = {
   token: string;
   active: boolean;
+  createdAt: string;
   updatedAt: string;
+  // false = senha do modelo antigo (escolhida por uma pessoa, que portanto a
+  // conhece). A tela sugere trocar por uma sorteada pelo sistema.
+  passwordGenerated: boolean;
+  passwordSetAt: string | null;
+  createdBy: string | null;
+  passwordSetBy: string | null;
 };
+
+export type ClientAccessAction =
+  | "criado"
+  | "senha_redefinida"
+  | "link_girado"
+  | "revogado";
+
+export type ClientAccessAuditEntry = {
+  id: string;
+  action: ClientAccessAction;
+  actor: string;
+  at: string;
+};
+
+export const ACCESS_ACTION_LABEL: Record<ClientAccessAction, string> = {
+  criado: "Acesso criado",
+  senha_redefinida: "Senha redefinida",
+  link_girado: "Novo link gerado",
+  revogado: "Acesso revogado",
+};
+
+// O que o CONSULTOR vê: dois booleanos, nenhuma credencial. Ele precisa saber
+// se o cliente já tem portal para conduzir a relação — só isso.
+export type ClientAccessStatus = { exists: boolean; active: boolean };
+
+// Visão da central: uma coisa OU outra, conforme o cargo.
+export type ClientAccessView =
+  | { role: "admin"; access: ClientAccessInfo | null; audit: ClientAccessAuditEntry[] }
+  | { role: "consultor"; status: ClientAccessStatus };
 
 export function clientPortalPath(token: string): string {
   return `/cliente/${token}`;

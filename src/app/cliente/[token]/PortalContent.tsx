@@ -4,6 +4,7 @@ import { useState } from "react";
 import type {
   PortalListing,
   PortalProgress,
+  PortalSource,
   PortalUpdate,
 } from "@/lib/client-portal";
 import PortalListings from "./PortalListings";
@@ -19,12 +20,12 @@ import PortalProgressFeed from "./PortalProgressFeed";
 type Tab = "listagens" | "andamento" | "atualizacoes";
 
 export default function PortalContent({
-  token,
+  source,
   listings,
   progress,
   updates,
 }: {
-  token: string;
+  source: PortalSource;
   listings: PortalListing[];
   progress: PortalProgress;
   updates: PortalUpdate[];
@@ -77,7 +78,7 @@ export default function PortalContent({
         {active === "listagens" ? (
           <PortalListings listings={listings} />
         ) : active === "andamento" ? (
-          <PortalProgressFeed token={token} initial={progress} />
+          <PortalProgressFeed source={source} initial={progress} />
         ) : (
           <PortalUpdates updates={updates} />
         )}

@@ -2,8 +2,13 @@
 
 import { useState } from "react";
 import { ShowMore } from "@/components/ListControls";
-import type { PortalProgress, PortalProgressItem } from "@/lib/client-portal";
+import type {
+  PortalProgress,
+  PortalProgressItem,
+  PortalSource,
+} from "@/lib/client-portal";
 import { clientPortalProgressPage } from "../actions";
+import { clientPreviewProgressPage } from "@/app/client-preview-actions";
 
 // Aba "Andamento" do portal do cliente (passo 25.1). Timeline curada: itens
 // "Em andamento" no topo (marcador neutro, sem data/prazo) e depois os
@@ -11,12 +16,16 @@ import { clientPortalProgressPage } from "../actions";
 // do banco (client_portal_progress seleciona apenas título/estado/data);
 // aqui não existe consulta — o "ver mais" pede a PRÓXIMA PÁGINA ao servidor
 // (paginação no servidor: nunca carrega tudo de uma vez).
+//
+// A origem da página seguinte muda conforme o caminho (sessão do cliente ou
+// pré-visualização interna), mas o conteúdo é o mesmo: as duas ações caem na
+// mesma curadoria no banco.
 
 export default function PortalProgressFeed({
-  token,
+  source,
   initial,
 }: {
-  token: string;
+  source: PortalSource;
   initial: PortalProgress;
 }) {
   const [items, setItems] = useState<PortalProgressItem[]>(initial.items);
@@ -30,7 +39,10 @@ export default function PortalProgressFeed({
     if (loading) return;
     setLoading(true);
     setError(null);
-    const page = await clientPortalProgressPage(token, items.length);
+    const page =
+      source.mode === "portal"
+        ? await clientPortalProgressPage(source.token, items.length)
+        : await clientPreviewProgressPage(source.companyId, items.length);
     if (!page) {
       setError(
         "Não foi possível carregar mais itens. Recarregue a página e tente de novo."

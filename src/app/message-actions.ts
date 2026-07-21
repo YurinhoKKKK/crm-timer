@@ -1,7 +1,12 @@
 "use server";
 
 import { createClient } from "@/lib/supabase-server";
-import { loadCompanyMessages, type CompanyMessagePage } from "@/lib/messages";
+import {
+  loadCompanyMessages,
+  loadMessageInbox,
+  type CompanyMessagePage,
+  type InboxRow,
+} from "@/lib/messages";
 
 // Lado INTERNO das mensagens (passo 31): a equipe responde pela conta
 // autenticada, nunca pelo portal.
@@ -39,6 +44,41 @@ export async function sendCompanyMessage(
     return { error: "Não foi possível enviar a mensagem." };
   }
   return { error: null };
+}
+
+// Ressincronização da caixa de entrada (passo 32.1): a MESMA consulta que
+// alimenta o render inicial no servidor, agora acionável pelo componente vivo
+// (Realtime/foco). Badge e lista saem de message_inbox() — fonte única.
+export async function fetchMessageInbox(): Promise<InboxRow[] | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  return loadMessageInbox(supabase);
+}
+
+// Marca a conversa como lida PARA ESTE USUÁRIO (passo 32). A marcação é por
+// usuário — se o admin lê, o consultor não perde a notificação. RLS: só a
+// própria linha, e só de empresa a que o usuário tem acesso.
+export async function markMessagesRead(
+  companyId: string
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Sessão expirada." };
+
+  const { error } = await supabase.from("company_message_reads").upsert(
+    {
+      user_id: user.id,
+      company_id: companyId,
+      last_read_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id,company_id" }
+  );
+  return { error: error ? "Não foi possível marcar como lida." : null };
 }
 
 // Página anterior da conversa ("ver mais"), escopada pela mesma RLS.

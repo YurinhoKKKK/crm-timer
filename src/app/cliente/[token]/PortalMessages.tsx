@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ShowMore } from "@/components/ListControls";
+import { useCallback, useEffect, useState } from "react";
 import type {
   PortalMessage,
   PortalMessages as PortalMessagesData,
   PortalSource,
 } from "@/lib/client-portal";
 import { useConversation } from "@/lib/use-conversation";
+import { useChatScroll } from "@/lib/use-chat-scroll";
 import {
   clientPortalSendMessage,
   clientPortalMessagesPage,
@@ -68,22 +68,16 @@ export default function PortalMessages({
       orderOf: (m) => m.at,
     });
 
-  // Rolagem: só acompanha as mensagens novas se o usuário já estiver no fim
-  // da conversa — nunca arrasta quem está lendo mensagens antigas acima.
-  const endRef = useRef<HTMLDivElement | null>(null);
-  const stickRef = useRef(false);
-  useEffect(() => {
-    const el = endRef.current;
-    if (!el) return;
-    const io = new IntersectionObserver(([e]) => {
-      stickRef.current = e.isIntersecting;
-    });
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
-  useEffect(() => {
-    if (stickRef.current) endRef.current?.scrollIntoView({ block: "nearest" });
-  }, [items.length, pending.length]);
+  // Rolagem de chat (passo 32.1): abre no FIM (mais recentes), subir ao topo
+  // carrega as antigas preservando a posição, e mensagem nova só arrasta quem
+  // já está no fim — senão acende o indicador "nova mensagem".
+  const { containerRef, topSentinelRef, hasNew, jumpToEnd } = useChatScroll({
+    lastItemKey: items.length > 0 ? items[items.length - 1].id : null,
+    itemCount: items.length + pending.length,
+    loadOlder: showOlder,
+    hasOlder: remaining > 0,
+    loadingOlder: loadingMore,
+  });
 
   // Causa A (cache de navegação): o payload servido pelo Next pode ser uma
   // versão antiga da rota — ao montar, a conversa se ressincroniza sozinha e
@@ -163,6 +157,8 @@ export default function PortalMessages({
     ]);
     setBody("");
     setError(null);
+    // Enviar leva ao fim da conversa (a própria mensagem, "Enviando…").
+    requestAnimationFrame(jumpToEnd);
 
     const res = await clientPortalSendMessage(source.token, text);
     if (res.error) {
@@ -210,33 +206,48 @@ export default function PortalMessages({
       </div>
 
       <div className="mt-6">
-        {remaining > 0 && !loadingMore && (
-          <ShowMore remaining={remaining} onClick={showOlder} />
-        )}
-        {loadingMore && (
-          <p className="mb-4 text-center text-sm text-fg-subtle">Carregando…</p>
-        )}
-
         {items.length === 0 && pending.length === 0 ? (
           <p className="rounded-xl border border-dashed border-line bg-surface-2 px-4 py-6 text-center text-sm text-fg-muted">
             Nenhuma mensagem ainda.
             {canWrite && " Escreva abaixo — a equipe responde por aqui."}
           </p>
         ) : (
-          <ol className="space-y-3">
-            {items.map((m) => (
-              <Bubble key={m.id} message={m} />
-            ))}
-            {pending.map((p) => (
-              <PendingBubble
-                key={p.tempId}
-                pending={p}
-                onDiscard={() => discardFailed(p.tempId)}
-              />
-            ))}
-          </ol>
+          <div className="relative">
+            <div
+              ref={containerRef}
+              className="max-h-[60vh] overflow-y-auto overscroll-contain pr-1"
+            >
+              {/* Sentinela do topo: entrar na viewport carrega as antigas. */}
+              <div ref={topSentinelRef} aria-hidden="true" />
+              {loadingMore && (
+                <p className="py-2 text-center text-xs text-fg-subtle">
+                  Carregando mensagens antigas…
+                </p>
+              )}
+              <ol className="space-y-3">
+                {items.map((m) => (
+                  <Bubble key={m.id} message={m} />
+                ))}
+                {pending.map((p) => (
+                  <PendingBubble
+                    key={p.tempId}
+                    pending={p}
+                    onDiscard={() => discardFailed(p.tempId)}
+                  />
+                ))}
+              </ol>
+            </div>
+            {hasNew && (
+              <button
+                type="button"
+                onClick={jumpToEnd}
+                className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-risd px-3.5 py-1.5 text-xs font-semibold text-white shadow-pop transition hover:bg-chrysler focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+              >
+                Nova mensagem ↓
+              </button>
+            )}
+          </div>
         )}
-        <div ref={endRef} aria-hidden="true" />
       </div>
 
       {sessionEnded && (

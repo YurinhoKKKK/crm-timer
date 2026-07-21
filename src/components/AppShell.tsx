@@ -9,10 +9,12 @@ import ThemeToggle from "./ThemeToggle";
 import Avatar from "./Avatar";
 import Logo from "./Logo";
 import ActiveTimerIndicator from "./ActiveTimerIndicator";
+import UnreadMessagesBadge from "./UnreadMessagesBadge";
 
 type Role = "admin" | "consultor" | "colaborador";
 
-type NavItem = { href: string; label: string; icon: ReactNode };
+// `unread` liga o badge de mensagens não lidas (passo 32) no item.
+type NavItem = { href: string; label: string; icon: ReactNode; unread?: boolean };
 
 /* -------------------------------------------------------------------------- */
 /* Ícones (stroke, herdam currentColor)                                       */
@@ -52,6 +54,9 @@ const ic = {
       <path d="M12 7v5l3 2" />
     </>
   ),
+  chat: (
+    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+  ),
 };
 
 function Icon({ children }: { children: ReactNode }) {
@@ -78,16 +83,19 @@ const NAV: Record<Role, NavItem[]> = {
     { href: "/admin/usuarios", label: "Usuários", icon: <Icon>{ic.users}</Icon> },
     { href: "/admin/empresas", label: "Empresas", icon: <Icon>{ic.building}</Icon> },
     { href: "/admin/tarefas", label: "Tarefas", icon: <Icon>{ic.tasks}</Icon> },
+    { href: "/admin/mensagens", label: "Mensagens", icon: <Icon>{ic.chat}</Icon>, unread: true },
     { href: "/colaborador", label: "Meu Trabalho", icon: <Icon>{ic.clock}</Icon> },
   ],
   consultor: [
     { href: "/consultor", label: "Painel", icon: <Icon>{ic.briefcase}</Icon> },
     { href: "/consultor/tarefas", label: "Tarefas", icon: <Icon>{ic.tasks}</Icon> },
+    { href: "/consultor/mensagens", label: "Mensagens", icon: <Icon>{ic.chat}</Icon>, unread: true },
     { href: "/colaborador", label: "Meu Trabalho", icon: <Icon>{ic.clock}</Icon> },
   ],
   colaborador: [
     { href: "/colaborador", label: "Minhas empresas", icon: <Icon>{ic.building}</Icon> },
     { href: "/colaborador/tarefas", label: "Minhas tarefas", icon: <Icon>{ic.tasks}</Icon> },
+    { href: "/colaborador/mensagens", label: "Mensagens", icon: <Icon>{ic.chat}</Icon>, unread: true },
   ],
 };
 
@@ -141,6 +149,7 @@ function NavLinks({
         >
           {item.icon}
           {item.label}
+          {item.unread && <UnreadMessagesBadge />}
         </Link>
       ))}
     </nav>

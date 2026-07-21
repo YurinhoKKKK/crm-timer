@@ -14,13 +14,16 @@ export default function CompanyCentralTabs({
   listings,
   notes,
   messages,
+  initialTab = "overview",
 }: {
   overview: ReactNode;
   listings: ReactNode;
   notes: ReactNode;
   messages: ReactNode;
+  // Deep-link (ex.: a caixa de entrada abre direto na aba Mensagens).
+  initialTab?: Tab;
 }) {
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Tab>(initialTab);
 
   const tabClass = (active: boolean) =>
     `-mb-px border-b-2 px-4 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${

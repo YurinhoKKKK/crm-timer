@@ -29,6 +29,45 @@ export type CompanyMessagePage = {
   total: number;
 };
 
+// --- Caixa de entrada (passo 32) -------------------------------------------
+
+export type InboxRow = {
+  companyId: string;
+  companyName: string;
+  lastBody: string;
+  lastAuthorType: "cliente" | "interno";
+  // Primeiro nome de quem respondeu (lado interno); null quando é o cliente.
+  lastAuthor: string | null;
+  lastAt: string;
+  unread: number;
+};
+
+// Uma linha por conversa, não lidas primeiro. SECURITY INVOKER no banco: o
+// escopo é o RLS de company_messages (admin tudo; consultor nas dele;
+// colaborador onde tem tarefa) — a função só reagrupa o que o usuário já lia.
+export async function loadMessageInbox(
+  supabase: SupabaseServer
+): Promise<InboxRow[]> {
+  const { data } = await supabase.rpc("message_inbox");
+  return ((data ?? []) as {
+    company_id: string;
+    company_name: string;
+    last_body: string;
+    last_author_type: "cliente" | "interno";
+    last_author: string | null;
+    last_at: string;
+    unread: number;
+  }[]).map((r) => ({
+    companyId: r.company_id,
+    companyName: r.company_name,
+    lastBody: r.last_body,
+    lastAuthorType: r.last_author_type,
+    lastAuthor: r.last_author,
+    lastAt: r.last_at,
+    unread: Number(r.unread),
+  }));
+}
+
 export async function loadCompanyMessages(
   supabase: SupabaseServer,
   companyId: string,

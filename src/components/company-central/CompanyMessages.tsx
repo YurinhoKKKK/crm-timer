@@ -1,12 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Avatar from "@/components/Avatar";
-import { ShowMore } from "@/components/ListControls";
 import { createClient } from "@/lib/supabase-browser";
 import { useConversation } from "@/lib/use-conversation";
+import { useChatScroll } from "@/lib/use-chat-scroll";
 import type { CompanyMessage } from "@/lib/messages";
-import { sendCompanyMessage, companyMessagesPage } from "@/app/message-actions";
+import {
+  sendCompanyMessage,
+  companyMessagesPage,
+  markMessagesRead,
+} from "@/app/message-actions";
+import { emitMessagesRead } from "@/lib/message-sync";
 
 // Lado INTERNO da conversa com o cliente (passos 31 e 31.1). Aparece na
 // central da empresa (admin e consultor) e na tela da empresa do colaborador.
@@ -63,21 +68,31 @@ export default function CompanyMessages({
       orderOf: (m) => m.createdAt,
     });
 
-  // Rolagem: acompanha só se o usuário estiver no fim da conversa.
-  const endRef = useRef<HTMLDivElement | null>(null);
-  const stickRef = useRef(false);
+  // Estar COM a conversa aberta e visível = leu (passo 32). Marca a leitura
+  // deste usuário (por usuário, nunca global) e avisa o badge da sidebar na
+  // mesma aba. Reexecuta quando chega mensagem nova com a tela visível.
   useEffect(() => {
-    const el = endRef.current;
-    if (!el) return;
-    const io = new IntersectionObserver(([e]) => {
-      stickRef.current = e.isIntersecting;
+    if (items.length === 0) return;
+    if (document.visibilityState !== "visible") return;
+    let cancelled = false;
+    markMessagesRead(companyId).then((res) => {
+      if (!cancelled && !res.error) emitMessagesRead();
     });
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
-  useEffect(() => {
-    if (stickRef.current) endRef.current?.scrollIntoView({ block: "nearest" });
-  }, [items.length, pending.length]);
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId, items.length]);
+
+  // Rolagem de chat (passo 32.1): abre no FIM (mais recentes), subir ao topo
+  // carrega as antigas preservando a posição, e mensagem nova só arrasta quem
+  // já está no fim — senão acende o indicador "nova mensagem".
+  const { containerRef, topSentinelRef, hasNew, jumpToEnd } = useChatScroll({
+    lastItemKey: items.length > 0 ? items[items.length - 1].id : null,
+    itemCount: items.length + pending.length,
+    loadOlder: showOlder,
+    hasOlder: remaining > 0,
+    loadingOlder: loadingMore,
+  });
 
   // Causa A (cache de navegação): ao montar, ressincroniza — a conversa nunca
   // fica presa no payload antigo do cache do router. Foco/reconexão idem.
@@ -130,6 +145,8 @@ export default function CompanyMessages({
     setPending((prev) => [...prev, { tempId, body: text, failed: false }]);
     setBody("");
     setError(null);
+    // Enviar leva ao fim da conversa (a própria mensagem, "Enviando…").
+    requestAnimationFrame(jumpToEnd);
 
     const res = await sendCompanyMessage(companyId, text);
     if (res.error) {
@@ -155,32 +172,47 @@ export default function CompanyMessages({
         dele. Mensagens não podem ser editadas nem apagadas.
       </p>
 
-      {remaining > 0 && !loadingMore && (
-        <ShowMore remaining={remaining} onClick={showOlder} />
-      )}
-      {loadingMore && (
-        <p className="mb-4 text-center text-sm text-fg-subtle">Carregando…</p>
-      )}
-
       {items.length === 0 && pending.length === 0 ? (
         <p className="rounded-xl border border-dashed border-line bg-surface-2 px-4 py-6 text-center text-sm text-fg-muted">
           Nenhuma mensagem ainda. O cliente vê esta conversa no portal dele.
         </p>
       ) : (
-        <ol className="space-y-3">
-          {items.map((m) => (
-            <Bubble key={m.id} message={m} companyName={companyName} />
-          ))}
-          {pending.map((p) => (
-            <PendingBubble
-              key={p.tempId}
-              pending={p}
-              onDiscard={() => discardFailed(p.tempId)}
-            />
-          ))}
-        </ol>
+        <div className="relative">
+          <div
+            ref={containerRef}
+            className="max-h-[60vh] overflow-y-auto overscroll-contain pr-1"
+          >
+            {/* Sentinela do topo: entrar na viewport carrega as antigas. */}
+            <div ref={topSentinelRef} aria-hidden="true" />
+            {loadingMore && (
+              <p className="py-2 text-center text-xs text-fg-subtle">
+                Carregando mensagens antigas…
+              </p>
+            )}
+            <ol className="space-y-3">
+              {items.map((m) => (
+                <Bubble key={m.id} message={m} companyName={companyName} />
+              ))}
+              {pending.map((p) => (
+                <PendingBubble
+                  key={p.tempId}
+                  pending={p}
+                  onDiscard={() => discardFailed(p.tempId)}
+                />
+              ))}
+            </ol>
+          </div>
+          {hasNew && (
+            <button
+              type="button"
+              onClick={jumpToEnd}
+              className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-risd px-3.5 py-1.5 text-xs font-semibold text-white shadow-pop transition hover:bg-chrysler focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+            >
+              Nova mensagem ↓
+            </button>
+          )}
+        </div>
       )}
-      <div ref={endRef} aria-hidden="true" />
 
       <form onSubmit={send} className="mt-5 border-t border-line pt-5">
         <label htmlFor="company-msg" className="sr-only">

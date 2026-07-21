@@ -161,7 +161,7 @@ export default async function ColaboradorEmpresaPage({
 
       {/* Mensagens do cliente (passo 31): o colaborador lê e responde nas
           empresas em que tem tarefa — o vínculo derivado que a RLS já usa. */}
-      <section className="mt-8">
+      <section id="mensagens" className="mt-8 scroll-mt-20">
         <h2 className="mb-4 text-base font-semibold text-fg">Mensagens</h2>
         <CompanyMessages
           companyId={company.id}

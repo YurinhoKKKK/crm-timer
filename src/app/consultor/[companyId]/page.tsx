@@ -27,7 +27,7 @@ export default async function ConsultorEmpresaPage({
   searchParams,
 }: {
   params: { companyId: string };
-  searchParams: { periodo?: string };
+  searchParams: { periodo?: string; aba?: string };
 }) {
   const { supabase, profile } = await guardRole(["consultor"]);
   const period = normalizePeriod(searchParams?.periodo);
@@ -55,6 +55,7 @@ export default async function ConsultorEmpresaPage({
         </div>
       ) : (
         <CompanyCentralTabs
+          initialTab={searchParams?.aba === "mensagens" ? "messages" : "overview"}
           overview={
             <CompanyCentral
               data={res.data}

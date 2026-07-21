@@ -1602,16 +1602,95 @@ assinante, verificado na policy por SQL.
 
 ---
 
-## PASSO 32 — Caixa de entrada de mensagens + badge de não lidas (planejado)
+## PASSO 32 — Caixa de entrada de mensagens + badge de não lidas (Feito)
 
 Requisito que originou: consultores e colaboradores NÃO podem ser obrigados a
 abrir o portal (nem a central) de cada cliente para descobrir se há mensagem.
 Tem que ser prático e imediato.
 
-Decisão pendente antes de codar: colaboradores também recebem notificação? O
-vínculo deles com a empresa é DERIVADO (têm tarefa lá), então tende a ser
-barulhento. Sugestão: notificar **consultores da empresa + admins**; o
-colaborador vê a conversa ao abrir a empresa, sem badge próprio.
+**Decisão tomada (21/07):** os **TRÊS cargos** recebem badge e caixa de
+entrada — coerente com o passo 31, em que o colaborador também responde ao
+cliente. (A sugestão original era só consultor+admin, pelo risco de ruído no
+vínculo derivado do colaborador; ficou registrado como ponto a reavaliar se o
+badge dele se mostrar barulhento na prática.)
+
+### O que foi aplicado (migration 0035)
+
+- **`company_message_reads`** (user × empresa × last_read_at): marcação de
+  lido POR USUÁRIO, nunca global — se o admin lê, o consultor não perde a
+  notificação. RLS: cada um só a própria linha (forjar `user_id` de outro é
+  bloqueado no banco).
+- **`message_inbox()`** e **`my_unread_messages()`**: ambas **SECURITY
+  INVOKER** — não há caminho novo de leitura para blindar; quem escopa é o
+  RLS `cm_select` que já existia. "Não lida" = mensagem que não é do próprio
+  usuário, depois da última leitura dele.
+- **Badge na sidebar** (três cargos), custo controlado (requisito explícito):
+  a contagem é UM inteiro, buscada de forma NÃO bloqueante após o render — a
+  navegação nunca espera por ela. Atualiza por Realtime (assinatura sem
+  filtro de empresa; a entrega já é filtrada pelo RLS por assinante), pelo
+  evento local `crm-messages-read` (mesma aba) e por visibilitychange/online.
+  Sem poll periódico.
+- **Caixa de entrada** em `/admin/mensagens`, `/consultor/mensagens` e
+  `/colaborador/mensagens`: não lidas primeiro, nome da empresa + trecho da
+  última mensagem (com "Cliente:"/"Equipe:") + data + chip de contagem.
+  Clicar abre a conversa: deep-link `?aba=mensagens` na central
+  (admin/consultor) e âncora `#mensagens` na tela do colaborador.
+- **Abrir a conversa marca como lida** (com a aba visível) e avisa o badge na
+  mesma aba.
+
+### Validação no banco (simulando o consultor, rollback na mesma chamada)
+
+| Teste | Resultado |
+|---|---|
+| Inbox mostra só as empresas dele | 1 conversa (a dele) |
+| Badge antes / depois de marcar lido | 16 → 0 |
+| Marcar lido em nome de OUTRO usuário | bloqueado pela RLS |
+| Ler marcação de leitura de outros | 0 linhas |
+
+### PASSO 32.1 — Caixa de entrada viva + conversa abrindo no fim (Feito)
+
+**BUG (prévia não atualizava):** o badge e a lista saíam de consultas IRMÃS,
+não IGUAIS — o badge (client, dinâmico) atualizava e a prévia (server, presa
+no Router Cache do Next) ficava velha. Correção estrutural (migration 0036):
+
+- **Fonte de verdade única no banco:** `message_inbox()` passou a devolver,
+  por empresa, a última mensagem (com o NOME de quem respondeu, via
+  `display_profiles` — sem esbarrar no RLS de profiles) + a contagem de não
+  lidas; e `my_unread_messages()` virou LITERALMENTE `sum(unread)` sobre
+  `message_inbox()`. Badge e lista não têm mais como divergir, por construção.
+- **Lista viva:** `MessageInbox` virou componente cliente que ressincroniza ao
+  montar (mata o Router Cache), no Realtime de `company_messages` (entrega
+  filtrada pelo RLS por assinante — consultor não recebe evento de empresa
+  alheia), no evento local `crm-messages-read` e em foco/reconexão. Mesmo
+  princípio do 31.1: evento é sinal, o estado é refeito pela consulta.
+
+**MELHORIAS na lista:** não lidas com barra de acento risd na lateral, nome em
+negrito, prévia mais clara e chip de contagem por empresa (o badge da sidebar
+é a soma deles, agora por definição); lidas ficam apagadas. Prefixo da prévia:
+"Cliente:" ou o primeiro nome de quem respondeu. Horário legível (hora se
+hoje, "Ontem", data). Busca por empresa (escala). Ordenação: não lidas
+primeiro, mais recente no topo de cada grupo.
+
+**POSIÇÃO DE ABERTURA (era antiprático):** a conversa virou um contêiner
+rolável próprio (`lib/use-chat-scroll.ts`, compartilhado pelas duas janelas) e:
+
+- **abre no FIM** (mais recentes), posicionada ANTES da primeira pintura
+  (useLayoutEffect) — sem animação visível;
+- **subir ao topo carrega as antigas automaticamente** (sentinela +
+  IntersectionObserver) **preservando a posição de leitura** — mede-se o
+  scrollHeight antes da carga e compensa-se o deslocamento antes da pintura,
+  sem solavanco (o botão "ver mais" saiu; a paginação continua a mesma, só o
+  gatilho mudou);
+- mensagem nova rola para o fim SÓ se o usuário já estiver no fim; lendo o
+  histórico, acende o indicador **"Nova mensagem ↓"** que leva ao fim;
+- enviar leva ao fim (a própria mensagem em "Enviando…").
+
+A primeira página sempre foi a mais recente (busca desc + inversão, do passo
+31) — o que faltava era a POSIÇÃO de abertura e a compensação do prepend.
+
+Validado no banco: `my_unread_messages()` = soma do inbox (mesma consulta);
+`last_author` null para cliente e primeiro nome para equipe. Escopo por RLS
+inalterado (funções continuam SECURITY INVOKER).
 
 ```
 Adicione uma CAIXA DE ENTRADA única de mensagens, para que ninguém precise

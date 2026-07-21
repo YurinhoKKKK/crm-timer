@@ -8,11 +8,14 @@ export const labelClass = "mb-1 block text-sm font-medium text-fg";
 
 export const hintClass = "font-normal text-fg-subtle";
 
+// `select-none` nos botões: além do padrão de UI (botão não é texto para
+// selecionar), evita que um clique com micro-arrasto vire seleção de texto em
+// vez de clique — irmão do problema de arrasto de link tratado no globals.css.
 export const btnPrimary =
-  "rounded-lg bg-risd px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-chrysler focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:cursor-not-allowed disabled:opacity-60";
+  "select-none rounded-lg bg-risd px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-chrysler focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:cursor-not-allowed disabled:opacity-60";
 
 export const btnSecondary =
-  "rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-fg shadow-sm transition hover:border-risd/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:cursor-not-allowed disabled:opacity-60";
+  "select-none rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-fg shadow-sm transition hover:border-risd/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:cursor-not-allowed disabled:opacity-60";
 
 export const cardClass =
   "rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6";

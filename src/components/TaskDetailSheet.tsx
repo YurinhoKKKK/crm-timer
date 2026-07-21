@@ -311,10 +311,15 @@ export default function TaskDetailSheet({
 
         {detail && detail.actions.length > 0 && (
           <footer className="flex flex-wrap items-center gap-2 border-t border-line p-4">
+            {/* draggable=false (passo 32.2): links são nativamente ARRASTÁVEIS,
+                e um clique humano com 2-3px de movimento vira um dragstart de
+                link — o click nunca dispara ("preciso clicar 3 vezes"). Em
+                <a> estilizado de botão, arrastar não tem função: desligado. */}
             {detail.actions.map((a) => (
               <Link
                 key={a.href}
                 href={a.href}
+                draggable={false}
                 className={a.primary ? btnPrimary : btnSecondary}
               >
                 {a.label}

@@ -68,6 +68,22 @@ body {
   * {
     border-color: var(--line);
   }
+
+  /* Links NÃO são arrastáveis (passo 32.2 — causa raiz de "preciso clicar 3
+     vezes"). Todo <a> é nativamente arrastável: se o clique sair com 2-3px de
+     movimento — trackpad, mouse sensível, mão pesada — o navegador dispara
+     `dragstart` e ENGOLE o `click`, que nunca acontece. Reproduzido no
+     navegador: pointerdown → mousedown → dragstart, e nenhum click.
+     Neste sistema arrastar link não tem uso nenhum (não se arrasta tarefa
+     para a área de trabalho), então some para todos: rodapé do detalhe,
+     linhas da caixa de entrada, cards de tarefa, navegação lateral.
+     Exceção: dentro do editor rich text, onde arrastar conteúdo é legítimo. */
+  a {
+    -webkit-user-drag: none;
+  }
+  .rich-text a {
+    -webkit-user-drag: auto;
+  }
 }
 
 @layer components {

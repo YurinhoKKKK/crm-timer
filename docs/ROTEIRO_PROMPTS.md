@@ -1744,13 +1744,43 @@ detalhe não seriam clicáveis.
    transform volta a `none` ao fim da animação. (Os portais continuam, por
    robustez — mas a armadilha de fundo morreu.)
 
-**SUSPEITA CONCRETA para o relato original:** a extensão de navegador
-**Linkclump Plus** está injetada nas páginas com spans de z-index MÁXIMO
-(2147483647). Extensões desse tipo capturam ARRASTO sobre LINKS — e os botões
-do rodapé são dos poucos `<a>` estilizados de botão no sistema (quase todo o
-resto é `<button>`, imune a elas). Um clique com 1–2px de arrasto pode ser
-engolido pela extensão. Se o bug persistir após estas correções, testar em
-aba anônima / com a extensão desativada para o site.
+**CAUSA RAIZ ENCONTRADA na segunda rodada** (o usuário reportou "preciso
+clicar 3 vezes rápidas"): o clique estava sendo engolido por **arrasto de
+link**. Todo `<a>` é NATIVAMENTE ARRASTÁVEL: se o clique sai com 2–3px de
+movimento — trackpad, mouse sensível, mão pesada — o navegador dispara
+`dragstart` e o `click` NUNCA acontece. Por isso "várias vezes rápido"
+funcionava: um dos cliques saía parado o suficiente.
+
+Reproduzido com instrumentação de eventos no navegador real, simulando o
+clique humano (arrasto de 3px em vez do clique sintético perfeitamente parado
+da primeira rodada, que por isso não pegou o bug):
+
+```
+pointerdown → mousedown → dragstart     (e NENHUM click)
+```
+
+**CORREÇÃO (global, não só no rodapé):** o problema valia para TODO link do
+sistema — linhas da caixa de entrada, cards de tarefa, navegação lateral —,
+não só para os dois botões relatados. Em `globals.css`, camada base:
+
+```css
+a { -webkit-user-drag: none; }
+.rich-text a { -webkit-user-drag: auto; }  /* editor mantém o arrasto */
+```
+
+Arrastar link não tem uso nenhum neste sistema (não se arrasta tarefa para a
+área de trabalho), então some para todos. Somado a isso: `select-none` nos
+botões (`lib/ui.ts`) — irmão do mesmo problema, em que o micro-arrasto vira
+seleção de texto — e `draggable={false}` explícito nos links do rodapé do
+detalhe (cobre Firefox, onde `-webkit-user-drag` não existe).
+
+**VERIFICADO** em build de produção (porta 3001, isolada): com
+`-webkit-user-drag: none` ativo, o MESMO arrasto de 4px que antes matava o
+clique navegou normalmente para a tela da tarefa.
+
+A suspeita anterior (extensão Linkclump Plus, que injeta spans de z-index
+máximo e captura arrasto sobre links) provavelmente AGRAVAVA o problema, mas
+não era necessária para causá-lo — o comportamento é nativo do navegador.
 
 Não foi possível testar viewport mobile na sessão (a janela do Chrome estava
 ancorada e não aceitou redimensionamento) — fica no checklist manual.

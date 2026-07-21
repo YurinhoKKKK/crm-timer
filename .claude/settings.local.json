@@ -136,7 +136,8 @@
       "PowerShell(git *)",
       "PowerShell(node -e \"const p=require\\('./package.json'\\); console.log\\('supabase-js:', \\(p.dependencies['@supabase/supabase-js']||'via @supabase/ssr'\\)\\); console.log\\('ssr:', p.dependencies['@supabase/ssr']\\); console.log\\('next:', p.dependencies['next']\\)\")",
       "PowerShell(Test-NetConnection *)",
-      "Skill(claude-in-chrome)"
+      "Skill(claude-in-chrome)",
+      "PowerShell($env:PORT=3001; npx next start -p 3001)"
     ]
   }
 }

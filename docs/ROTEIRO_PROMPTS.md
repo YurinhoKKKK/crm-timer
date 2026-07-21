@@ -1778,6 +1778,34 @@ detalhe (cobre Firefox, onde `-webkit-user-drag` não existe).
 `-webkit-user-drag: none` ativo, o MESMO arrasto de 4px que antes matava o
 clique navegou normalmente para a tela da tarefa.
 
+**MAS o usuário reportou que o problema PERSISTIU** — e com um detalhe que
+derruba a teoria do arrasto como causa única: acontece **só nesses dois
+botões**, não em todo link. Terceira rodada, correção definitiva: os dois
+`<a>` viraram `<button>` de verdade (`SheetAction`), com `router.push` dentro
+de `useTransition`.
+
+Por que isso fecha TODAS as hipóteses restantes de uma vez:
+- `<button>` não é arrastável (mata a hipótese do `dragstart`);
+- extensões de gesto/link não captam eventos sobre `<button>` (mata a
+  hipótese Linkclump);
+- o alvo do clique passa a ser a caixa inteira, não o texto interno;
+- **feedback imediato**: a rota de destino é server-rendered e pode levar
+  ~1s; sem sinal nenhum, o clique parece perdido e a pessoa clica de novo.
+  Agora aparece "Abrindo…" e o botão trava contra cliques repetidos — se o
+  problema real era latência sem retorno visual, isso resolve também.
+
+Eram os ÚNICOS `<a>` estilizados de botão dentro de um painel sobreposto no
+sistema — o que explica o "só nesses dois". Trade-off consciente: perde-se
+abrir em nova aba (clique do meio/Ctrl) nessas duas ações.
+
+⚠️ **Limite honesto desta investigação:** não consegui reproduzir o bug de
+forma confiável na automação de navegador (a janela do Chrome derivava de
+tamanho entre chamadas e os cliques passaram a não gerar evento algum). As
+correções acima são baseadas no mecanismo, não em reprodução do sintoma
+final. Se AINDA persistir, o próximo passo é instrumentar no navegador do
+usuário (listener de `click` no `document` com log) para ver se o evento
+chega.
+
 A suspeita anterior (extensão Linkclump Plus, que injeta spans de z-index
 máximo e captura arrasto sobre links) provavelmente AGRAVAVA o problema, mas
 não era necessária para causá-lo — o comportamento é nativo do navegador.

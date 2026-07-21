@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { STATUS_META, isOverdue } from "@/lib/status";
 import { formatDuration, formatDue } from "@/lib/format";
 import { btnPrimary, btnSecondary } from "@/lib/ui";
@@ -311,25 +311,64 @@ export default function TaskDetailSheet({
 
         {detail && detail.actions.length > 0 && (
           <footer className="flex flex-wrap items-center gap-2 border-t border-line p-4">
-            {/* draggable=false (passo 32.2): links são nativamente ARRASTÁVEIS,
-                e um clique humano com 2-3px de movimento vira um dragstart de
-                link — o click nunca dispara ("preciso clicar 3 vezes"). Em
-                <a> estilizado de botão, arrastar não tem função: desligado. */}
             {detail.actions.map((a) => (
-              <Link
+              <SheetAction
                 key={a.href}
                 href={a.href}
-                draggable={false}
-                className={a.primary ? btnPrimary : btnSecondary}
-              >
-                {a.label}
-              </Link>
+                label={a.label}
+                primary={a.primary}
+              />
             ))}
           </footer>
         )}
       </aside>
     </div>,
     document.body
+  );
+}
+
+// Ação do rodapé do painel (passo 32.2 — correção do "preciso clicar 3 vezes
+// para o botão funcionar").
+//
+// É um <button> de verdade, não um <a>. Isso não é preferência de estilo: um
+// <a> tem três modos de falhar que um <button> simplesmente não tem —
+//   1. é ARRASTÁVEL por natureza: clique com 2-3px de movimento vira
+//      `dragstart` e o `click` nunca acontece;
+//   2. extensões de navegador (gestos de mouse, "abrir vários links") captam
+//      eventos SOBRE LINKS e engolem o clique;
+//   3. o alvo do clique é o texto interno, não a caixa inteira.
+// Como estes eram os ÚNICOS <a> estilizados de botão dentro de um painel
+// sobreposto, eram o único ponto do sistema onde isso doía.
+//
+// A navegação vira router.push dentro de useTransition, o que resolve o
+// outro lado do problema: FEEDBACK IMEDIATO. A rota de destino é renderizada
+// no servidor e pode demorar um segundo; sem sinal nenhum, o clique parece
+// perdido e a pessoa clica de novo. Agora o botão mostra "Abrindo…" e trava
+// contra cliques repetidos.
+//
+// Trade-off consciente: perde-se abrir em nova aba (clique do meio / Ctrl).
+// Para uma ação dentro de um painel efêmero, o clique confiável vale mais.
+function SheetAction({
+  href,
+  label,
+  primary,
+}: {
+  href: string;
+  label: string;
+  primary?: boolean;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      onClick={() => startTransition(() => router.push(href))}
+      className={primary ? btnPrimary : btnSecondary}
+    >
+      {pending ? "Abrindo…" : label}
+    </button>
   );
 }
 

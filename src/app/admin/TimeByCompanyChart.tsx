@@ -122,12 +122,12 @@ function BreakdownPanel({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // Portal para o <body>: o <main> tem `transform` (animate-fade-in), o que o
-  // tornaria o containing block deste painel `fixed` e o ancoraria ao topo do
-  // conteúdo (cortado quando a página está rolada). No body, o `fixed` ancora
-  // na viewport e o painel abre inteiro, com rolagem interna própria.
+  // Portal para o <body>: durante o animate-fade-in o <main> tem `transform`
+  // e seria o containing block deste painel `fixed` (desde a correção do fill
+  // "backwards" o transform some ao fim da animação, mas o portal continua
+  // sendo o caminho robusto). z-overlay (50): escala em tailwind.config.ts.
   return createPortal(
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className="fixed inset-0 z-overlay flex justify-end">
       <div
         className="absolute inset-0 bg-black/40"
         onClick={onClose}

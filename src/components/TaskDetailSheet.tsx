@@ -69,10 +69,11 @@ export default function TaskDetailSheet({
   const meta = detail ? STATUS_META[detail.status] : null;
   const overdue = detail ? isOverdue(detail.status, detail.due_at) : false;
 
-  // Portal no body (mesma razão do BreakdownPanel: o <main> tem transform).
-  // z-[60] para abrir por cima de outros painéis/modais z-50.
+  // Portal no body (mesma razão do BreakdownPanel). z-sheet (60): por cima de
+  // outros painéis/modais (z-overlay, 50) e do pill do timer (z-pill, 45).
+  // Escala de camadas em tailwind.config.ts.
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex justify-end">
+    <div className="fixed inset-0 z-sheet flex justify-end">
       <div
         className="absolute inset-0 bg-gunmetal/50 backdrop-blur-sm"
         onClick={onClose}

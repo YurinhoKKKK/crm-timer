@@ -254,9 +254,12 @@ export default function ActiveTimerIndicator() {
 
   const first = timers[0];
 
+  // z-pill (45): o lembrete de timer fica ACIMA do conteúdo, mas ABAIXO de
+  // qualquer overlay (modais z-overlay, detalhe z-sheet) — ele nunca pode
+  // cobrir ações de um painel aberto. Escala em tailwind.config.ts.
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 z-50 flex flex-col items-center px-4 lg:left-64"
+      className="pointer-events-none fixed inset-x-0 z-pill flex flex-col items-center px-4 lg:left-64"
       style={{ bottom: "max(1rem, env(safe-area-inset-bottom))" }}
     >
       {error && (

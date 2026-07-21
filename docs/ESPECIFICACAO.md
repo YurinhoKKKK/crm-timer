@@ -62,6 +62,8 @@ Novos usuários nascem como `pending` e só acessam após o admin atribuir um ca
 
 ---
 
+**Escala de camadas (z-index) — Passo 32.2:** definida como tokens em `tailwind.config.ts` e obrigatória para componente novo: header `20` < backdrop da sidebar `30` < sidebar `40` < `z-pill` 45 (indicador de timer — **abaixo de qualquer overlay**, nunca cobre ações de um painel) < `z-overlay` 50 (Modal, ConfirmDialog, BreakdownPanel) < `z-sheet` 60 (detalhe da tarefa) < `z-lightbox` 100 < `z-toast` 110 (reservado). Não usar números soltos. Junto veio a correção do `animate-fade-in`: fill `both` → `backwards`, porque o `both` deixava `transform` permanente no elemento animado — o `<main>` virava stacking context + containing block, a razão histórica de todo painel `fixed` precisar de portal no body (os portais continuam, por robustez).
+
 ## 3. Modelo de dados (já aplicado no Supabase)
 
 Projeto Supabase: `odpcgeiaikdvpoydcfyu` (CRM/Timer - Monvatti).

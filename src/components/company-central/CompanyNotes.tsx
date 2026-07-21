@@ -59,7 +59,7 @@ function AttachmentIcon({ name }: { name: string }) {
 // Visualizador de imagem ampliada (lightbox): renderizado via PORTAL no body —
 // fora dos containers da lista/editor, então nenhum ancestral com
 // transform/filter/overflow quebra o position:fixed nem a ordem das camadas.
-// z-[100] fica acima de todo o sistema (sidebar z-40, header z-20, modais z-50).
+// z-lightbox (100) fica acima de todo o sistema (escala em tailwind.config.ts).
 // Fecha no ESC, no clique fora e no X; setas navegam entre as imagens da mesma
 // anotação; clicar na imagem alterna zoom (tamanho real com rolagem).
 function Lightbox({
@@ -106,7 +106,7 @@ function Lightbox({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] bg-gunmetal/90"
+      className="fixed inset-0 z-lightbox bg-gunmetal/90"
       role="dialog"
       aria-modal="true"
       aria-label="Imagem ampliada"

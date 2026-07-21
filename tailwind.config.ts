@@ -44,7 +44,27 @@ const config: Config = {
         },
       },
       animation: {
-        "fade-in": "fade-in 0.25s ease-out both",
+        // fill "backwards" (não "both"/"forwards"): depois que a animação
+        // termina, o transform volta a NONE. Com "both", o translateY(0)
+        // ficava aplicado para sempre e o elemento animado virava stacking
+        // context + containing block permanente — era por isso que o <main>
+        // prendia position:fixed e todo painel precisava de portal no body.
+        "fade-in": "fade-in 0.25s ease-out backwards",
+      },
+      // ESCALA DE CAMADAS do sistema (z-index). Use SEMPRE estes tokens em
+      // vez de números soltos, para não virar guerra de z-index:
+      //   header (20) < backdrop da sidebar (30) < sidebar (40)
+      //   < z-pill (45, indicador de timer — ABAIXO de qualquer overlay)
+      //   < z-overlay (50, modais/painéis: Modal, BreakdownPanel, ConfirmDialog)
+      //   < z-sheet (60, detalhe da tarefa — abre por cima de outros painéis)
+      //   < z-lightbox (100, imagem ampliada)
+      //   < z-toast (110, reservado para avisos futuros)
+      zIndex: {
+        pill: "45",
+        overlay: "50",
+        sheet: "60",
+        lightbox: "100",
+        toast: "110",
       },
     },
   },

@@ -39,8 +39,10 @@ export default function Modal({
 
   if (!open || typeof document === "undefined") return null;
 
+  // z-overlay (50): acima do pill do timer (45), abaixo do detalhe de tarefa
+  // (z-sheet, 60). Escala de camadas em tailwind.config.ts.
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-overlay flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-gunmetal/50 backdrop-blur-sm"
         onClick={onClose}

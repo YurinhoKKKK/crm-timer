@@ -129,7 +129,7 @@ function Lightbox({
       aria-modal="true"
       aria-label="Imagem ampliada"
       onClick={onClose}
-      className="fixed inset-0 z-[100] grid place-items-center bg-black/85 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-lightbox grid place-items-center bg-black/85 p-4 backdrop-blur-sm"
     >
       <button
         type="button"

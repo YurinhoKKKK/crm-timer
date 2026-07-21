@@ -1713,6 +1713,50 @@ dele.
 
 ---
 
+### PASSO 32.2 — Investigação: cliques no rodapé do detalhe da tarefa + escala de camadas
+
+Relato: os botões "Abrir tarefa (executar)" e "Editar tarefa" do painel de
+detalhe não seriam clicáveis.
+
+**DIAGNÓSTICO (reproduzido no navegador real, ponto a ponto):**
+- Backdrop por cima do rodapé? NÃO — o `aside` vem depois do backdrop no DOM
+  e `elementsFromPoint` mostra o próprio `<a>` no topo da pilha.
+- `pointer-events` herdado? NÃO — cadeia toda `auto`.
+- Rodapé fora da área clicável? NÃO — o footer fica fora do contêiner de
+  rolagem, sempre visível.
+- Pill do timer interceptando? NÃO — z abaixo do sheet; clique testado COM
+  timer ativo e navegou normalmente.
+- **O bug NÃO reproduziu** no ambiente de teste (desktop, tema escuro, com e
+  sem timer, dois pontos de entrada diferentes): os dois botões navegaram.
+
+**CORREÇÕES ESTRUTURAIS aplicadas mesmo assim (problemas latentes reais):**
+1. **Escala de camadas criada** (`tailwind.config.ts`, tokens de zIndex):
+   header 20 < backdrop sidebar 30 < sidebar 40 < **z-pill 45** <
+   **z-overlay 50** (Modal/ConfirmDialog/BreakdownPanel) < **z-sheet 60**
+   (detalhe da tarefa) < **z-lightbox 100** < z-toast 110 (reservado).
+   Antes o pill EMPATAVA com os modais em z-50 e quem decidia era a ordem no
+   DOM (os portais venciam por sorte de serem appendados depois). Agora o
+   pill fica ABAIXO de qualquer overlay por definição.
+2. **`animate-fade-in` com fill `both` → `backwards`**: o `both` mantinha
+   `transform: translateY(0)` PARA SEMPRE no elemento animado — o `<main>`
+   virava stacking context + containing block permanente, a razão histórica
+   de todo painel fixed precisar de portal no body. Com `backwards` o
+   transform volta a `none` ao fim da animação. (Os portais continuam, por
+   robustez — mas a armadilha de fundo morreu.)
+
+**SUSPEITA CONCRETA para o relato original:** a extensão de navegador
+**Linkclump Plus** está injetada nas páginas com spans de z-index MÁXIMO
+(2147483647). Extensões desse tipo capturam ARRASTO sobre LINKS — e os botões
+do rodapé são dos poucos `<a>` estilizados de botão no sistema (quase todo o
+resto é `<button>`, imune a elas). Um clique com 1–2px de arrasto pode ser
+engolido pela extensão. Se o bug persistir após estas correções, testar em
+aba anônima / com a extensão desativada para o site.
+
+Não foi possível testar viewport mobile na sessão (a janela do Chrome estava
+ancorada e não aceitou redimensionamento) — fica no checklist manual.
+
+---
+
 # ITENS ARQUIVADOS E DECISÕES EM ABERTO
 
 Registro do que foi CONSCIENTEMENTE deixado de lado, para não parecer

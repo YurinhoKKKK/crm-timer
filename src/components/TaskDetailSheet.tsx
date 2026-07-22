@@ -341,23 +341,31 @@ export default function TaskDetailSheet({
 // sobreposto, eram o único ponto do sistema onde isso doía.
 //
 // A navegação dá FEEDBACK IMEDIATO: a rota de destino é renderizada no
-// servidor e pode demorar um segundo; sem sinal nenhum, o clique parece
-// perdido e a pessoa clica de novo. O botão mostra "Abrindo…" e trava contra
-// cliques repetidos.
+// servidor e pode demorar uma fração de segundo; sem sinal nenhum, o clique
+// parece perdido e a pessoa clica de novo. O botão mostra "Abrindo…" e trava
+// contra cliques repetidos.
 //
-// Por que NÃO usar o `pending` do useTransition: com o App Router, `router.push`
-// dentro de uma transição só resolve quando o RSC da rota de destino é buscado
-// e renderizado — algo que este botão não controla. Se essa busca nunca
-// completa (erro 500 no render do destino em produção, 404 por skew de deploy,
-// RSC preso), o `pending` fica `true` PARA SEMPRE e o botão trava em "Abrindo…"
-// (o bug que só aparecia em produção). Aqui o estado é nosso e tem um watchdog:
-// o "Abrindo…" SEMPRE termina. Se em ABRINDO_TIMEOUT_MS a rota não trocou (este
-// componente ainda está montado), voltamos e oferecemos uma navegação DURA, que
-// funciona mesmo com o router client-side quebrado ou com skew de deploy.
+// Por que NÃO confiar só no `router.push`: com o App Router, `router.push`
+// dispara uma navegação SUAVE que só conclui quando a transição do RSC
+// termina de trocar a tela. Em produção diagnosticamos que o RSC volta 200 em
+// ~300ms, mas a transição às vezes NÃO conclui (o `pending` do useTransition
+// ficaria preso para sempre — era o bug "Abrindo… eterno"). Por isso este
+// botão não espera a transição de graça:
+//
+//   1. dispara a navegação suave (router.push) e, em paralelo, arma um
+//      watchdog curto (SOFT_TIMEOUT_MS);
+//   2. se a tela NÃO trocou nesse prazo (este componente ainda montado), cai
+//      SOZINHO na navegação DURA (window.location) — sem exigir 2º clique;
+//   3. a navegação dura tem seu próprio prazo (HARD_TIMEOUT_MS); só se ATÉ
+//      ela demorar é que aparece o "tentar de novo", como último recurso.
+//
+// Resultado: o descompasso do App Router vira invisível — um clique só, a tela
+// abre, no pior caso com uma fração de segundo a mais.
 //
 // Trade-off consciente: perde-se abrir em nova aba (clique do meio / Ctrl).
 // Para uma ação dentro de um painel efêmero, o clique confiável vale mais.
-const ABRINDO_TIMEOUT_MS = 8000;
+const SOFT_TIMEOUT_MS = 2000;
+const HARD_TIMEOUT_MS = 4000;
 
 function SheetAction({
   href,
@@ -369,7 +377,10 @@ function SheetAction({
   primary?: boolean;
 }) {
   const router = useRouter();
-  const [phase, setPhase] = useState<"idle" | "opening" | "error">("idle");
+  // idle → opening (navegação suave) → hard (navegação dura automática) → error
+  const [phase, setPhase] = useState<"idle" | "opening" | "hard" | "error">(
+    "idle"
+  );
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
@@ -379,13 +390,24 @@ function SheetAction({
     []
   );
 
+  // Navegação dura (full load): funciona mesmo se a transição suave do App
+  // Router não concluir, se o router client-side falhar ou se o deploy trocou.
+  function hardNavigate() {
+    setPhase("hard");
+    if (timerRef.current) clearTimeout(timerRef.current);
+    // Se nem o full load resolver em HARD_TIMEOUT_MS, oferece o retry manual.
+    timerRef.current = setTimeout(() => setPhase("error"), HARD_TIMEOUT_MS);
+    window.location.href = href;
+  }
+
   function open() {
-    if (phase === "opening") return;
+    if (phase === "opening" || phase === "hard") return;
     setPhase("opening");
-    // Se a navegação der certo, este componente desmonta antes do disparo e o
-    // cleanup limpa o timer. Se não trocar de rota, o watchdog nos tira do
-    // "Abrindo…" e mostra a recuperação.
-    timerRef.current = setTimeout(() => setPhase("error"), ABRINDO_TIMEOUT_MS);
+    // Se a navegação suave der certo, este componente desmonta antes do
+    // disparo e o cleanup limpa o timer. Se a tela não trocou, caímos na dura
+    // automaticamente — sem segundo clique.
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(hardNavigate, SOFT_TIMEOUT_MS);
     router.push(href);
   }
 
@@ -393,11 +415,7 @@ function SheetAction({
     return (
       <button
         type="button"
-        onClick={() => {
-          // Recuperação à prova de falha: navegação dura (full load), que
-          // funciona mesmo se o router client-side falhou ou o deploy trocou.
-          window.location.href = href;
-        }}
+        onClick={hardNavigate}
         className={primary ? btnPrimary : btnSecondary}
         title="A abertura demorou demais. Clique para tentar de novo."
       >
@@ -406,14 +424,15 @@ function SheetAction({
     );
   }
 
+  const busy = phase === "opening" || phase === "hard";
   return (
     <button
       type="button"
-      disabled={phase === "opening"}
+      disabled={busy}
       onClick={open}
       className={primary ? btnPrimary : btnSecondary}
     >
-      {phase === "opening" ? "Abrindo…" : label}
+      {busy ? "Abrindo…" : label}
     </button>
   );
 }

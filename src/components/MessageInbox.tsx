@@ -35,18 +35,30 @@ function hrefFor(role: Role, companyId: string): string {
   }
 }
 
-// Horário legível: hora se for hoje, "Ontem", data nos demais.
+// Horário legível: hora se for hoje, "Ontem", data nos demais. A decisão de
+// DIA é tomada no fuso de Brasília (não no relógio local, que no SSR é UTC) —
+// senão "hoje/ontem" e a hora pulariam 3h após a hidratação.
+function spStartOfDay(x: Date): number {
+  // Data (YYYY-MM-DD) no fuso de Brasília, normalizada para comparar dias.
+  const ymd = x.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+  return Date.parse(`${ymd}T00:00:00Z`);
+}
 function formatWhen(at: string): string {
   const d = new Date(at);
   const now = new Date();
-  const startOfDay = (x: Date) =>
-    new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const dayDiff = Math.round((startOfDay(now) - startOfDay(d)) / 86_400_000);
+  const dayDiff = Math.round(
+    (spStartOfDay(now) - spStartOfDay(d)) / 86_400_000
+  );
   if (dayDiff === 0) {
-    return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleTimeString("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   }
   if (dayDiff === 1) return "Ontem";
   return d.toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
     day: "2-digit",
     month: "2-digit",
     year: "2-digit",

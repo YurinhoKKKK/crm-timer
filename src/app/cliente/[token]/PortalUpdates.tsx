@@ -58,7 +58,7 @@ export default function PortalUpdates({
 
       {updates.length === 0 ? (
         <p className="mt-6 rounded-xl border border-dashed border-line bg-surface-2/40 p-6 text-center text-sm text-fg-subtle">
-          Nenhuma atualização publicada ainda.
+          Nenhuma atualização ainda.
         </p>
       ) : (
         <ol className="mt-6 space-y-5">

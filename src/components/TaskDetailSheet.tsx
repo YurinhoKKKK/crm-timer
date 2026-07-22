@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { STATUS_META, isOverdue } from "@/lib/status";
@@ -340,14 +340,25 @@ export default function TaskDetailSheet({
 // Como estes eram os ÚNICOS <a> estilizados de botão dentro de um painel
 // sobreposto, eram o único ponto do sistema onde isso doía.
 //
-// A navegação vira router.push dentro de useTransition, o que resolve o
-// outro lado do problema: FEEDBACK IMEDIATO. A rota de destino é renderizada
-// no servidor e pode demorar um segundo; sem sinal nenhum, o clique parece
-// perdido e a pessoa clica de novo. Agora o botão mostra "Abrindo…" e trava
-// contra cliques repetidos.
+// A navegação dá FEEDBACK IMEDIATO: a rota de destino é renderizada no
+// servidor e pode demorar um segundo; sem sinal nenhum, o clique parece
+// perdido e a pessoa clica de novo. O botão mostra "Abrindo…" e trava contra
+// cliques repetidos.
+//
+// Por que NÃO usar o `pending` do useTransition: com o App Router, `router.push`
+// dentro de uma transição só resolve quando o RSC da rota de destino é buscado
+// e renderizado — algo que este botão não controla. Se essa busca nunca
+// completa (erro 500 no render do destino em produção, 404 por skew de deploy,
+// RSC preso), o `pending` fica `true` PARA SEMPRE e o botão trava em "Abrindo…"
+// (o bug que só aparecia em produção). Aqui o estado é nosso e tem um watchdog:
+// o "Abrindo…" SEMPRE termina. Se em ABRINDO_TIMEOUT_MS a rota não trocou (este
+// componente ainda está montado), voltamos e oferecemos uma navegação DURA, que
+// funciona mesmo com o router client-side quebrado ou com skew de deploy.
 //
 // Trade-off consciente: perde-se abrir em nova aba (clique do meio / Ctrl).
 // Para uma ação dentro de um painel efêmero, o clique confiável vale mais.
+const ABRINDO_TIMEOUT_MS = 8000;
+
 function SheetAction({
   href,
   label,
@@ -358,16 +369,51 @@ function SheetAction({
   primary?: boolean;
 }) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const [phase, setPhase] = useState<"idle" | "opening" | "error">("idle");
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    },
+    []
+  );
+
+  function open() {
+    if (phase === "opening") return;
+    setPhase("opening");
+    // Se a navegação der certo, este componente desmonta antes do disparo e o
+    // cleanup limpa o timer. Se não trocar de rota, o watchdog nos tira do
+    // "Abrindo…" e mostra a recuperação.
+    timerRef.current = setTimeout(() => setPhase("error"), ABRINDO_TIMEOUT_MS);
+    router.push(href);
+  }
+
+  if (phase === "error") {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          // Recuperação à prova de falha: navegação dura (full load), que
+          // funciona mesmo se o router client-side falhou ou o deploy trocou.
+          window.location.href = href;
+        }}
+        className={primary ? btnPrimary : btnSecondary}
+        title="A abertura demorou demais. Clique para tentar de novo."
+      >
+        Não abriu — tentar de novo
+      </button>
+    );
+  }
 
   return (
     <button
       type="button"
-      disabled={pending}
-      onClick={() => startTransition(() => router.push(href))}
+      disabled={phase === "opening"}
+      onClick={open}
       className={primary ? btnPrimary : btnSecondary}
     >
-      {pending ? "Abrindo…" : label}
+      {phase === "opening" ? "Abrindo…" : label}
     </button>
   );
 }

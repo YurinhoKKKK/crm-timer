@@ -8,13 +8,13 @@ import TimeByCompanyChart, { type CompanyTime } from "./TimeByCompanyChart";
 import CollaboratorSummary, {
   type CollaboratorRow,
 } from "./CollaboratorSummary";
+import { periodStart } from "@/lib/period";
 
 type InstanceRow = {
   company_id: string;
   collaborator_id: string;
   status: TaskStatus;
   due_at: string | null;
-  total_seconds: number;
 };
 
 type Named = { id: string; name: string };
@@ -54,15 +54,6 @@ function normalizePeriod(value: string | string[] | undefined): Period {
   return PERIODS.includes(v as Period) ? (v as Period) : "30d";
 }
 
-// Início do período (string YYYY-MM-DD) para filtrar por task_date. null = tudo.
-function periodStart(period: Period): string | null {
-  if (period === "tudo") return null;
-  const d = new Date();
-  if (period === "7d") d.setDate(d.getDate() - 6);
-  else if (period === "30d") d.setDate(d.getDate() - 29);
-  return d.toISOString().slice(0, 10);
-}
-
 const PERIOD_LABEL: Record<Period, string> = {
   hoje: "hoje",
   "7d": "nos últimos 7 dias",
@@ -71,6 +62,9 @@ const PERIOD_LABEL: Record<Period, string> = {
 };
 
 function formatDuration(totalSeconds: number): string {
+  // Ver nota em lib/format.ts: correções manuais para baixo gravam intervalo
+  // negativo; num recorte curto o agregado pode somar negativo. Piso em 0.
+  if (totalSeconds < 0) totalSeconds = 0;
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   if (hours === 0 && minutes === 0) return "0min";
@@ -88,9 +82,12 @@ export default async function AdminPage({
   const period = normalizePeriod(searchParams?.periodo);
   const start = periodStart(period);
 
+  // Contagens por status e overdue seguem por task_date (a fazer/prazo). O
+  // TEMPO por período NÃO sai daqui: vem das RPCs time_by_* (time_entries por
+  // started_at), porque task_date é o prazo, não o dia trabalhado.
   let instancesQuery = supabase
     .from("task_instances")
-    .select("company_id, collaborator_id, status, due_at, total_seconds");
+    .select("company_id, collaborator_id, status, due_at");
   if (start) instancesQuery = instancesQuery.gte("task_date", start);
 
   const perf = perfRoute("/admin (dashboard)");
@@ -98,8 +95,10 @@ export default async function AdminPage({
     { data: instancesData, error: instancesError },
     { data: companiesData },
     { data: collaboratorsData },
+    { data: companyTimeData },
+    { data: collaboratorTimeData },
   ] = await Promise.all([
-    perf.timed("task_instances (todas do período, sem limit)", instancesQuery),
+    perf.timed("task_instances (contagens por período, sem limit)", instancesQuery),
     perf.timed("companies", supabase.from("companies").select("id, name")),
     // Todos os perfis (não só role=colaborador): admin/consultor que executam
     // tarefas também contam como responsáveis pelo tempo (Passo 14). Os que não
@@ -107,6 +106,17 @@ export default async function AdminPage({
     perf.timed(
       "profiles",
       supabase.from("profiles").select("id, full_name, email, avatar_path")
+    ),
+    // Tempo TRABALHADO no período (por empresa e por responsável), agregado no
+    // banco a partir de time_entries.started_at (BRT). SECURITY INVOKER: admin
+    // enxerga tudo pela te_select.
+    perf.timed(
+      "rpc time_by_company",
+      supabase.rpc("time_by_company", { p_start: start })
+    ),
+    perf.timed(
+      "rpc time_by_collaborator",
+      supabase.rpc("time_by_collaborator", { p_start: start })
     ),
   ]);
   perf.done();
@@ -117,6 +127,23 @@ export default async function AdminPage({
 
   const companyName = new Map(companies.map((c) => [c.id, c.name]));
 
+  // Tempo do período (fonte de verdade: time_entries via RPC).
+  const companyTime = new Map(
+    ((companyTimeData as { company_id: string; seconds: number }[]) ?? []).map(
+      (r) => [r.company_id, Number(r.seconds)]
+    )
+  );
+  const collaboratorSeconds = new Map(
+    (
+      (collaboratorTimeData as { collaborator_id: string; seconds: number }[]) ??
+      []
+    ).map((r) => [r.collaborator_id, Number(r.seconds)])
+  );
+  const totalSeconds = Array.from(companyTime.values()).reduce(
+    (s, v) => s + v,
+    0
+  );
+
   const statusCount: Record<TaskStatus, number> = {
     a_fazer: 0,
     iniciada: 0,
@@ -124,19 +151,15 @@ export default async function AdminPage({
     cancelada: 0,
   };
 
-  let totalSeconds = 0;
   let overdue = 0;
   const now = Date.now();
 
-  const companyTime = new Map<string, number>();
-  const perCollaborator = new Map<
-    string,
-    { seconds: number; total: number; done: number }
-  >();
+  // Contagens por responsável (total/concluídas) por task_date; o TEMPO vem do
+  // mapa collaboratorSeconds (time_entries).
+  const perCollaborator = new Map<string, { total: number; done: number }>();
 
   for (const r of instances) {
     statusCount[r.status] += 1;
-    totalSeconds += r.total_seconds;
 
     if (
       r.status !== "finalizada" &&
@@ -147,17 +170,7 @@ export default async function AdminPage({
       overdue += 1;
     }
 
-    companyTime.set(
-      r.company_id,
-      (companyTime.get(r.company_id) ?? 0) + r.total_seconds
-    );
-
-    const c = perCollaborator.get(r.collaborator_id) ?? {
-      seconds: 0,
-      total: 0,
-      done: 0,
-    };
-    c.seconds += r.total_seconds;
+    const c = perCollaborator.get(r.collaborator_id) ?? { total: 0, done: 0 };
     c.total += 1;
     if (r.status === "finalizada") c.done += 1;
     perCollaborator.set(r.collaborator_id, c);
@@ -175,22 +188,22 @@ export default async function AdminPage({
 
   const collaboratorRows: CollaboratorRow[] = collaborators
     .map((p) => {
-      const stats = perCollaborator.get(p.id) ?? {
-        seconds: 0,
-        total: 0,
-        done: 0,
-      };
+      const stats = perCollaborator.get(p.id) ?? { total: 0, done: 0 };
+      // Tempo do responsável no período vem de time_entries (RPC). Pode haver
+      // quem trabalhou no período em tarefa datada fora dele (seconds > 0,
+      // total 0) — entra no resumo mesmo assim.
+      const seconds = collaboratorSeconds.get(p.id) ?? 0;
       return {
         id: p.id,
         name: p.full_name || p.email,
         avatarPath: p.avatar_path,
-        seconds: stats.seconds,
+        seconds,
         total: stats.total,
         done: stats.done,
         percent: stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0,
       };
     })
-    .filter((r) => r.total > 0)
+    .filter((r) => r.total > 0 || r.seconds > 0)
     .sort((a, b) => b.seconds - a.seconds)
     .map(({ seconds, ...r }) => ({
       ...r,

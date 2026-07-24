@@ -736,6 +736,10 @@ export type Database = {
           name: string
         }[]
       }
+      entry_seconds: {
+        Args: { p_ended: string; p_seconds: number; p_started: string }
+        Returns: number
+      }
       generate_daily_tasks: { Args: { target_date?: string }; Returns: number }
       generate_template_today: {
         Args: { p_template: string }
@@ -762,6 +766,27 @@ export type Database = {
           seconds: number
           first_date: string
           last_date: string
+        }[]
+      }
+      time_by_collaborator: {
+        Args: { p_start: string }
+        Returns: {
+          collaborator_id: string
+          seconds: number
+        }[]
+      }
+      time_by_company: {
+        Args: { p_collaborator?: string; p_start: string }
+        Returns: {
+          company_id: string
+          seconds: number
+        }[]
+      }
+      time_by_task: {
+        Args: { p_collaborator?: string; p_company: string; p_start: string }
+        Returns: {
+          seconds: number
+          task_id: string
         }[]
       }
       timer_finish: {

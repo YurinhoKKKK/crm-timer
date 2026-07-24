@@ -1815,6 +1815,53 @@ ancorada e não aceitou redimensionamento) — fica no checklist manual.
 
 ---
 
+## PASSO 33 — Correção: cômputo de tempo POR PERÍODO (Feito)
+
+Bug confirmado em produção (investigação somente-leitura, números reais). O
+filtro de período ("Hoje" etc.) somava `task_instances.total_seconds` filtrando
+por `task_date` — mas `task_date` é o **prazo/dia agendado** da tarefa, não o dia
+em que o trabalho ocorreu. Respondia "tempo das tarefas **previstas** para o
+período" e exibia como "tempo **trabalhado** no período". No diagnóstico: 92 de
+446 instâncias com tempo (~20%, 155h) mal atribuídas, concentradas nas **únicas
+com prazo futuro** (nas diárias, data e trabalho coincidem). Caso âncora: uma
+colaboradora aparecia com ~5h05 no "Hoje" às 09:18 tendo chegado 08:23 — 2h48 e
+1h58 eram trabalho de ONTEM em tarefas datadas de hoje; só 19min eram reais.
+
+**Correção (migrations `0037` e `0038`):**
+- **Regra nova:** todo tempo por período sai de `time_entries` pela janela em que
+  o trabalho ocorreu (`started_at` em `America/Sao_Paulo`), via RPCs
+  `time_by_company` / `time_by_collaborator` / `time_by_task` (SECURITY INVOKER,
+  herdam `te_select` — escopo por cargo idêntico). Helper `entry_seconds`.
+  `company_overview` e `company_collaborator_summary` passaram a tirar o **tempo**
+  de `time_entries`; **contagens de status** e **`seconds_all`** seguem por
+  `task_date`/`total_seconds`. Tempo **por tarefa** continua em `total_seconds`.
+- **Meia-noite:** sessão inteira no dia do `started_at` (sem rateio). Timer em
+  andamento conta `now() − started_at`.
+- ⚠️ **Ajustes manuais (Passo 16) gravam intervalos de reconciliação que PODEM
+  SER NEGATIVOS** (redução de tempo: `seconds = novo − soma_atual`), o que mantém
+  `sum(time_entries) = total_seconds`. **Zerá-los com `greatest(0,…)` quebra o
+  cálculo** — foi o bug pego na implementação e corrigido na `0038`: o clamp em 0
+  vale só para o intervalo **aberto**; intervalo fechado usa o `seconds` com
+  sinal. `formatDuration` põe piso em 0 só na exibição.
+- **NÃO** criar constraint exigindo `seconds = ended_at − started_at` (quebraria o
+  Passo 16).
+- **Limitação conhecida (aceita):** o ajuste cai no dia da **correção**, não no
+  dia do trabalho.
+- **Bônus:** os limites de período estavam em data **UTC** (das 21h à meia-noite
+  BRT apontavam o dia seguinte) — corrigidos para BRT em `lib/period.ts`.
+- Rótulos separados nas telas: "Tempo trabalhado no período" × "Tarefas previstas
+  para o período" (+ nota), para a divergência lista×total não ser implícita.
+
+Validado no banco (transações revertidas): caso âncora 5h05 → 19min; total do
+**mês** por pessoa praticamente igual (deltas < 0,12h — o que muda é a
+distribuição entre dias); invariante `sum(entries)=total_seconds` sem
+divergências; escopo por cargo preservado (consultor só empresas dele,
+colaborador só o próprio tempo); timer em andamento e ajuste manual entram na
+soma. Correção 100% de leitura; portal do cliente intocado. Aprovado no navegador
+pelo usuário (24/07).
+
+---
+
 # ITENS ARQUIVADOS E DECISÕES EM ABERTO
 
 Registro do que foi CONSCIENTEMENTE deixado de lado, para não parecer

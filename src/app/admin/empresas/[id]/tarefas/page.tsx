@@ -6,23 +6,16 @@ import {
   normalizeStatusFilter,
   statusListTitle,
 } from "@/lib/instance-status";
+import { periodStart, type PeriodKey } from "@/lib/period";
 import InstanceStatusList from "@/app/admin/instancias/InstanceStatusList";
 
-type Period = "hoje" | "7d" | "30d" | "tudo";
+type Period = PeriodKey;
 
 const PERIODS: Period[] = ["hoje", "7d", "30d", "tudo"];
 
 function normalizePeriod(value: string | string[] | undefined): Period {
   const v = Array.isArray(value) ? value[0] : value;
   return PERIODS.includes(v as Period) ? (v as Period) : "30d";
-}
-
-function periodStart(period: Period): string | null {
-  if (period === "tudo") return null;
-  const d = new Date();
-  if (period === "7d") d.setDate(d.getDate() - 6);
-  else if (period === "30d") d.setDate(d.getDate() - 29);
-  return d.toISOString().slice(0, 10);
 }
 
 // Drill-down do funil da central da empresa (admin): lista dedicada com as

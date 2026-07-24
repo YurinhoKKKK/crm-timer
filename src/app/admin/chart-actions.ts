@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase-server";
 import type { TaskStatus } from "@/lib/types";
 import { avatarUrl } from "@/lib/avatar";
+import { periodStart } from "@/lib/period";
 import type { Period } from "./PeriodFilter";
 
 export type BreakdownTask = {
@@ -20,21 +21,10 @@ function first<T>(value: Joined<T>): T | null {
   return value;
 }
 
-// Início do período (YYYY-MM-DD) — mesma regra do dashboard, para que a soma
-// do detalhamento bata exatamente com a altura da barra.
-function periodStart(period: Period): string | null {
-  if (period === "tudo") return null;
-  const d = new Date();
-  if (period === "7d") d.setDate(d.getDate() - 6);
-  else if (period === "30d") d.setDate(d.getDate() - 29);
-  return d.toISOString().slice(0, 10);
-}
-
 type Row = {
   id: string;
   title: string;
   status: TaskStatus;
-  total_seconds: number;
   collaborator: Joined<{
     full_name: string | null;
     email: string;
@@ -43,10 +33,12 @@ type Row = {
 };
 
 // Passo 17 — tarefas que compõem o tempo de uma empresa no período, ordenadas
-// da que mais consumiu para a que menos. A RLS (ti_select / is_admin) protege.
-// `collaboratorId` opcional escopa o detalhamento a um único responsável: usado
-// no gráfico da página do colaborador, cuja barra já é só o tempo dele naquela
-// empresa — assim a soma do painel bate exatamente com a altura da barra.
+// da que mais consumiu para a que menos. O tempo por tarefa é o TRABALHADO no
+// período (time_entries por started_at, via RPC time_by_task), não o
+// total_seconds da tarefa — assim a soma bate exatamente com a barra do
+// gráfico, que também vem de time_entries. `collaboratorId` opcional escopa o
+// detalhamento a um único responsável (gráfico da tela do colaborador). A RLS
+// (ti_select / te_select) protege o acesso.
 export async function getCompanyTimeBreakdown(
   companyId: string,
   period: Period,
@@ -63,16 +55,30 @@ export async function getCompanyTimeBreakdown(
   if (!user) return { error: "Sessão expirada. Faça login novamente." };
 
   const start = periodStart(period);
-  let query = supabase
+
+  // 1) Tempo por tarefa no período (fonte de verdade: time_entries).
+  const { data: timeData, error: timeError } = await supabase.rpc(
+    "time_by_task",
+    { p_company: companyId, p_start: start, p_collaborator: collaboratorId ?? null }
+  );
+  if (timeError) return { error: timeError.message };
+
+  const secondsByTask = new Map(
+    ((timeData as { task_id: string; seconds: number }[]) ?? []).map((r) => [
+      r.task_id,
+      Number(r.seconds),
+    ])
+  );
+  const ids = Array.from(secondsByTask.keys());
+  if (ids.length === 0) return { error: null, tasks: [], totalSeconds: 0 };
+
+  // 2) Metadados das tarefas com tempo no período (título, status, responsável).
+  const { data, error } = await supabase
     .from("task_instances")
     .select(
-      "id, title, status, total_seconds, collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email, avatar_path)"
+      "id, title, status, collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email, avatar_path)"
     )
-    .eq("company_id", companyId);
-  if (collaboratorId) query = query.eq("collaborator_id", collaboratorId);
-  if (start) query = query.gte("task_date", start);
-
-  const { data, error } = await query;
+    .in("id", ids);
   if (error) return { error: error.message };
 
   const tasks: BreakdownTask[] = ((data as Row[]) ?? [])
@@ -85,7 +91,7 @@ export async function getCompanyTimeBreakdown(
         collaboratorName:
           collab?.full_name || collab?.email || "(sem responsável)",
         collaboratorAvatarUrl: avatarUrl(collab?.avatar_path),
-        seconds: r.total_seconds,
+        seconds: secondsByTask.get(r.id) ?? 0,
       };
     })
     .filter((t) => t.seconds > 0)

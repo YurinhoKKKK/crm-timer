@@ -1,6 +1,11 @@
 // Helpers de formatação reutilizados nas telas.
 
 export function formatDuration(totalSeconds: number): string {
+  // Agregados de tempo por período vêm de time_entries com sinal (uma correção
+  // manual para baixo grava um intervalo negativo — passo 16). Num recorte
+  // curto ("Hoje") um dia dominado por essa correção pode somar negativo; o
+  // tempo trabalhado nunca é exibido negativo, então piso em 0.
+  if (totalSeconds < 0) totalSeconds = 0;
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   if (hours === 0 && minutes === 0) return "0min";

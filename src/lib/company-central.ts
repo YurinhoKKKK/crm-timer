@@ -12,6 +12,7 @@ import type {
   ClientAccessView,
 } from "@/lib/client-portal";
 import { perfRoute } from "@/lib/perf";
+import { periodStart, monthStart } from "@/lib/period";
 import {
   resolvePeople,
   describeInstanceCreator,
@@ -41,20 +42,9 @@ function first<T>(value: Joined<T>): T | null {
   return value;
 }
 
-// Início do período (YYYY-MM-DD) — mesma regra do dashboard, para os números
-// baterem. null = todo o período.
-function periodStart(period: Period): string | null {
-  if (period === "tudo") return null;
-  const d = new Date();
-  if (period === "7d") d.setDate(d.getDate() - 6);
-  else if (period === "30d") d.setDate(d.getDate() - 29);
-  return d.toISOString().slice(0, 10);
-}
-
-function monthStart(): string {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
-}
+// Limites de período em BRT — mesma regra do dashboard, para os números
+// baterem (lib/period). `periodStart` filtra tanto task_date (contagens/listas)
+// quanto started_at (tempo, no banco); null = todo o período.
 
 export type CentralCompany = {
   id: string;

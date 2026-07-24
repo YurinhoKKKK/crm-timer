@@ -14,6 +14,7 @@ import AdjustableTaskList, {
 } from "./AdjustableTaskList";
 import TimeByCompanyChart, { type CompanyTime } from "../../TimeByCompanyChart";
 import PeriodFilter, { type Period } from "../../PeriodFilter";
+import { periodStart } from "@/lib/period";
 
 type Joined<T> = T | T[] | null;
 
@@ -55,15 +56,6 @@ const PERIOD_LABEL: Record<Period, string> = {
 function normalizePeriod(value: string | string[] | undefined): Period {
   const v = Array.isArray(value) ? value[0] : value;
   return PERIODS.includes(v as Period) ? (v as Period) : "30d";
-}
-
-// Início do período (YYYY-MM-DD) para filtrar por task_date / created_at.
-function periodStart(period: Period): string | null {
-  if (period === "tudo") return null;
-  const d = new Date();
-  if (period === "7d") d.setDate(d.getDate() - 6);
-  else if (period === "30d") d.setDate(d.getDate() - 29);
-  return d.toISOString().slice(0, 10);
 }
 
 const ROLE_LABEL: Record<string, string> = {
@@ -144,11 +136,24 @@ export default async function CollaboratorDetailPage({
     .limit(30);
   if (start) activityQuery = activityQuery.gte("created_at", start);
 
-  const [{ data: instancesData, error }, { data: activityData }] =
-    await Promise.all([instancesQuery, activityQuery]);
+  const [
+    { data: instancesData, error },
+    { data: activityData },
+    { data: timeByCompanyData },
+  ] = await Promise.all([
+    instancesQuery,
+    activityQuery,
+    // Tempo TRABALHADO no período por empresa, escopado a este responsável
+    // (time_entries por started_at BRT). Fonte do "Tempo trabalhado no período"
+    // e do gráfico — o total_seconds das instâncias (por task_date) inflava
+    // dias errados.
+    supabase.rpc("time_by_company", { p_start: start, p_collaborator: params.id }),
+  ]);
 
   const instances = (instancesData as InstanceRow[]) ?? [];
   const activities = (activityData as ActivityRow[]) ?? [];
+  const timeRows =
+    (timeByCompanyData as { company_id: string; seconds: number }[]) ?? [];
 
   // Ajustes manuais de tempo (Passo 16) das tarefas listadas, para o selo
   // "tempo ajustado" e o histórico. RLS ta_select libera para o admin.
@@ -188,30 +193,50 @@ export default async function CollaboratorDetailPage({
   }
 
   // --- Métricas do cabeçalho ---
-  let totalSeconds = 0;
+  // Contagens (concluídas/total) por task_date; TEMPO por time_entries (RPC).
   let done = 0;
   const total = instances.length;
   const now = Date.now();
 
-  const companyTime = new Map<string, { name: string; seconds: number }>();
-
   for (const r of instances) {
-    totalSeconds += r.total_seconds;
     if (r.status === "finalizada") done += 1;
-
-    const cName = first(r.company)?.name ?? "(empresa removida)";
-    const ct = companyTime.get(r.company_id) ?? { name: cName, seconds: 0 };
-    ct.seconds += r.total_seconds;
-    companyTime.set(r.company_id, ct);
   }
-
   const percent = total > 0 ? Math.round((done / total) * 100) : 0;
 
+  const totalSeconds = timeRows.reduce((s, r) => s + Number(r.seconds), 0);
+
+  // Nomes das empresas: a maioria vem da lista de tarefas do período; uma
+  // empresa com trabalho no período mas sem tarefa DATADA nele (o próprio caso
+  // do bug) não aparece na lista — buscamos o nome dela à parte.
+  const companyNames = new Map<string, string>();
+  for (const r of instances) {
+    companyNames.set(
+      r.company_id,
+      first(r.company)?.name ?? "(empresa removida)"
+    );
+  }
+  const missingNames = timeRows
+    .map((r) => r.company_id)
+    .filter((id) => !companyNames.has(id));
+  if (missingNames.length > 0) {
+    const { data: extra } = await supabase
+      .from("companies")
+      .select("id, name")
+      .in("id", missingNames);
+    for (const c of (extra as { id: string; name: string }[]) ?? []) {
+      companyNames.set(c.id, c.name);
+    }
+  }
+
   // --- Tempo por empresa (mesmo gráfico da dashboard) ---
-  // Mantém o id da empresa (chave do mapa) para habilitar o detalhamento por
-  // clique, escopado a este colaborador.
-  const chartData: CompanyTime[] = Array.from(companyTime.entries())
-    .map(([id, c]) => ({ id, name: c.name, seconds: c.seconds }))
+  // Mantém o id da empresa (chave) para habilitar o detalhamento por clique,
+  // escopado a este colaborador. Tempo por time_entries (bate com a barra).
+  const chartData: CompanyTime[] = timeRows
+    .map((r) => ({
+      id: r.company_id,
+      name: companyNames.get(r.company_id) ?? "(empresa)",
+      seconds: Number(r.seconds),
+    }))
     .filter((d) => d.seconds > 0)
     .sort((a, b) => b.seconds - a.seconds);
 
@@ -290,7 +315,9 @@ export default async function CollaboratorDetailPage({
               </div>
               <div className="grid grid-cols-2 gap-3 sm:gap-6">
                 <div className="rounded-xl border border-line bg-surface-2/40 p-4 sm:border-0 sm:bg-transparent sm:p-0 sm:text-right">
-                  <p className="text-xs text-fg-muted">Tempo total</p>
+                  <p className="text-xs text-fg-muted">
+                    Tempo trabalhado no período
+                  </p>
                   <p className="mt-1 font-mono text-2xl font-semibold tabular-nums text-fg">
                     {formatDuration(totalSeconds)}
                   </p>
@@ -392,11 +419,15 @@ export default async function CollaboratorDetailPage({
           {/* Lista de tarefas com busca/filtros + ajuste de tempo (Passo 16) */}
           <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
             <h3 className="mb-1 text-sm font-semibold text-fg">
-              Tarefas ({total})
+              Tarefas previstas para o período ({total})
             </h3>
             <p className="mb-4 text-xs text-fg-subtle">
-              Como admin, você pode corrigir o tempo de uma tarefa (ex.: alguém
-              esqueceu de pausar). Toda correção fica registrada.
+              Estas são as tarefas com prazo no período — o tempo de cada uma é o
+              total gasto nela. O &ldquo;Tempo trabalhado no período&rdquo; acima
+              conta o trabalho pelo dia em que foi feito, então uma tarefa
+              prevista para hoje pode ter sido trabalhada em outro dia. Como
+              admin, você pode corrigir o tempo de uma tarefa (ex.: alguém
+              esqueceu de pausar); toda correção fica registrada.
             </p>
             <AdjustableTaskList
               items={items}

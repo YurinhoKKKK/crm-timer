@@ -216,10 +216,13 @@ export default function CompanyCentral({
 
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
         <StatCard
-          label={`Tempo ${PERIOD_LABEL[period]}`}
+          label={`Tempo trabalhado ${PERIOD_LABEL[period]}`}
           value={formatDuration(o.secondsPeriod)}
         />
-        <StatCard label="Tempo no mês atual" value={formatDuration(o.secondsMonth)} />
+        <StatCard
+          label="Tempo trabalhado no mês"
+          value={formatDuration(o.secondsMonth)}
+        />
         <StatCard
           label="Tempo total da empresa"
           value={formatDuration(o.secondsAll)}
@@ -321,9 +324,15 @@ export default function CompanyCentral({
 
       {/* 5. Lista de tarefas */}
       <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
-        <h3 className="mb-4 text-sm font-semibold text-fg">
-          Tarefas {PERIOD_LABEL[period]}
+        <h3 className="mb-1 text-sm font-semibold text-fg">
+          Tarefas previstas para o período
         </h3>
+        <p className="mb-4 text-xs text-fg-subtle">
+          Lista por prazo ({PERIOD_LABEL[period]}); o tempo em cada tarefa é o
+          total gasto nela. O &ldquo;Tempo trabalhado&rdquo; acima conta pelo dia
+          em que o trabalho foi feito, então uma tarefa prevista para o período
+          pode ter sido trabalhada em outro.
+        </p>
         <CompanyTaskList
           tasks={data.tasks}
           truncated={data.tasksTruncated}

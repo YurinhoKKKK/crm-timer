@@ -11,8 +11,9 @@ import {
   usePaged,
 } from "@/components/ListControls";
 import { MARKETPLACES } from "@/lib/listing";
-import type { PortalListing } from "@/lib/client-portal";
+import type { PortalListing, PortalSource } from "@/lib/client-portal";
 import { formatPortalDate } from "./portal-format";
+import PortalListingActions from "./PortalListingActions";
 
 // Aba "Listagens" do portal do cliente. Filtra e pagina EM MEMÓRIA sobre o
 // conjunto curado que veio de client_portal_data — nenhuma consulta nova.
@@ -31,9 +32,14 @@ const BRANDS_PER_PAGE = 10;
 
 export default function PortalListings({
   listings,
+  source,
 }: {
   listings: PortalListing[];
+  source: PortalSource;
 }) {
+  // No portal, o cliente age (token da sessão). Na pré-visualização interna
+  // ("Ver como cliente"), token é null: mostra o estado, sem ações.
+  const token = source.mode === "portal" ? source.token : null;
   const [query, setQuery] = useState("");
   const [marketplace, setMarketplace] = useState("");
   const [status, setStatus] = useState("");
@@ -178,9 +184,9 @@ export default function PortalListings({
                       {rows.map((r, i) => (
                         <li key={`${r.marketplace}-${i}`}>
                           {r.link ? (
-                            <ListedRow row={r} />
+                            <ListedRow row={r} token={token} />
                           ) : (
-                            <NotListedRow row={r} />
+                            <NotListedRow row={r} token={token} />
                           )}
                         </li>
                       ))}
@@ -204,16 +210,12 @@ export default function PortalListings({
   );
 }
 
-// Com link: a LINHA INTEIRA é clicável; "Ver listagem" é um link discreto
-// (o azul cheio fica reservado a no máximo uma ação principal por bloco).
-function ListedRow({ row }: { row: PortalListing }) {
+// Com link: "Ver listagem" é um link discreto (o azul cheio fica reservado a no
+// máximo uma ação principal por bloco). Abaixo, as ações de validação (aprovar /
+// solicitar ajuste) — o cliente registra seu veredito sem sair da lista.
+function ListedRow({ row, token }: { row: PortalListing; token: string | null }) {
   return (
-    <a
-      href={row.link!}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="group block rounded-xl border border-line bg-surface p-3.5 shadow-sm transition hover:border-risd/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface sm:p-4"
-    >
+    <div className="rounded-xl border border-line bg-surface p-3.5 shadow-sm sm:p-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <MarketplaceBadge marketplace={row.marketplace} />
         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
@@ -238,7 +240,12 @@ function ListedRow({ row }: { row: PortalListing }) {
               {formatPortalDate(row.date)}
             </span>
           )}
-          <span className="inline-flex items-center gap-1 text-sm font-medium text-risd">
+          <a
+            href={row.link!}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group inline-flex items-center gap-1 text-sm font-medium text-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+          >
             Ver listagem
             <svg
               width="13"
@@ -255,16 +262,23 @@ function ListedRow({ row }: { row: PortalListing }) {
               <path d="M7 17 17 7" />
               <path d="M9 7h8v8" />
             </svg>
-          </span>
+          </a>
         </span>
       </div>
-    </a>
+      <PortalListingActions
+        token={token}
+        listingResultId={row.id}
+        kind="listed"
+        initial={row.validation}
+      />
+    </div>
   );
 }
 
 // Sem link: tom NEUTRO (não é alerta nem pendência) e o motivo como nota
-// editorial da curadoria.
-function NotListedRow({ row }: { row: PortalListing }) {
+// editorial da curadoria. O cliente pode CONTESTAR (com comentário) — captura
+// informação comercial que hoje se perde.
+function NotListedRow({ row, token }: { row: PortalListing; token: string | null }) {
   return (
     <div className="rounded-xl border border-line/70 bg-surface-2/50 p-3.5 sm:p-4">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -278,9 +292,13 @@ function NotListedRow({ row }: { row: PortalListing }) {
           </span>
         )}
       </div>
-      {row.reason && (
-        <p className="mt-2 text-sm text-fg-muted">{row.reason}</p>
-      )}
+      {row.reason && <p className="mt-2 text-sm text-fg-muted">{row.reason}</p>}
+      <PortalListingActions
+        token={token}
+        listingResultId={row.id}
+        kind="not_listed"
+        initial={row.validation}
+      />
     </div>
   );
 }

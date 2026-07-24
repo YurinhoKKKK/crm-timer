@@ -8,6 +8,7 @@ import {
   PORTAL_MESSAGES_PAGE,
   type PortalProgress,
   type PortalMessages,
+  type ListingValidationEvent,
 } from "@/lib/client-portal";
 
 // Ações do PORTAL DO CLIENTE (passo 25). O cliente não tem conta: o login
@@ -125,6 +126,66 @@ export async function clientPortalSendMessage(
     return {
       error: MESSAGE_ERROR[res?.error ?? ""] ?? "Não foi possível enviar.",
     };
+  }
+  return { error: null };
+}
+
+// --- Validação das listagens (passo 33) ------------------------------------
+// O VEREDITO do cliente sobre uma listagem (aprovar / solicitar ajuste /
+// contestar). Append-only: cada ação é um evento imutável. A empresa e a
+// autoria são carimbadas no banco pela SESSÃO (nunca do navegador); a função
+// client_portal_listing_validate valida que o item é da empresa do token e que
+// o evento é coerente com o estado do item.
+
+const VALIDATION_ERROR: Record<string, string> = {
+  sessao: "Sua sessão expirou. Recarregue a página e entre de novo.",
+  item: "Não foi possível identificar esta listagem. Recarregue a página.",
+  estado: "Esta ação não é válida para esta listagem. Recarregue a página.",
+  tipo: "Ação inválida.",
+  comentario: "Escreva um comentário para a equipe.",
+  longo: "O comentário pode ter no máximo 2000 caracteres.",
+  limite:
+    "Você fez muitas ações em pouco tempo. Aguarde um instante e continue de onde parou.",
+};
+
+export async function clientPortalValidateListing(
+  token: string,
+  listingResultId: string,
+  event: ListingValidationEvent,
+  comment: string
+): Promise<{ error: string | null }> {
+  const secret = cookies().get(SESSION_COOKIE)?.value ?? null;
+  if (!secret || !token) return { error: VALIDATION_ERROR.sessao };
+
+  const trimmed = comment.trim();
+  if (event !== "aprovado" && !trimmed) {
+    return { error: VALIDATION_ERROR.comentario };
+  }
+  if (trimmed.length > 2000) return { error: VALIDATION_ERROR.longo };
+
+  const h = headers();
+  const ip =
+    h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    h.get("x-real-ip") ||
+    null;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("client_portal_listing_validate", {
+    p_token: token,
+    p_session: secret,
+    p_listing_result: listingResultId,
+    p_event_type: event,
+    p_comment: trimmed || null,
+    p_ip: ip,
+    p_user_agent: h.get("user-agent"),
+  });
+  if (error) {
+    return { error: "Não foi possível registrar. Tente novamente." };
+  }
+
+  const res = data as { ok: boolean; error?: string } | null;
+  if (!res?.ok) {
+    return { error: VALIDATION_ERROR[res?.error ?? ""] ?? "Não foi possível registrar." };
   }
   return { error: null };
 }

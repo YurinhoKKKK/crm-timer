@@ -1815,7 +1815,7 @@ ancorada e não aceitou redimensionamento) — fica no checklist manual.
 
 ---
 
-## PASSO 33 — Correção: cômputo de tempo POR PERÍODO (Feito)
+## PASSO 32.3 — Correção: cômputo de tempo POR PERÍODO (Feito)
 
 Bug confirmado em produção (investigação somente-leitura, números reais). O
 filtro de período ("Hoje" etc.) somava `task_instances.total_seconds` filtrando
@@ -1859,6 +1859,48 @@ divergências; escopo por cargo preservado (consultor só empresas dele,
 colaborador só o próprio tempo); timer em andamento e ajuste manual entram na
 soma. Correção 100% de leitura; portal do cliente intocado. Aprovado no navegador
 pelo usuário (24/07).
+
+---
+
+## PASSO 33 — Validação das listagens pelo cliente (Feito)
+
+Até aqui o cliente LIA (25-27) e CONVERSAVA (31). Agora ele registra um VEREDITO
+sobre cada listagem (marca×marketplace): **Aprovar** / **Solicitar ajuste** nas
+listadas, e **contestar** ("Gostaria de listar esta marca") nas não listadas. É
+registro de NEGÓCIO — integridade acima da das mensagens.
+
+**Aplicado (migrations `0039` e `0040`):**
+- **Append-only e imutável** (`listing_validations`): cada ação é um evento; o
+  status é o ÚLTIMO evento; histórico nunca some; mudar de ideia = novo evento
+  (verificado: aprovar→ajuste gera 2 eventos, estado vira ajuste). Sem UPDATE
+  nem DELETE, para ninguém (nem admin).
+- **Autoria carimbada no servidor** (como nas mensagens): portal →
+  `client_portal_listing_validate` (SECURITY DEFINER, empresa da sessão,
+  'cliente'/NULL, valida coerência estado×evento e comentário obrigatório em
+  ajuste/contestação); interno → INSERT sob `lv_insert_interno`
+  ('interno' + author_id=auth.uid()). Nenhuma policy aceita 'cliente' de usuário
+  autenticado ⇒ ninguém de dentro forja veredito do cliente (validado). Limite
+  honesto: quem tem a senha do portal é o cliente.
+- **Sem consequência operacional; opcional e silenciosa:** só registra e
+  notifica, nada de trava/automação, nada de cobrança de pendência no portal.
+- **Notificação reaproveita o passo 32 (fonte única):** badge `my_unread_total`
+  = mensagens + validações; SÓ ajuste/contestação notificam (aprovação não);
+  `mark_validations_read` zera o badge (a FILA em aberto continua). "Onde ver":
+  seção "Listagens para revisar" na caixa de entrada (`listing_validation_queue`,
+  escopo por cargo — colaborador só as DELE), link direto p/ a central
+  (`?aba=listings`); histórico por listagem na aba "Minhas Listagens".
+- **Rate limit recalibrado (`0040`):** validações 20→**100/10min**, sem contar
+  aprovações (uma empresa já tem 23 itens); mensagens do portal 10→**30/10min**;
+  mensagem de limite ao cliente clara e não alarmante.
+- **Observação:** `listing_validation_reads` é por USUÁRIO (não por empresa) —
+  marcar visto zera o alerta de todas as empresas de uma vez (coerente com a
+  caixa única; a fila em aberto não depende disso).
+
+Validado no banco (transações revertidas): função aceita aprovar/ajuste/
+contestar e recusa sem comentário, incoerência de estado, sessão forjada e item
+de outra empresa; admin não forja veredito de cliente; ninguém edita/apaga
+evento; colaborador alheio não vê nada; badge some ao marcar visto e a fila
+permanece; aprovação não notifica.
 
 ---
 

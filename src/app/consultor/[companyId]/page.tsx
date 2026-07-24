@@ -6,7 +6,7 @@ import CompanyCentralTabs from "@/components/company-central/CompanyCentralTabs"
 import CompanyListings from "@/components/company-central/CompanyListings";
 import CompanyNotes from "@/components/company-central/CompanyNotes";
 import { loadCompanyCentral, type Period } from "@/lib/company-central";
-import { loadCompanyListings } from "@/lib/listing";
+import { loadCompanyListings, loadListingValidations } from "@/lib/listing";
 import { loadCompanyNotes } from "@/lib/notes";
 import { loadCompanyMessages } from "@/lib/messages";
 import CompanyMessages from "@/components/company-central/CompanyMessages";
@@ -35,9 +35,10 @@ export default async function ConsultorEmpresaPage({
   // Mesma paralelização da central do admin: as três leituras são
   // independentes e cada uma é escopada pela RLS por conta própria (aqui, às
   // empresas deste consultor). Antes rodavam em cascata.
-  const [res, listings, notes, messages] = await Promise.all([
+  const [res, listings, listingValidations, notes, messages] = await Promise.all([
     loadCompanyCentral(supabase, profile, params.companyId, period, false),
     loadCompanyListings(supabase, params.companyId),
+    loadListingValidations(supabase, params.companyId),
     loadCompanyNotes(supabase, params.companyId),
     loadCompanyMessages(supabase, params.companyId),
   ]);
@@ -55,7 +56,13 @@ export default async function ConsultorEmpresaPage({
         </div>
       ) : (
         <CompanyCentralTabs
-          initialTab={searchParams?.aba === "mensagens" ? "messages" : "overview"}
+          initialTab={
+            searchParams?.aba === "mensagens"
+              ? "messages"
+              : searchParams?.aba === "listings"
+              ? "listings"
+              : "overview"
+          }
           overview={
             <CompanyCentral
               data={res.data}
@@ -64,7 +71,9 @@ export default async function ConsultorEmpresaPage({
               previewHref={`/consultor/${params.companyId}/ver-como-cliente`}
             />
           }
-          listings={<CompanyListings rows={listings} />}
+          listings={
+            <CompanyListings rows={listings} validations={listingValidations} />
+          }
           notes={
             <CompanyNotes
               companyId={params.companyId}

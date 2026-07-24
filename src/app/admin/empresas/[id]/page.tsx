@@ -6,7 +6,7 @@ import CompanyCentralTabs from "@/components/company-central/CompanyCentralTabs"
 import CompanyListings from "@/components/company-central/CompanyListings";
 import CompanyNotes from "@/components/company-central/CompanyNotes";
 import { loadCompanyCentral, type Period } from "@/lib/company-central";
-import { loadCompanyListings } from "@/lib/listing";
+import { loadCompanyListings, loadListingValidations } from "@/lib/listing";
 import { loadCompanyNotes } from "@/lib/notes";
 import { loadCompanyMessages } from "@/lib/messages";
 import CompanyMessages from "@/components/company-central/CompanyMessages";
@@ -35,9 +35,10 @@ export default async function EmpresaCentralPage({
   // de rede a mais); agora vão juntas. Cada uma é escopada pela RLS por conta
   // própria, então disparar as três em paralelo não amplia o que o usuário
   // enxerga: sem acesso à empresa, todas voltam vazias.
-  const [res, listings, notes, messages] = await Promise.all([
+  const [res, listings, listingValidations, notes, messages] = await Promise.all([
     loadCompanyCentral(supabase, profile, params.id, period, true),
     loadCompanyListings(supabase, params.id),
+    loadListingValidations(supabase, params.id),
     loadCompanyNotes(supabase, params.id),
     loadCompanyMessages(supabase, params.id),
   ]);
@@ -55,7 +56,13 @@ export default async function EmpresaCentralPage({
         </div>
       ) : (
         <CompanyCentralTabs
-          initialTab={searchParams?.aba === "mensagens" ? "messages" : "overview"}
+          initialTab={
+            searchParams?.aba === "mensagens"
+              ? "messages"
+              : searchParams?.aba === "listings"
+              ? "listings"
+              : "overview"
+          }
           overview={
             <CompanyCentral
               data={res.data}
@@ -65,7 +72,9 @@ export default async function EmpresaCentralPage({
               previewHref={`/admin/empresas/${params.id}/ver-como-cliente`}
             />
           }
-          listings={<CompanyListings rows={listings} />}
+          listings={
+            <CompanyListings rows={listings} validations={listingValidations} />
+          }
           notes={
             <CompanyNotes
               companyId={params.id}

@@ -90,7 +90,7 @@ export default function PortalContent({
         key={active}
       >
         {active === "listagens" ? (
-          <PortalListings listings={listings} />
+          <PortalListings listings={listings} source={source} />
         ) : active === "andamento" ? (
           <PortalProgressFeed source={source} initial={progress} />
         ) : active === "mensagens" ? (

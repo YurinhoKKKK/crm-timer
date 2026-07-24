@@ -1,5 +1,6 @@
 import type { createClient } from "@/lib/supabase-server";
 import type { ListingMarketplace } from "@/lib/types";
+import { resolvePeople } from "@/lib/creator";
 
 type Client = Awaited<ReturnType<typeof createClient>>;
 
@@ -280,4 +281,62 @@ export async function loadCompanyListings(
     taskTitle: r.taskTitle,
     dateISO: r.dateISO,
   }));
+}
+
+// Um evento de validação de listagem (passo 33), para o histórico na central.
+export type ListingValidationItem = {
+  event: "aprovado" | "ajuste_solicitado" | "contestado";
+  comment: string | null;
+  authorType: "cliente" | "interno";
+  author: string | null; // primeiro nome de quem registrou, do lado interno
+  at: string;
+};
+
+// Histórico de validação de TODAS as listagens de uma empresa, agrupado por
+// listing_result_id e em ordem cronológica. A RLS lv_select escopa (admin/
+// consultor da empresa; a central só é usada por eles). Os nomes de quem
+// registrou (lado interno) vêm de display_profiles em lote (não esbarra no RLS
+// de profiles). Usado na aba "Minhas Listagens" para mostrar o veredito do
+// cliente e seu histórico junto de cada entrega.
+export async function loadListingValidations(
+  supabase: Client,
+  companyId: string
+): Promise<Record<string, ListingValidationItem[]>> {
+  const { data } = await supabase
+    .from("listing_validations")
+    .select("listing_result_id, event_type, comment, author_type, author_id, created_at")
+    .eq("company_id", companyId)
+    .order("created_at", { ascending: true });
+
+  type Row = {
+    listing_result_id: string;
+    event_type: ListingValidationItem["event"];
+    comment: string | null;
+    author_type: "cliente" | "interno";
+    author_id: string | null;
+    created_at: string;
+  };
+  const rows = (data as Row[] | null) ?? [];
+  if (rows.length === 0) return {};
+
+  const people = await resolvePeople(
+    supabase,
+    rows.filter((r) => r.author_type === "interno").map((r) => r.author_id)
+  );
+
+  const out: Record<string, ListingValidationItem[]> = {};
+  for (const r of rows) {
+    const list = out[r.listing_result_id] ?? (out[r.listing_result_id] = []);
+    list.push({
+      event: r.event_type,
+      comment: r.comment,
+      authorType: r.author_type,
+      author:
+        r.author_type === "interno"
+          ? (people.get(r.author_id ?? "")?.name ?? "Equipe").split(" ")[0]
+          : null,
+      at: r.created_at,
+    });
+  }
+  return out;
 }

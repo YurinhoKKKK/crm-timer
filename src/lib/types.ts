@@ -346,6 +346,78 @@ export type Database = {
           },
         ]
       }
+      listing_validations: {
+        Row: {
+          id: string
+          listing_result_id: string
+          company_id: string
+          event_type: string
+          comment: string | null
+          author_type: string
+          author_id: string | null
+          created_at: string
+          client_session_id: string | null
+          client_ip_hash: string | null
+          client_user_agent: string | null
+        }
+        Insert: {
+          id?: string
+          listing_result_id: string
+          company_id: string
+          event_type: string
+          comment?: string | null
+          author_type: string
+          author_id?: string | null
+          created_at?: string
+          client_session_id?: string | null
+          client_ip_hash?: string | null
+          client_user_agent?: string | null
+        }
+        Update: {
+          id?: string
+          listing_result_id?: string
+          company_id?: string
+          event_type?: string
+          comment?: string | null
+          author_type?: string
+          author_id?: string | null
+          created_at?: string
+          client_session_id?: string | null
+          client_ip_hash?: string | null
+          client_user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listing_validations_listing_result_id_fkey"
+            columns: ["listing_result_id"]
+            isOneToOne: false
+            referencedRelation: "listing_results"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "listing_validations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      listing_validation_reads: {
+        Row: {
+          user_id: string
+          last_read_at: string
+        }
+        Insert: {
+          user_id: string
+          last_read_at?: string
+        }
+        Update: {
+          user_id?: string
+          last_read_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_path: string | null
@@ -746,6 +818,47 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      client_portal_listing_validate: {
+        Args: {
+          p_token: string
+          p_session: string
+          p_listing_result: string
+          p_event_type: string
+          p_comment?: string
+          p_ip?: string
+          p_user_agent?: string
+        }
+        Returns: Json
+      }
+      my_unread_validations: { Args: never; Returns: number }
+      my_unread_total: { Args: never; Returns: number }
+      mark_validations_read: { Args: never; Returns: undefined }
+      listing_validation_queue: {
+        Args: never
+        Returns: {
+          company_id: string
+          company_name: string
+          listing_result_id: string
+          task_id: string
+          brand: string
+          marketplace: Database["public"]["Enums"]["listing_marketplace"]
+          link: string
+          event_type: string
+          comment: string
+          at: string
+        }[]
+      }
+      listing_validation_history: {
+        Args: { p_listing_result: string }
+        Returns: {
+          id: string
+          event_type: string
+          comment: string
+          author_type: string
+          author: string
+          at: string
+        }[]
+      }
       my_collaborator_companies: { Args: never; Returns: string[] }
       my_consultant_companies: { Args: never; Returns: string[] }
       sync_standard_task: { Args: { p_standard: string }; Returns: number }

@@ -6,16 +6,34 @@ import type { ListingMarketplace } from "@/lib/types";
 // Cookie HttpOnly com o segredo da sessão do cliente (hash fica no banco).
 export const CLIENT_SESSION_COOKIE = "mv_client_session";
 
+// Veredito do cliente sobre uma listagem (passo 33) — o ESTADO ATUAL, derivado
+// do último evento em listing_validations. `by` distingue cliente × interno
+// (ex.: "cliente aprovou por telefone" registrado pela equipe).
+export type ListingValidationState = {
+  event: "aprovado" | "ajuste_solicitado" | "contestado";
+  comment: string | null;
+  by: "cliente" | "interno";
+  at: string;
+};
+
 // Formato devolvido por client_portal_data (jsonb): SÓ o conteúdo curado.
 // Cada listagem tem OU o link publicado OU a justificativa de não feita
-// (constraint link_xor_reason no banco) — o cliente vê os dois casos.
+// (constraint link_xor_reason no banco) — o cliente vê os dois casos. `id` é o
+// listing_results.id, que o cliente referencia ao registrar uma validação.
 export type PortalListing = {
+  id: string;
   brand: string;
   marketplace: ListingMarketplace;
   link: string | null;
   reason: string | null;
   date: string | null;
+  validation: ListingValidationState | null;
 };
+
+export type ListingValidationEvent =
+  | "aprovado"
+  | "ajuste_solicitado"
+  | "contestado";
 
 export type PortalUpdate = {
   id: string;

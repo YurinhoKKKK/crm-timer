@@ -9,3 +9,12 @@ export function emitMessagesRead() {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new Event(MESSAGES_READ_EVENT));
 }
+
+// Validações de listagem lidas (passo 33) — mesmo padrão: quem marca "visto"
+// avisa o badge (que soma mensagens + validações) a refazer a contagem.
+export const VALIDATIONS_READ_EVENT = "crm-validations-read";
+
+export function emitValidationsRead() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(VALIDATIONS_READ_EVENT));
+}

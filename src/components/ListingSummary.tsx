@@ -1,5 +1,5 @@
 import type { ListingDetails } from "@/lib/listing";
-import { marketplaceLabel } from "@/lib/listing";
+import MarketplaceBadge from "@/components/MarketplaceBadge";
 
 // Exibição (somente leitura) dos dados de uma "Listagem de marcas" (passo 22):
 // marcas pesquisadas, marketplaces e se há cálculo de margem (com a alíquota).
@@ -45,11 +45,8 @@ export default function ListingSummary({
           {listing.marketplaces.length > 0 ? (
             <ul className="mt-1.5 flex flex-wrap gap-2">
               {listing.marketplaces.map((mk) => (
-                <li
-                  key={mk}
-                  className="rounded-full border border-line bg-surface-2 px-3 py-1 text-fg"
-                >
-                  {marketplaceLabel(mk)}
+                <li key={mk}>
+                  <MarketplaceBadge marketplace={mk} />
                 </li>
               ))}
             </ul>

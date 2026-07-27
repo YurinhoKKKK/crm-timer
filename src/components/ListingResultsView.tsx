@@ -1,5 +1,5 @@
 import type { ListingResultView } from "@/lib/listing";
-import { marketplaceLabel } from "@/lib/listing";
+import MarketplaceBadge from "@/components/MarketplaceBadge";
 
 // Exibe (somente leitura) o entregável de uma listagem finalizada: para cada
 // combinação marca × marketplace, o link clicável da planilha OU a justificativa
@@ -26,9 +26,7 @@ export default function ListingResultsView({
             className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 text-sm"
           >
             <span className="font-medium text-fg">{r.brandName}</span>
-            <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-xs text-fg-muted">
-              {marketplaceLabel(r.marketplace)}
-            </span>
+            <MarketplaceBadge marketplace={r.marketplace} />
             {r.link ? (
               <a
                 href={r.link}

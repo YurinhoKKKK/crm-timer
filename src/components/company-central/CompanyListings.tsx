@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import type { CompanyListingRow, ListingValidationItem } from "@/lib/listing";
-import { MARKETPLACES, marketplaceLabel } from "@/lib/listing";
+import { MARKETPLACES } from "@/lib/listing";
+import MarketplaceBadge from "@/components/MarketplaceBadge";
 import TaskDetailLink from "@/components/TaskDetailLink";
 import {
   FilterBar,
@@ -186,9 +187,7 @@ export default function CompanyListings({
             >
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-medium text-fg">{r.brandName}</span>
-                <span className="rounded-full border border-line bg-surface-2 px-2 py-0.5 text-xs text-fg-muted">
-                  {marketplaceLabel(r.marketplace)}
-                </span>
+                <MarketplaceBadge marketplace={r.marketplace} />
                 <span className="ml-auto text-xs text-fg-subtle">
                   {formatDate(r.dateISO)}
                 </span>

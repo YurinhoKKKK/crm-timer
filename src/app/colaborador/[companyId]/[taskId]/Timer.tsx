@@ -4,8 +4,8 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { TaskStatus, ListingMarketplace } from "@/lib/types";
 import type { ListingBrandRef, ListingResultView } from "@/lib/listing";
-import { marketplaceLabel } from "@/lib/listing";
 import ListingResultsView from "@/components/ListingResultsView";
+import MarketplaceBadge from "@/components/MarketplaceBadge";
 import {
   TIMER_SYNC_EVENT,
   emitTimerSync,
@@ -345,9 +345,7 @@ export default function Timer({
                       <span className="text-sm font-medium text-fg">
                         {c.brandName}
                       </span>
-                      <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-xs text-fg-muted">
-                        {marketplaceLabel(c.marketplace)}
-                      </span>
+                      <MarketplaceBadge marketplace={c.marketplace} />
                       <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-xs text-fg-muted">
                         <input
                           type="checkbox"

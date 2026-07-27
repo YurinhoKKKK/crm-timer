@@ -283,6 +283,100 @@ export async function loadCompanyListings(
   }));
 }
 
+// Estado de validação de UMA listagem, derivado do último evento (passo 33).
+// "aguardando" = o cliente ainda não se manifestou. "reajuste_feito" fica
+// reservado para o evento interno do fluxo de "marcar como reajustada" (2º
+// prompt) — ainda não é produzido, mas o modelo já o acomoda sem retrabalho.
+export type ListingValidationState =
+  | "aguardando"
+  | "aprovada"
+  | "ajuste_solicitado"
+  | "contestado"
+  | "reajuste_feito";
+
+// Deriva o estado de exibição a partir do último evento (tipo + autor). Fonte
+// única desta regra — a fila interna e a tela do colaborador leem daqui.
+export function deriveValidationState(
+  event: string | null,
+  by: string | null
+): ListingValidationState {
+  if (!event) return "aguardando";
+  if (event === "aprovado") return "aprovada";
+  if (by === "interno") return "reajuste_feito";
+  if (event === "ajuste_solicitado") return "ajuste_solicitado";
+  if (event === "contestado") return "contestado";
+  return "aguardando";
+}
+
+// Uma listagem é PENDÊNCIA quando o último veredito do CLIENTE pede ação
+// (ajuste solicitado ou "gostaria de listar") e ainda não foi resolvido — a
+// mesma regra da fila da caixa de entrada (listing_validation_queue).
+export function isValidationPending(state: ListingValidationState): boolean {
+  return state === "ajuste_solicitado" || state === "contestado";
+}
+
+// Uma listagem do COLABORADOR (marca × marketplace), cruzando empresas, com o
+// estado de validação do cliente. Vem da RPC my_listings (SECURITY INVOKER —
+// isolamento por executor garantido no banco). `id` é o listing_result_id, usado
+// pela notificação para destacar o item certo.
+export type MyListingRow = {
+  id: string;
+  companyId: string;
+  companyName: string;
+  taskId: string;
+  taskTitle: string;
+  brandName: string;
+  marketplace: ListingMarketplace;
+  link: string | null;
+  reason: string | null;
+  dateISO: string | null;
+  state: ListingValidationState;
+  validationComment: string | null;
+  validationAtISO: string | null;
+};
+
+// Todas as listagens do colaborador logado (executor), de TODAS as empresas. O
+// escopo é do banco (my_listings filtra por collaborator_id = auth.uid() e roda
+// sob a RLS do chamador) — nunca listagem de um colega, nem na mesma empresa.
+export async function loadMyListings(
+  supabase: Client
+): Promise<MyListingRow[]> {
+  const { data } = await supabase.rpc("my_listings");
+
+  type Row = {
+    company_id: string;
+    company_name: string;
+    listing_result_id: string;
+    task_id: string;
+    task_title: string;
+    brand: string;
+    marketplace: ListingMarketplace;
+    link: string | null;
+    not_done_reason: string | null;
+    date: string | null;
+    validation_event: string | null;
+    validation_by: string | null;
+    validation_comment: string | null;
+    validation_at: string | null;
+  };
+
+  return ((data as Row[] | null) ?? []).map((r) => ({
+    id: r.listing_result_id,
+    companyId: r.company_id,
+    companyName: r.company_name,
+    taskId: r.task_id,
+    taskTitle: r.task_title,
+    brandName: r.brand,
+    marketplace: r.marketplace,
+    link: r.link,
+    reason: r.not_done_reason,
+    dateISO: r.date,
+    state: deriveValidationState(r.validation_event, r.validation_by),
+    validationComment: r.validation_comment,
+    validationAtISO: r.validation_at,
+  }));
+}
+
 // Um evento de validação de listagem (passo 33), para o histórico na central.
 export type ListingValidationItem = {
   event: "aprovado" | "ajuste_solicitado" | "contestado";

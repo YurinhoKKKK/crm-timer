@@ -121,18 +121,22 @@ export default function MessageInbox({
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-line bg-surface px-6 py-12 text-center">
-        <p className="text-sm font-medium text-fg">Nenhuma conversa ainda</p>
-        <p className="mt-1 text-sm text-fg-muted">
-          Quando um cliente escrever pelo portal — ou alguém da equipe iniciar
-          uma conversa — ela aparece aqui.
-        </p>
+      <div>
+        <h2 className="mb-3 text-sm font-semibold text-fg">Conversas</h2>
+        <div className="rounded-2xl border border-dashed border-line bg-surface px-6 py-12 text-center">
+          <p className="text-sm font-medium text-fg">Nenhuma conversa ainda</p>
+          <p className="mt-1 text-sm text-fg-muted">
+            Quando um cliente escrever pelo portal — ou alguém da equipe iniciar
+            uma conversa — ela aparece aqui.
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
     <div>
+      <h2 className="mb-3 text-sm font-semibold text-fg">Conversas</h2>
       {/* Busca por empresa (escala: evita rolar uma lista gigante) */}
       <div className="mb-4">
         <label htmlFor="inbox-search" className="sr-only">

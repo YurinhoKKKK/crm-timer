@@ -10,7 +10,9 @@ export const CLIENT_SESSION_COOKIE = "mv_client_session";
 // do último evento em listing_validations. `by` distingue cliente × interno
 // (ex.: "cliente aprovou por telefone" registrado pela equipe).
 export type ListingValidationState = {
-  event: "aprovado" | "ajuste_solicitado" | "contestado";
+  // 'reajuste_feito' é INTERNO (a equipe sinalizou que refez o pedido); o
+  // cliente nunca o envia — só reconfirma (aprovar/solicitar ajuste).
+  event: "aprovado" | "ajuste_solicitado" | "contestado" | "reajuste_feito";
   comment: string | null;
   by: "cliente" | "interno";
   at: string;

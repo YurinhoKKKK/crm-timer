@@ -333,6 +333,9 @@ export type MyListingRow = {
   state: ListingValidationState;
   validationComment: string | null;
   validationAtISO: string | null;
+  // Linha do tempo completa (cliente pediu → equipe reajustou → cliente
+  // reconfirmou), em ordem cronológica. Vazia quando não houve validação.
+  events: ListingValidationItem[];
 };
 
 // Todas as listagens do colaborador logado (executor), de TODAS as empresas. O
@@ -358,6 +361,15 @@ export async function loadMyListings(
     validation_by: string | null;
     validation_comment: string | null;
     validation_at: string | null;
+    events:
+      | {
+          event: ListingValidationItem["event"];
+          comment: string | null;
+          author_type: "cliente" | "interno";
+          author: string | null;
+          at: string;
+        }[]
+      | null;
   };
 
   return ((data as Row[] | null) ?? []).map((r) => ({
@@ -374,12 +386,19 @@ export async function loadMyListings(
     state: deriveValidationState(r.validation_event, r.validation_by),
     validationComment: r.validation_comment,
     validationAtISO: r.validation_at,
+    events: (r.events ?? []).map((e) => ({
+      event: e.event,
+      comment: e.comment,
+      authorType: e.author_type,
+      author: e.author,
+      at: e.at,
+    })),
   }));
 }
 
-// Um evento de validação de listagem (passo 33), para o histórico na central.
+// Um evento de validação de listagem (passo 33 + reajuste), para o histórico.
 export type ListingValidationItem = {
-  event: "aprovado" | "ajuste_solicitado" | "contestado";
+  event: "aprovado" | "ajuste_solicitado" | "contestado" | "reajuste_feito";
   comment: string | null;
   authorType: "cliente" | "interno";
   author: string | null; // primeiro nome de quem registrou, do lado interno

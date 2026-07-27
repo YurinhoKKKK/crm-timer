@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { ListingValidationState } from "@/lib/client-portal";
+import type {
+  ListingValidationState,
+  ListingValidationEvent,
+} from "@/lib/client-portal";
 import { clientPortalValidateListing } from "@/app/cliente/actions";
 import { formatPortalDate } from "./portal-format";
 
@@ -19,6 +22,7 @@ const STATE_LABEL: Record<ListingValidationState["event"], string> = {
   aprovado: "Aprovada",
   ajuste_solicitado: "Ajuste solicitado",
   contestado: "Contestação enviada",
+  reajuste_feito: "Reajuste feito pela equipe",
 };
 
 export default function PortalListingActions({
@@ -42,7 +46,7 @@ export default function PortalListingActions({
 
   const readOnly = !token;
 
-  function submit(event: ListingValidationState["event"], text: string) {
+  function submit(event: ListingValidationEvent, text: string) {
     if (!token) return;
     setError(null);
     const previous = state;
@@ -64,8 +68,12 @@ export default function PortalListingActions({
     });
   }
 
-  // Estado atual (discreto), com o comentário quando houver.
-  const stateLine = state && (
+  // Reconfirmação: a equipe reajustou e a bola voltou para o cliente.
+  const reconfirm = state?.event === "reajuste_feito";
+
+  // Estado atual (discreto), com o comentário quando houver. No estado de
+  // reconfirmação entra o convite (reconfirmBanner), não este chip.
+  const stateLine = state && !reconfirm && (
     <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
       <span
         className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium ${
@@ -89,12 +97,32 @@ export default function PortalListingActions({
     </div>
   );
 
+  // A equipe reajustou o que o cliente pediu — convite construtivo (não
+  // cobrança) para reconfirmar. Mostra o comentário da equipe, se houver.
+  const reconfirmBanner = reconfirm && state && (
+    <div className="mt-2 rounded-lg border border-sky-500/40 bg-sky-500/5 p-3">
+      <p className="flex items-center gap-1.5 text-sm font-medium text-sky-700 dark:text-sky-300">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="m5 12.5 4.5 4.5L19 7.5" />
+        </svg>
+        A equipe reajustou conforme seu pedido
+      </p>
+      {state.comment && (
+        <p className="mt-1 text-sm text-fg-muted">“{state.comment}”</p>
+      )}
+      <p className="mt-1.5 text-xs text-fg-subtle">
+        Confira a listagem e confirme abaixo.
+      </p>
+    </div>
+  );
+
   if (readOnly) {
-    return stateLine || null;
+    return reconfirmBanner || stateLine || null;
   }
 
   return (
     <div className="mt-2.5">
+      {reconfirmBanner}
       {stateLine}
 
       {openComment ? (
@@ -146,7 +174,7 @@ export default function PortalListingActions({
         </form>
       ) : (
         <div className="mt-1 flex flex-wrap items-center gap-2">
-          {kind === "listed" ? (
+          {reconfirm || kind === "listed" ? (
             <>
               <button
                 type="button"

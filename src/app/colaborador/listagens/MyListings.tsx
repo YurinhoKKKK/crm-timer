@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import MarketplaceBadge from "@/components/MarketplaceBadge";
 import TaskDetailLink from "@/components/TaskDetailLink";
+import ValidationTimeline from "@/components/ValidationTimeline";
+import ReadjustAction from "@/components/ReadjustAction";
 import {
   FilterBar,
   SearchBox,
@@ -45,7 +47,7 @@ const STATE_META: Record<
     tone: "bg-risd/10 text-risd dark:text-white",
   },
   reajuste_feito: {
-    label: "Reajuste feito",
+    label: "Aguardando reconfirmação",
     tone: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
   },
   aguardando: {
@@ -60,6 +62,7 @@ const STATE_OPTIONS: { value: ListingValidationState; label: string }[] = [
   { value: "aprovada", label: "Aprovada" },
   { value: "ajuste_solicitado", label: "Ajuste solicitado" },
   { value: "contestado", label: "Gostaria de listar" },
+  { value: "reajuste_feito", label: "Aguardando reconfirmação" },
   { value: "aguardando", label: "Aguardando cliente" },
 ];
 
@@ -342,6 +345,11 @@ export default function MyListings({ rows }: { rows: MyListingRow[] }) {
                 >
                   {r.taskTitle}
                 </TaskDetailLink>
+
+                <ValidationTimeline events={r.events} />
+                {isValidationPending(r.state) && (
+                  <ReadjustAction listingResultId={r.id} />
+                )}
               </li>
             );
           })}

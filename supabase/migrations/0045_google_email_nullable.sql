@@ -1,0 +1,18 @@
+-- =====================================================================
+-- GOOGLE CALENDAR — google_email passa a aceitar NULL
+--
+-- ESCOPO ATUAL desta etapa: calendar.events.owned + openid + email
+-- (ver GOOGLE_SCOPES em src/lib/google-oauth.ts). O openid+email NÃO é agenda
+-- nem dado sensível: serve só para saber QUAL conta Google foi conectada e
+-- alertar quando ela difere do e-mail do usuário no sistema (aviso de
+-- divergência de conta — evita reunião nascendo na agenda errada de quem tem
+-- conta pessoal + da empresa).
+--
+-- Por que a coluna aceita NULL mesmo pedindo email: o e-mail vem do id_token do
+-- token exchange, e nem sempre chega (id_token ausente, payload sem `email`, ou
+-- um reconsentimento que não o devolve). O e-mail é comodidade/segurança, não
+-- pré-requisito da conexão — então a conexão nunca falha por falta dele, e a
+-- linha fica com google_email nulo. Relaxa o NOT NULL da 0043.
+-- Aditiva/relaxante, tabela nova e vazia.
+-- =====================================================================
+alter table google_accounts alter column google_email drop not null;

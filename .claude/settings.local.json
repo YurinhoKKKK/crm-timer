@@ -137,7 +137,30 @@
       "PowerShell(node -e \"const p=require\\('./package.json'\\); console.log\\('supabase-js:', \\(p.dependencies['@supabase/supabase-js']||'via @supabase/ssr'\\)\\); console.log\\('ssr:', p.dependencies['@supabase/ssr']\\); console.log\\('next:', p.dependencies['next']\\)\")",
       "PowerShell(Test-NetConnection *)",
       "Skill(claude-in-chrome)",
-      "PowerShell($env:PORT=3001; npx next start -p 3001)"
+      "PowerShell($env:PORT=3001; npx next start -p 3001)",
+      "Bash(PORT=3000 npm start)",
+      "Bash(PORT=3100 npm start)",
+      "Bash(PORT=3101 npm start)",
+      "WebSearch",
+      "WebFetch(domain:developers.google.com)",
+      "Bash(xargs grep -ln \"createServerClient\\\\|createBrowserClient\\\\|SUPABASE\")",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('next', p.dependencies.next\\); console.log\\('deps:', Object.keys\\(p.dependencies\\).join\\(', '\\)\\)\")",
+      "Bash(\"C:/Users/renat/OneDrive/Desktop/crm-timer/node_modules/.bin/tsc\" harness.ts --module commonjs --target es2020 --moduleResolution node --esModuleInterop --skipLibCheck --outDir ./build)",
+      "Bash(node ./build/harness.js)",
+      "Bash(cp \"C:/Users/renat/AppData/Local/Temp/claude/C--Users-renat-OneDrive-Desktop-crm-timer/b94d36a8-9adf-4818-a848-e6f7b9383e9b/scratchpad/harness.ts\" ./_gcal_harness.ts)",
+      "Bash(sed -i 's#\\\\.\\\\./\\\\.\\\\./\\\\.\\\\./\\\\.\\\\./\\\\.\\\\./OneDrive/Desktop/crm-timer/src/lib/google-oauth#./src/lib/google-oauth#' ./_gcal_harness.ts)",
+      "Bash(./node_modules/.bin/tsc _gcal_harness.ts --module commonjs --target es2020 --moduleResolution node --esModuleInterop --skipLibCheck --outDir ./_gcal_build)",
+      "Bash(node ./_gcal_build/_gcal_harness.js)",
+      "Bash(node --conditions=react-server ./_gcal_build/_gcal_harness.js)",
+      "Bash(./node_modules/.bin/tsc _gcal_genstate.ts --module commonjs --target es2020 --moduleResolution node --esModuleInterop --skipLibCheck --outDir ./_gcal_build)",
+      "Bash(node --conditions=react-server ./_gcal_build/_gcal_genstate.js)",
+      "Bash(./node_modules/.bin/tsc -p _gcal_tsconfig.json)",
+      "Bash(node --conditions=react-server ./_gcal_build2/_gcal_cb_harness.js)",
+      "Bash(node --conditions=react-server _gcal_run.js)",
+      "Bash(node _gcal_run.js)",
+      "Bash(./node_modules/.bin/tsc --noEmit --skipLibCheck -p tsconfig.json)",
+      "Bash(tee ./_gcal_build/tsc_full.txt)",
+      "Bash(xargs echo \"total linhas de saída tsc:\")"
     ]
   }
 }

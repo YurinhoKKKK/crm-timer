@@ -9,7 +9,9 @@ import { loadCompanyCentral, type Period } from "@/lib/company-central";
 import { loadCompanyListings, loadListingValidations } from "@/lib/listing";
 import { loadCompanyNotes } from "@/lib/notes";
 import { loadCompanyMessages } from "@/lib/messages";
+import { loadMeetings, loadMeetingDirectory } from "@/lib/meetings";
 import CompanyMessages from "@/components/company-central/CompanyMessages";
+import CompanyMeetings from "@/components/company-central/CompanyMeetings";
 
 const PERIODS: Period[] = ["hoje", "7d", "30d", "tudo"];
 
@@ -35,13 +37,16 @@ export default async function EmpresaCentralPage({
   // de rede a mais); agora vão juntas. Cada uma é escopada pela RLS por conta
   // própria, então disparar as três em paralelo não amplia o que o usuário
   // enxerga: sem acesso à empresa, todas voltam vazias.
-  const [res, listings, listingValidations, notes, messages] = await Promise.all([
-    loadCompanyCentral(supabase, profile, params.id, period, true),
-    loadCompanyListings(supabase, params.id),
-    loadListingValidations(supabase, params.id),
-    loadCompanyNotes(supabase, params.id),
-    loadCompanyMessages(supabase, params.id),
-  ]);
+  const [res, listings, listingValidations, notes, messages, meetings, directory] =
+    await Promise.all([
+      loadCompanyCentral(supabase, profile, params.id, period, true),
+      loadCompanyListings(supabase, params.id),
+      loadListingValidations(supabase, params.id),
+      loadCompanyNotes(supabase, params.id),
+      loadCompanyMessages(supabase, params.id),
+      loadMeetings(supabase, { companyId: params.id }),
+      loadMeetingDirectory(supabase),
+    ]);
   if (res.notFound) notFound();
 
   return (
@@ -61,6 +66,8 @@ export default async function EmpresaCentralPage({
               ? "messages"
               : searchParams?.aba === "listings"
               ? "listings"
+              : searchParams?.aba === "reunioes"
+              ? "meetings"
               : "overview"
           }
           overview={
@@ -70,6 +77,14 @@ export default async function EmpresaCentralPage({
               editHref={`/admin/empresas/${params.id}/editar`}
               tasksHref={`/admin/empresas/${params.id}/tarefas`}
               previewHref={`/admin/empresas/${params.id}/ver-como-cliente`}
+            />
+          }
+          meetings={
+            <CompanyMeetings
+              companyId={params.id}
+              companyName={res.data.company.name}
+              rows={meetings}
+              directory={directory}
             />
           }
           listings={

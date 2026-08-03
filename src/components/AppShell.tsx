@@ -54,6 +54,12 @@ const ic = {
       <path d="M12 7v5l3 2" />
     </>
   ),
+  calendar: (
+    <>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4M8 2v4M3 10h18" />
+    </>
+  ),
   bag: (
     <>
       <path d="M6 7h12l1.2 13H4.8L6 7z" />
@@ -89,12 +95,14 @@ const NAV: Record<Role, NavItem[]> = {
     { href: "/admin/usuarios", label: "Usuários", icon: <Icon>{ic.users}</Icon> },
     { href: "/admin/empresas", label: "Empresas", icon: <Icon>{ic.building}</Icon> },
     { href: "/admin/tarefas", label: "Tarefas", icon: <Icon>{ic.tasks}</Icon> },
+    { href: "/agenda", label: "Agenda", icon: <Icon>{ic.calendar}</Icon> },
     { href: "/admin/mensagens", label: "Mensagens", icon: <Icon>{ic.chat}</Icon>, unread: true },
     { href: "/colaborador", label: "Meu Trabalho", icon: <Icon>{ic.clock}</Icon> },
   ],
   consultor: [
     { href: "/consultor", label: "Painel", icon: <Icon>{ic.briefcase}</Icon> },
     { href: "/consultor/tarefas", label: "Tarefas", icon: <Icon>{ic.tasks}</Icon> },
+    { href: "/agenda", label: "Agenda", icon: <Icon>{ic.calendar}</Icon> },
     { href: "/consultor/mensagens", label: "Mensagens", icon: <Icon>{ic.chat}</Icon>, unread: true },
     { href: "/colaborador", label: "Meu Trabalho", icon: <Icon>{ic.clock}</Icon> },
   ],
@@ -102,6 +110,7 @@ const NAV: Record<Role, NavItem[]> = {
     { href: "/colaborador", label: "Minhas empresas", icon: <Icon>{ic.building}</Icon> },
     { href: "/colaborador/tarefas", label: "Minhas tarefas", icon: <Icon>{ic.tasks}</Icon> },
     { href: "/colaborador/listagens", label: "Minhas Listagens", icon: <Icon>{ic.bag}</Icon> },
+    { href: "/agenda", label: "Agenda", icon: <Icon>{ic.calendar}</Icon> },
     { href: "/colaborador/mensagens", label: "Mensagens", icon: <Icon>{ic.chat}</Icon>, unread: true },
   ],
 };

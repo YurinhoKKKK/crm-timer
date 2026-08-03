@@ -1,0 +1,244 @@
+import type { createClient } from "@/lib/supabase-server";
+import { avatarUrl } from "@/lib/avatar";
+import { resolvePeople } from "@/lib/creator";
+
+// =====================================================================
+// Reuniões (Fatia 1) — tipos, formatação (fuso de Brasília) e leitura.
+// O sistema é a fonte da verdade; o Google é destino (ver docs/REUNIOES.md).
+// =====================================================================
+
+type Client = Awaited<ReturnType<typeof createClient>>;
+
+export type MeetingType = "meet" | "presencial_escritorio" | "presencial_cliente";
+export type GoogleSyncStatus =
+  | "pendente"
+  | "sincronizado"
+  | "nao_conectado"
+  | "falhou";
+
+export const MEETING_TYPE_LABEL: Record<MeetingType, string> = {
+  meet: "Google Meet",
+  presencial_escritorio: "Presencial · escritório",
+  presencial_cliente: "Presencial · no cliente",
+};
+
+export const MEETING_TYPE_OPTIONS: { value: MeetingType; label: string }[] = [
+  { value: "meet", label: "Google Meet" },
+  { value: "presencial_escritorio", label: "Presencial · escritório" },
+  { value: "presencial_cliente", label: "Presencial · no cliente" },
+];
+
+export type MeetingPerson = { id: string; name: string; avatarUrl: string | null };
+
+export type MeetingRow = {
+  id: string;
+  companyId: string;
+  companyName: string;
+  title: string;
+  description: string | null;
+  startsAt: string; // ISO (UTC)
+  endsAt: string; // ISO (UTC)
+  type: MeetingType;
+  syncStatus: GoogleSyncStatus;
+  syncError: string | null;
+  meetLink: string | null;
+  creator: MeetingPerson;
+  participants: MeetingPerson[];
+};
+
+// Usuário interno para o seletor de participantes (sem e-mail: o cliente do
+// navegador só precisa de nome/foto; o e-mail fica no servidor, ver meetings
+// actions). Vem de meeting_directory() (SECURITY DEFINER).
+export type DirectoryUser = {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  role: string;
+};
+
+export type ReachableCompany = { id: string; name: string };
+
+// Forma estrutural de uma linha de conflito de horário — o que o aviso do
+// formulário precisa exibir. Compatível com o ConflictRow devolvido por
+// checkMeetingConflicts (ver src/app/meeting-actions.ts).
+export type ConflictLike = {
+  meetingId: string;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  companyName: string;
+  userIds: string[];
+};
+
+// ---------------------------------------------------------------------
+// Formatação em horário de Brasília (fuso fixo do usuário; ver [[timezone]]).
+// ---------------------------------------------------------------------
+const TZ = "America/Sao_Paulo";
+
+// Chave AAAA-MM-DD no fuso BRT (en-CA formata ISO-like) — para agrupar por dia.
+export function meetingDayKey(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone: TZ });
+}
+
+// "Terça-feira, 05 de agosto" — cabeçalho de grupo do dia.
+export function formatMeetingDay(iso: string): string {
+  const label = new Date(iso).toLocaleDateString("pt-BR", {
+    timeZone: TZ,
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+  });
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+export function formatMeetingTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString("pt-BR", {
+    timeZone: TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+// "14:30 – 15:30"; se cruzar a meia-noite, mostra o dia do fim junto.
+export function formatMeetingRange(startISO: string, endISO: string): string {
+  const start = formatMeetingTime(startISO);
+  const sameDay = meetingDayKey(startISO) === meetingDayKey(endISO);
+  const end = sameDay
+    ? formatMeetingTime(endISO)
+    : `${formatMeetingDay(endISO)}, ${formatMeetingTime(endISO)}`;
+  return `${start} – ${end}`;
+}
+
+// ---------------------------------------------------------------------
+// Leitura
+// ---------------------------------------------------------------------
+type MeetingDbRow = {
+  id: string;
+  company_id: string;
+  title: string;
+  description: string | null;
+  starts_at: string;
+  ends_at: string;
+  meeting_type: MeetingType;
+  created_by: string;
+  meet_link: string | null;
+  google_sync_status: GoogleSyncStatus;
+  google_sync_error: string | null;
+  company: { name: string } | { name: string }[] | null;
+};
+
+function companyName(
+  company: MeetingDbRow["company"]
+): string {
+  if (!company) return "(empresa)";
+  const c = Array.isArray(company) ? company[0] : company;
+  return c?.name ?? "(empresa)";
+}
+
+function person(
+  id: string,
+  people: Map<string, { name: string; avatarUrl: string | null }>
+): MeetingPerson {
+  const p = people.get(id);
+  return { id, name: p?.name ?? "(sem nome)", avatarUrl: p?.avatarUrl ?? null };
+}
+
+// Reuniões visíveis ao usuário (RLS: todos os internos veem todas). `companyId`
+// filtra por empresa (aba da central); `fromISO` traz só as que ainda não
+// terminaram (agenda "próximas primeiro"). Ordena por início ascendente.
+export async function loadMeetings(
+  supabase: Client,
+  opts: { companyId?: string; fromISO?: string } = {}
+): Promise<MeetingRow[]> {
+  let query = supabase
+    .from("meetings")
+    .select(
+      "id, company_id, title, description, starts_at, ends_at, meeting_type, created_by, meet_link, google_sync_status, google_sync_error, company:companies(name)"
+    )
+    .order("starts_at", { ascending: true });
+
+  if (opts.companyId) query = query.eq("company_id", opts.companyId);
+  if (opts.fromISO) query = query.gte("ends_at", opts.fromISO);
+
+  const { data, error } = await query;
+  if (error || !data) return [];
+  const rows = data as unknown as MeetingDbRow[];
+  if (rows.length === 0) return [];
+
+  // Participantes de todas as reuniões numa consulta só.
+  const ids = rows.map((r) => r.id);
+  const { data: partData } = await supabase
+    .from("meeting_participants")
+    .select("meeting_id, user_id")
+    .in("meeting_id", ids);
+  const parts = (partData as { meeting_id: string; user_id: string }[]) ?? [];
+
+  const byMeeting = new Map<string, string[]>();
+  for (const p of parts) {
+    const list = byMeeting.get(p.meeting_id) ?? [];
+    list.push(p.user_id);
+    byMeeting.set(p.meeting_id, list);
+  }
+
+  // Nome+foto de criadores e participantes numa chamada agrupada (display_profiles).
+  const everyId = [
+    ...rows.map((r) => r.created_by),
+    ...parts.map((p) => p.user_id),
+  ];
+  const people = await resolvePeople(supabase, everyId);
+
+  return rows.map((r) => ({
+    id: r.id,
+    companyId: r.company_id,
+    companyName: companyName(r.company),
+    title: r.title,
+    description: r.description,
+    startsAt: r.starts_at,
+    endsAt: r.ends_at,
+    type: r.meeting_type,
+    syncStatus: r.google_sync_status,
+    syncError: r.google_sync_error,
+    meetLink: r.meet_link,
+    creator: person(r.created_by, people),
+    participants: (byMeeting.get(r.id) ?? []).map((uid) => person(uid, people)),
+  }));
+}
+
+// Roster interno para o seletor de participantes. Descarta o e-mail (fica no
+// servidor); o navegador vê só id/nome/foto/cargo.
+export async function loadMeetingDirectory(
+  supabase: Client
+): Promise<DirectoryUser[]> {
+  const { data } = await supabase.rpc("meeting_directory");
+  const rows =
+    (data as
+      | {
+          id: string;
+          full_name: string | null;
+          email: string | null;
+          avatar_path: string | null;
+          role: string;
+        }[]
+      | null) ?? [];
+  return rows.map((r) => ({
+    id: r.id,
+    name: (r.full_name ?? "").trim() || r.email || "(sem nome)",
+    avatarUrl: avatarUrl(r.avatar_path),
+    role: r.role,
+  }));
+}
+
+// Empresas que o usuário alcança (RLS companies_select = exatamente as em que
+// ele pode criar reunião). Para o seletor de empresa quando não está travada.
+export async function loadReachableCompanies(
+  supabase: Client
+): Promise<ReachableCompany[]> {
+  const { data } = await supabase
+    .from("companies")
+    .select("id, name")
+    .order("name");
+  return ((data as { id: string; name: string }[]) ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+  }));
+}

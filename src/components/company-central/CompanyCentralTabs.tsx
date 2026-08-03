@@ -2,21 +2,23 @@
 
 import { useState, type ReactNode } from "react";
 
-type Tab = "overview" | "listings" | "notes" | "messages";
+type Tab = "overview" | "meetings" | "listings" | "notes" | "messages";
 
-// Alterna entre "Visão geral" (a central completa do passo 19), "Minhas
-// Listagens" (as entregas de listagem da empresa, passo 23), "Anotações"
-// (rich text, passo 24) e "Mensagens" (conversa com o cliente, passo 31). Os
-// conteúdos são renderizados no servidor e passados como slots; aqui só
-// escolhemos a aba.
+// Alterna entre "Visão geral" (a central completa do passo 19), "Reuniões" (a
+// agenda desta empresa, fatia 1 do Google Calendar), "Minhas Listagens" (as
+// entregas de listagem da empresa, passo 23), "Anotações" (rich text, passo 24)
+// e "Mensagens" (conversa com o cliente, passo 31). Os conteúdos são
+// renderizados no servidor e passados como slots; aqui só escolhemos a aba.
 export default function CompanyCentralTabs({
   overview,
+  meetings,
   listings,
   notes,
   messages,
   initialTab = "overview",
 }: {
   overview: ReactNode;
+  meetings: ReactNode;
   listings: ReactNode;
   notes: ReactNode;
   messages: ReactNode;
@@ -34,6 +36,7 @@ export default function CompanyCentralTabs({
 
   const tabs: { key: Tab; label: string; content: ReactNode }[] = [
     { key: "overview", label: "Visão geral", content: overview },
+    { key: "meetings", label: "Reuniões", content: meetings },
     { key: "listings", label: "Minhas Listagens", content: listings },
     { key: "notes", label: "Anotações", content: notes },
     { key: "messages", label: "Mensagens", content: messages },

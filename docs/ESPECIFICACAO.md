@@ -100,6 +100,15 @@ Projeto Supabase: `odpcgeiaikdvpoydcfyu` (CRM/Timer - Monvatti).
 ### Segurança (RLS)
 Todas as tabelas têm RLS ativo. Funções auxiliares `is_admin()`, `my_consultant_companies()`, `my_collaborator_companies()` (todas `SECURITY DEFINER`). O isolamento por colaborador é garantido na política `ti_select` (`collaborator_id = auth.uid()`).
 
+#### ⚠️ Armadilha: policy de SELECT que relê a própria tabela quebra `INSERT ... RETURNING`
+Uma função de visibilidade `SECURITY DEFINER` usada como policy de **SELECT** **não pode buscar a linha nova pela própria PK na própria tabela**. Foi o bug que impedia criar reunião (migration 0047 corrigiu).
+
+- **Como acontece:** no supabase-js, `.insert(...).select(...)` vira `INSERT ... RETURNING`. O `RETURNING` faz o Postgres aplicar a policy de **SELECT** à linha recém-criada. Se essa policy chama uma função que faz `exists (select 1 from <a_mesma_tabela> where id = <id_da_linha_nova>)`, essa releitura roda no **snapshot da instrução de INSERT**, que **ainda não enxerga a linha em voo** → a função devolve `false` → visibilidade negada.
+- **Sintoma:** Postgres **42501** (`new row violates row-level security policy`) na criação, **mesmo quando a policy de escrita (`WITH CHECK`) avalia `true`** para o usuário. Parece erro de permissão/acesso, mas não é — engana.
+- **Como diagnosticar:** rode o mesmo INSERT **sem** `RETURNING` (sem `.select()`) e **com** ele, sob o JWT do usuário (`set local role authenticated; set local "request.jwt.claims" = ...` numa transação com `rollback`). Se passa sem `RETURNING` e falha com, é esta armadilha — o culpado é a policy de **SELECT**, não a de **INSERT**.
+- **Distinção que salva:** ler o **próprio** perfil (`is_admin()`/`auth_role()` fazem `... where id = auth.uid()`) é seguro — essa linha já existe no snapshot. Perigoso é só reler **a linha que está sendo inserida, pela PK dela, na mesma tabela**.
+- **Correção:** escreva a policy sobre as **colunas da própria linha** (o Postgres já as tem no `RETURNING`), sem reconsultar a tabela. Ex.: `meeting_is_visible` virou `select auth.uid() is not null` (a decisão de produto já era "todo interno vê tudo"), sem o `exists(select ... from meetings)`.
+
 ---
 
 ## 4. O que já está construído (fundação)

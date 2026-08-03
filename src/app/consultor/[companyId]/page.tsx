@@ -9,7 +9,9 @@ import { loadCompanyCentral, type Period } from "@/lib/company-central";
 import { loadCompanyListings, loadListingValidations } from "@/lib/listing";
 import { loadCompanyNotes } from "@/lib/notes";
 import { loadCompanyMessages } from "@/lib/messages";
+import { loadMeetings, loadMeetingDirectory } from "@/lib/meetings";
 import CompanyMessages from "@/components/company-central/CompanyMessages";
+import CompanyMeetings from "@/components/company-central/CompanyMeetings";
 
 const PERIODS: Period[] = ["hoje", "7d", "30d", "tudo"];
 
@@ -35,13 +37,16 @@ export default async function ConsultorEmpresaPage({
   // Mesma paralelização da central do admin: as três leituras são
   // independentes e cada uma é escopada pela RLS por conta própria (aqui, às
   // empresas deste consultor). Antes rodavam em cascata.
-  const [res, listings, listingValidations, notes, messages] = await Promise.all([
-    loadCompanyCentral(supabase, profile, params.companyId, period, false),
-    loadCompanyListings(supabase, params.companyId),
-    loadListingValidations(supabase, params.companyId),
-    loadCompanyNotes(supabase, params.companyId),
-    loadCompanyMessages(supabase, params.companyId),
-  ]);
+  const [res, listings, listingValidations, notes, messages, meetings, directory] =
+    await Promise.all([
+      loadCompanyCentral(supabase, profile, params.companyId, period, false),
+      loadCompanyListings(supabase, params.companyId),
+      loadListingValidations(supabase, params.companyId),
+      loadCompanyNotes(supabase, params.companyId),
+      loadCompanyMessages(supabase, params.companyId),
+      loadMeetings(supabase, { companyId: params.companyId }),
+      loadMeetingDirectory(supabase),
+    ]);
   if (res.notFound) notFound();
 
   return (
@@ -61,6 +66,8 @@ export default async function ConsultorEmpresaPage({
               ? "messages"
               : searchParams?.aba === "listings"
               ? "listings"
+              : searchParams?.aba === "reunioes"
+              ? "meetings"
               : "overview"
           }
           overview={
@@ -69,6 +76,14 @@ export default async function ConsultorEmpresaPage({
               period={period}
               tasksHref={`/consultor/${params.companyId}/tarefas`}
               previewHref={`/consultor/${params.companyId}/ver-como-cliente`}
+            />
+          }
+          meetings={
+            <CompanyMeetings
+              companyId={params.companyId}
+              companyName={res.data.company.name}
+              rows={meetings}
+              directory={directory}
             />
           }
           listings={

@@ -9,7 +9,8 @@ import {
   deleteCalendarEvent,
 } from "@/lib/google-calendar";
 import { GoogleError } from "@/lib/google-oauth";
-import type { GoogleSyncStatus, MeetingType } from "@/lib/meetings";
+import { loadMeetings } from "@/lib/meetings";
+import type { GoogleSyncStatus, MeetingRow, MeetingType } from "@/lib/meetings";
 
 // =====================================================================
 // Reuniões (Fatia 1 + 1.1) — criar, editar, excluir, sincronizar depois.
@@ -385,6 +386,22 @@ export async function syncMeetingToGoogle(
       ? "Reunião enviada à sua agenda, mas o Google não retornou um link do Meet."
       : null,
   };
+}
+
+// ---------------------------------------------------------------------
+// Leitura por INTERVALO — para o calendário navegar (semana/dia/mês) buscando só
+// a janela visível (+ folga), nunca a base inteira. A RLS já escopa (todo interno
+// vê tudo); o filtro de pessoas é aplicado no cliente sobre esta janela.
+// ---------------------------------------------------------------------
+export async function fetchMeetingsRange(
+  fromISO: string,
+  toISO: string
+): Promise<MeetingRow[]> {
+  const from = new Date(fromISO).getTime();
+  const to = new Date(toISO).getTime();
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) return [];
+  const supabase = await createClient();
+  return loadMeetings(supabase, { fromISO, toISO });
 }
 
 // =====================================================================

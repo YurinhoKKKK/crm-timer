@@ -84,6 +84,9 @@ export default function MeetingForm({
   lockedCompany,
   meetingId,
   initial,
+  prefillStartISO,
+  prefillEndISO,
+  bare,
   onDone,
   onCancel,
 }: {
@@ -95,11 +98,24 @@ export default function MeetingForm({
   lockedCompany?: ReachableCompany;
   meetingId?: string; // obrigatório em mode="edit"
   initial?: MeetingInitial;
+  // Horário pré-preenchido ao criar clicando num espaço vazio da grade (create).
+  prefillStartISO?: string;
+  prefillEndISO?: string;
+  // `bare`: sem a moldura de cartão (para dentro de um Modal, que já a tem).
+  bare?: boolean;
   onDone: (warning: string | null) => void;
   onCancel: () => void;
 }) {
-  const startInit = initial ? isoToBrtLocal(initial.startISO) : defaultTimes().start;
-  const endInit = initial ? isoToBrtLocal(initial.endISO) : defaultTimes().end;
+  const startInit = initial
+    ? isoToBrtLocal(initial.startISO)
+    : prefillStartISO
+    ? isoToBrtLocal(prefillStartISO)
+    : defaultTimes().start;
+  const endInit = initial
+    ? isoToBrtLocal(initial.endISO)
+    : prefillEndISO
+    ? isoToBrtLocal(prefillEndISO)
+    : defaultTimes().end;
 
   const [companyId, setCompanyId] = useState(
     initial?.companyId ?? lockedCompany?.id ?? ""
@@ -209,7 +225,11 @@ export default function MeetingForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="space-y-4 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6"
+      className={
+        bare
+          ? "space-y-4"
+          : "space-y-4 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6"
+      }
     >
       <h2 className="font-semibold text-fg">
         {mode === "edit" ? "Editar reunião" : "Nova reunião"}

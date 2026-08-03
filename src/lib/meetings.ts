@@ -160,7 +160,7 @@ function person(
 // terminaram (agenda "próximas primeiro"). Ordena por início ascendente.
 export async function loadMeetings(
   supabase: Client,
-  opts: { companyId?: string; fromISO?: string } = {}
+  opts: { companyId?: string; fromISO?: string; toISO?: string } = {}
 ): Promise<MeetingRow[]> {
   let query = supabase
     .from("meetings")
@@ -170,7 +170,11 @@ export async function loadMeetings(
     .order("starts_at", { ascending: true });
 
   if (opts.companyId) query = query.eq("company_id", opts.companyId);
+  // Janela [fromISO, toISO): sobreposição meia-aberta — traz o que ainda não
+  // terminou antes do início E que começa antes do fim. Para o calendário buscar
+  // SÓ o intervalo visível (+ folga), nunca a base inteira (ver perf do passo 29).
   if (opts.fromISO) query = query.gte("ends_at", opts.fromISO);
+  if (opts.toISO) query = query.lt("starts_at", opts.toISO);
 
   const { data, error } = await query;
   if (error || !data) return [];

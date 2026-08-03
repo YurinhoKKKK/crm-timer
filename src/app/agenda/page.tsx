@@ -1,31 +1,27 @@
 import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
-import NewMeetingForm from "@/components/meetings/NewMeetingForm";
-import MeetingList from "@/components/meetings/MeetingList";
+import Calendar from "@/components/meetings/calendar/Calendar";
 import {
   loadMeetings,
   loadMeetingDirectory,
   loadReachableCompanies,
   loadGoogleConnected,
-  type MeetingActionsContext,
 } from "@/lib/meetings";
+import {
+  addDays,
+  civilMidnightMs,
+  todayCivil,
+  weekStart,
+} from "@/components/meetings/calendar/datetime";
 
-// Página dedicada de agenda — o lar do módulo de reuniões. Lista as próximas
-// reuniões (todas as que o usuário vê; a RLS deixa todo interno ver todas),
-// agrupadas por dia. A visão de calendário/grade vem numa fatia seguinte.
+// Página dedicada de agenda — o calendário do módulo de reuniões (visões
+// Dia/Semana/Mês, espírito do Google Calendar). A aba "Reuniões" da central da
+// empresa segue como lista; esta é a visão de calendário.
 //
-// force-dynamic: as ações (criar) mudam a lista; a leitura não pode servir de
-// cache. O cliente ainda revalida com router.refresh após criar (como no /perfil).
+// force-dynamic: as ações (criar/editar/excluir) mudam a base; a leitura inicial
+// não pode servir de cache. A navegação entre períodos busca só o intervalo
+// visível (fetchMeetingsRange), nunca a base inteira.
 export const dynamic = "force-dynamic";
-
-// Início do dia de HOJE em BRT, convertido para UTC — filtra as reuniões que
-// ainda não terminaram (inclui as em andamento agora). Offset fixo -03:00
-// (Brasília sem horário de verão; ver docs/REUNIOES.md).
-function startOfTodayBRTasISO(): string {
-  const brt = new Date(Date.now() - 3 * 3600 * 1000);
-  brt.setUTCHours(0, 0, 0, 0);
-  return new Date(brt.getTime() + 3 * 3600 * 1000).toISOString();
-}
 
 export default async function AgendaPage() {
   const { supabase, profile } = await guardRole([
@@ -34,20 +30,18 @@ export default async function AgendaPage() {
     "colaborador",
   ]);
 
+  // Semana atual (BRT, domingo→sábado) — a janela padrão ao abrir. O calendário
+  // já nasce com essa fatia em cache; navegar busca as demais sob demanda.
+  const wk = weekStart(todayCivil());
+  const fromISO = new Date(civilMidnightMs(wk)).toISOString();
+  const toISO = new Date(civilMidnightMs(addDays(wk, 7))).toISOString();
+
   const [meetings, directory, companies, googleConnected] = await Promise.all([
-    loadMeetings(supabase, { fromISO: startOfTodayBRTasISO() }),
+    loadMeetings(supabase, { fromISO, toISO }),
     loadMeetingDirectory(supabase),
     loadReachableCompanies(supabase),
     loadGoogleConnected(supabase),
   ]);
-
-  const ctx: MeetingActionsContext = {
-    currentUserId: profile.id,
-    isAdmin: profile.role === "admin",
-    googleConnected,
-    directory,
-    companies,
-  };
 
   return (
     <AppShell
@@ -57,13 +51,15 @@ export default async function AgendaPage() {
         avatarUrl: profile.avatarUrl,
       }}
       title="Agenda"
-      subtitle="Próximas reuniões da equipe"
+      subtitle="Calendário de reuniões da equipe"
     >
-      <NewMeetingForm directory={directory} companies={companies} />
-      <MeetingList
-        rows={meetings}
-        ctx={ctx}
-        emptyLabel="Nenhuma reunião futura. Clique em “Nova reunião” para criar a primeira."
+      <Calendar
+        currentUserId={profile.id}
+        isAdmin={profile.role === "admin"}
+        googleConnected={googleConnected}
+        directory={directory}
+        companies={companies}
+        initialMeetings={meetings}
       />
     </AppShell>
   );

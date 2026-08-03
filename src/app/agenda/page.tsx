@@ -6,6 +6,8 @@ import {
   loadMeetings,
   loadMeetingDirectory,
   loadReachableCompanies,
+  loadGoogleConnected,
+  type MeetingActionsContext,
 } from "@/lib/meetings";
 
 // Página dedicada de agenda — o lar do módulo de reuniões. Lista as próximas
@@ -32,11 +34,20 @@ export default async function AgendaPage() {
     "colaborador",
   ]);
 
-  const [meetings, directory, companies] = await Promise.all([
+  const [meetings, directory, companies, googleConnected] = await Promise.all([
     loadMeetings(supabase, { fromISO: startOfTodayBRTasISO() }),
     loadMeetingDirectory(supabase),
     loadReachableCompanies(supabase),
+    loadGoogleConnected(supabase),
   ]);
+
+  const ctx: MeetingActionsContext = {
+    currentUserId: profile.id,
+    isAdmin: profile.role === "admin",
+    googleConnected,
+    directory,
+    companies,
+  };
 
   return (
     <AppShell
@@ -51,6 +62,7 @@ export default async function AgendaPage() {
       <NewMeetingForm directory={directory} companies={companies} />
       <MeetingList
         rows={meetings}
+        ctx={ctx}
         emptyLabel="Nenhuma reunião futura. Clique em “Nova reunião” para criar a primeira."
       />
     </AppShell>

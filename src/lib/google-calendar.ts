@@ -167,6 +167,112 @@ export async function insertCalendarEvent(
   };
 }
 
+// Atualiza o evento existente (edição). PATCH = mescla: os campos enviados
+// substituem, os omitidos ficam. `attendees` é enviado SEMPRE (mesmo vazio) para
+// que remoções de convidados reflitam. sendUpdates=all avisa os convidados da
+// mudança. O Meet é tratado conforme a troca de tipo (ver `hadMeet`):
+//   virou meet (withMeet && !hadMeet)  → cria a conferência
+//   deixou de ser (!withMeet && hadMeet) → conferenceData:null remove o Meet
+//   continua igual → não mexe na conferência (não recria link à toa)
+export async function patchCalendarEvent(
+  accessToken: string,
+  eventId: string,
+  input: CalendarEventInput,
+  opts: { hadMeet: boolean }
+): Promise<CalendarEventResult> {
+  const body: Record<string, unknown> = {
+    summary: input.summary,
+    description: input.description || null,
+    start: { dateTime: input.startISO, timeZone: TIME_ZONE },
+    end: { dateTime: input.endISO, timeZone: TIME_ZONE },
+    attendees: input.attendeeEmails.map((email) => ({ email })),
+  };
+  if (input.withMeet && !opts.hadMeet) {
+    body.conferenceData = {
+      createRequest: {
+        requestId: crypto.randomUUID(),
+        conferenceSolutionKey: { type: "hangoutsMeet" },
+      },
+    };
+  } else if (!input.withMeet && opts.hadMeet) {
+    body.conferenceData = null; // remove a conferência do evento
+  }
+
+  const url = new URL(`${CALENDAR_EVENTS_ENDPOINT}/${encodeURIComponent(eventId)}`);
+  url.searchParams.set("conferenceDataVersion", "1");
+  url.searchParams.set("sendUpdates", "all");
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    });
+  } catch {
+    throw new GoogleError(
+      "Não foi possível falar com o Google Calendar. Tente de novo."
+    );
+  }
+
+  const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    const err = json.error;
+    const msg =
+      err &&
+      typeof err === "object" &&
+      typeof (err as { message?: unknown }).message === "string"
+        ? (err as { message: string }).message
+        : "O Google recusou a atualização do evento.";
+    throw new GoogleError(msg);
+  }
+
+  return {
+    eventId: typeof json.id === "string" ? json.id : eventId,
+    meetLink: extractMeetLink(json),
+    htmlLink: typeof json.htmlLink === "string" ? json.htmlLink : null,
+  };
+}
+
+// Remove o evento da agenda do usuário. 404/410 = já não existe lá → tratamos
+// como SUCESSO (não travar o usuário por algo removido por fora). sendUpdates=all
+// avisa os convidados do cancelamento.
+export async function deleteCalendarEvent(
+  accessToken: string,
+  eventId: string
+): Promise<void> {
+  const url = new URL(`${CALENDAR_EVENTS_ENDPOINT}/${encodeURIComponent(eventId)}`);
+  url.searchParams.set("sendUpdates", "all");
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+  } catch {
+    throw new GoogleError(
+      "Não foi possível falar com o Google Calendar. Tente de novo."
+    );
+  }
+
+  if (res.ok || res.status === 404 || res.status === 410) return; // já não existe = ok
+  const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const err = json.error;
+  const msg =
+    err &&
+    typeof err === "object" &&
+    typeof (err as { message?: unknown }).message === "string"
+      ? (err as { message: string }).message
+      : "O Google recusou a exclusão do evento.";
+  throw new GoogleError(msg);
+}
+
 // Link do Meet: prefere o entryPoint de vídeo do conferenceData; cai no
 // hangoutLink legado. Null se o Google não gerou (o chamador avisa).
 function extractMeetLink(event: Record<string, unknown>): string | null {

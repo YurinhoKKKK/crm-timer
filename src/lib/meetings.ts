@@ -58,6 +58,18 @@ export type DirectoryUser = {
 
 export type ReachableCompany = { id: string; name: string };
 
+// Contexto que a lista precisa para decidir e explicar as AÇÕES por reunião
+// (editar/excluir só do criador; enviar ao Google; faxina do admin). Montado no
+// servidor (página/central) e passado para os cartões (client).
+export type MeetingActionsContext = {
+  currentUserId: string;
+  isAdmin: boolean;
+  googleConnected: boolean; // o usuário ATUAL tem conta Google conectada agora
+  directory: DirectoryUser[]; // para o seletor de participantes na edição
+  companies?: ReachableCompany[]; // /agenda: empresa editável
+  lockedCompany?: ReachableCompany; // central: empresa travada
+};
+
 // Forma estrutural de uma linha de conflito de horário — o que o aviso do
 // formulário precisa exibir. Compatível com o ConflictRow devolvido por
 // checkMeetingConflicts (ver src/app/meeting-actions.ts).
@@ -226,6 +238,17 @@ export async function loadMeetingDirectory(
     avatarUrl: avatarUrl(r.avatar_path),
     role: r.role,
   }));
+}
+
+// O usuário ATUAL tem uma conta Google conectada agora? (existe linha própria em
+// google_accounts — RLS ga_select_own só devolve a dele). Habilita "Enviar para
+// o Google" e sinaliza que a edição vai sincronizar.
+export async function loadGoogleConnected(supabase: Client): Promise<boolean> {
+  const { data } = await supabase
+    .from("google_accounts")
+    .select("user_id")
+    .maybeSingle();
+  return !!data;
 }
 
 // Empresas que o usuário alcança (RLS companies_select = exatamente as em que

@@ -23,7 +23,7 @@ Verificado na documentação atual do Google (03/08/2026):
 - `creator.self` / `organizer.self` (booleanos) dizem se foi a própria conta que
   criou/organizou o evento.
 
-## Fatia 1 — CRIAR e LISTAR (em construção)
+## Fatia 1 — CRIAR e LISTAR (pronta, validada no navegador)
 
 - **Página dedicada `/agenda`** (lar do módulo, na navegação de todos os cargos):
   lista de reuniões agrupada por dia, próximas primeiro. Visão de calendário/grade
@@ -47,6 +47,67 @@ Verificado na documentação atual do Google (03/08/2026):
 - **Visibilidade**: todos os usuários internos veem as reuniões uns dos outros,
   com detalhes, inclusive de qual empresa. O portal do cliente fica intocado.
 
+## Fatia 1.1 — EDITAR, EXCLUIR e ENVIAR AO GOOGLE (pronta)
+
+Ainda **sem** visão de calendário e **sem** importação (essas são fatias
+seguintes). O que entrou:
+
+### Permissão: só QUEM CRIOU edita/exclui (decisão tomada)
+
+- **Só o criador** edita, exclui e sincroniza a própria reunião — é quem tem o
+  token Google do evento. Para os demais, os botões ficam **desabilitados e
+  EXPLICADOS** ("só quem criou pode editar/excluir — o evento pertence à agenda
+  Google de quem criou"), nunca escondidos sem motivo.
+- **Por que o admin NÃO edita/exclui pelo fluxo normal:** por construção (sem
+  `service_role`, ver [[google-calendar-etapa1]]) o admin não tem o token Google
+  do outro. Editar/excluir no banco deixaria o evento real intocado — o
+  desencontro silencioso que o produto evita. A migration 0048 **alinhou o RLS**:
+  `meetings_update`/`meetings_delete`/`mp_write` passaram a exigir
+  `created_by = auth.uid()` (antes o update permitia `is_admin()` também).
+- **Caso ÓRFÃO** (criador saiu / conta Google se foi): o admin tem uma saída
+  separada e explícita — **"Remover do sistema"** (função `admin_delete_meeting`,
+  SECURITY DEFINER, admin-only). Remove SÓ do sistema e **assume não tocar no
+  Google**; a UI avisa que o evento pode permanecer na agenda de quem criou.
+  Não existe "editar como admin".
+
+### Editar
+
+- Mesmos campos da criação. Salva no banco e faz **PATCH** no evento do Google
+  (`sendUpdates=all`, os convidados são avisados). Mudança de participantes
+  reflete nos convidados. O **aviso de conflito** roda também na edição (exclui a
+  própria reunião do cálculo).
+- **Troca de tipo trata o Meet:** virou `meet` → gera a conferência; deixou de
+  ser `meet` → remove (`conferenceData: null`).
+- Mesma filosofia da criação: se o Google falhar, a edição no banco **permanece**
+  com `google_sync_status`/aviso — a reunião nunca se perde. Reunião criada
+  offline e depois editada é **criada** no Google na hora (não havia evento).
+
+### Excluir (decisão tomada: "excluir e avisar")
+
+- Pede **confirmação** explícita (é destrutivo e avisa convidados).
+- Apaga o evento no Google (`sendUpdates=all`) e depois a reunião no sistema.
+  **404/410 = sucesso** (já não existe lá — não trava o usuário).
+- **Se o Google falhar (fora 404): exclui do sistema MESMO ASSIM e avisa** que o
+  evento pode ter permanecido na agenda. Trade-off aceito conscientemente: some
+  da lista, mas perde-se o `google_event_id` → o evento pode virar órfão
+  permanente no Google. (A alternativa — manter no banco e pedir retry — foi
+  descartada pelo usuário.)
+
+### Enviar para o Google Calendar (sincronizar depois)
+
+- Reunião com `google_sync_status` em `nao_conectado`/`falhou` ganha a ação
+  **"Enviar para o Google Calendar"**, disponível **só para o criador** e **só se
+  ele estiver conectado agora**. Cria o evento e atualiza o status. Fecha o buraco
+  do fallback: uma reunião criada com o Google desconectado não fica órfã para
+  sempre.
+
+### Mensagens de erro e cache
+
+- Erros **classificados** (permissão / campo inválido / falha do Google / sessão),
+  nunca chutando a causa — mesma disciplina do fix da 0047. Cache revalidado
+  (`router.refresh`) após editar/excluir/enviar; o banner de resultado fica ACIMA
+  da lista (o cartão some no refresh após excluir).
+
 ## Fatia 2 — IMPORTAÇÃO de eventos do Google (futuro)
 
 Ainda NÃO construída. Registro das **decisões pendentes** para não se perder:
@@ -69,5 +130,5 @@ que o usuário **não criou** (usando `creator.self` / `organizer.self`), mostra
 detalhes só nas reuniões **criadas pelo sistema** e nas que **ele próprio criou**.
 Considerar também tratar `visibility != public` como "ocupado, sem detalhes".
 
-Fora de escopo por enquanto: tela de calendário/grade, edição/exclusão
-sincronizada, reserva de salas, aba de reuniões no portal do cliente.
+Fora de escopo por enquanto: tela de calendário/grade, importação de eventos do
+Google, reserva de salas, aba de reuniões no portal do cliente.

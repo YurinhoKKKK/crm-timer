@@ -222,19 +222,31 @@ export default function MeetingForm({
       ? "Criando…"
       : "Criar reunião";
 
-  return (
-    <form
-      onSubmit={handleSubmit}
-      className={
-        bare
-          ? "space-y-4"
-          : "space-y-4 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6"
-      }
-    >
-      <h2 className="font-semibold text-fg">
-        {mode === "edit" ? "Editar reunião" : "Nova reunião"}
-      </h2>
+  const header = (
+    <h2 className="font-semibold text-fg">
+      {mode === "edit" ? "Editar reunião" : "Nova reunião"}
+    </h2>
+  );
 
+  const footer = (
+    <div className="flex items-center gap-2">
+      <button
+        type="submit"
+        disabled={submitting || isPending}
+        className={btnPrimary}
+      >
+        {submitLabel}
+      </button>
+      <button type="button" onClick={onCancel} className={btnSecondary}>
+        Cancelar
+      </button>
+    </div>
+  );
+
+  // Campos do formulário — compartilhados pelos dois layouts (modal com rodapé
+  // fixo x cartão inline). No modal, este bloco é a ÚNICA parte que rola.
+  const body = (
+    <>
       <div>
         <label htmlFor="meeting-company" className={labelClass}>
           Empresa
@@ -372,19 +384,38 @@ export default function MeetingForm({
       {formError && (
         <p className="text-sm text-red-600 dark:text-red-400">{formError}</p>
       )}
+    </>
+  );
 
-      <div className="flex items-center gap-2">
-        <button
-          type="submit"
-          disabled={submitting || isPending}
-          className={btnPrimary}
-        >
-          {submitLabel}
-        </button>
-        <button type="button" onClick={onCancel} className={btnSecondary}>
-          Cancelar
-        </button>
-      </div>
+  // Dentro do Modal (`bare`): cabeçalho e ações FIXOS; só o corpo rola. O painel
+  // dá a altura (max-h da viewport) e o form a preenche como coluna flex, então
+  // o rodapé com "Criar/Cancelar" fica sempre alcançável, mesmo em 1366×768 ou
+  // no celular. Ver Modal (modo flush).
+  if (bare) {
+    return (
+      <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+        <div className="shrink-0 border-b border-line px-5 pb-3 pt-5 sm:px-6">
+          {header}
+        </div>
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4 sm:px-6">
+          {body}
+        </div>
+        <div className="shrink-0 border-t border-line bg-surface px-5 py-4 sm:px-6">
+          {footer}
+        </div>
+      </form>
+    );
+  }
+
+  // Cartão inline (central da empresa): a própria página rola.
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-4 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6"
+    >
+      {header}
+      {body}
+      {footer}
     </form>
   );
 }

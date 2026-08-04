@@ -22,13 +22,18 @@ export function SearchBox({
   value,
   onChange,
   placeholder,
+  // Wrapper padrão (barras de filtro): largura mínima confortável + cresce. Em
+  // contêineres estreitos (ex.: painel de agendas da /agenda) passe algo fluido
+  // como "relative w-full", senão o min-w estoura o painel.
+  wrapperClassName = "relative sm:min-w-[220px] sm:flex-1",
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
+  wrapperClassName?: string;
 }) {
   return (
-    <div className="relative sm:min-w-[220px] sm:flex-1">
+    <div className={wrapperClassName}>
       <svg
         className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle"
         width="16"

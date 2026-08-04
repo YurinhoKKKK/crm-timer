@@ -21,6 +21,7 @@ export default function CalendarToolbar({
   onNext,
   onCreate,
   onToggleSidebar,
+  sidebarCollapsed,
 }: {
   view: CalendarView;
   label: string;
@@ -30,6 +31,8 @@ export default function CalendarToolbar({
   onNext: () => void;
   onCreate: () => void;
   onToggleSidebar: () => void;
+  // Só afeta o desktop: quando recolhido, o botão mostra "expandir" (»).
+  sidebarCollapsed: boolean;
 }) {
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -40,10 +43,20 @@ export default function CalendarToolbar({
       <button
         type="button"
         onClick={onToggleSidebar}
-        aria-label="Mostrar/ocultar agendas"
-        className="rounded-lg border border-line bg-surface p-2 text-fg-muted transition hover:border-risd/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd lg:hidden"
+        aria-label={
+          sidebarCollapsed ? "Mostrar agendas" : "Ocultar agendas"
+        }
+        title={sidebarCollapsed ? "Mostrar agendas" : "Ocultar agendas"}
+        className="rounded-lg border border-line bg-surface p-2 text-fg-muted transition hover:border-risd/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
       >
-        <MenuIcon />
+        {/* No mobile é sempre o menu (abre a gaveta); no desktop vira a seta que
+            reflete recolhido/expandido. */}
+        <span className="lg:hidden">
+          <MenuIcon />
+        </span>
+        <span className="hidden lg:inline">
+          {sidebarCollapsed ? <PanelRightIcon /> : <PanelLeftIcon />}
+        </span>
       </button>
 
       <button
@@ -113,6 +126,26 @@ function MenuIcon() {
       <line x1="3" y1="6" x2="21" y2="6" />
       <line x1="3" y1="12" x2="21" y2="12" />
       <line x1="3" y1="18" x2="21" y2="18" />
+    </svg>
+  );
+}
+
+// Painel com a coluna à ESQUERDA destacada — estado "expandido" (clicar recolhe).
+function PanelLeftIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <line x1="9" y1="4" x2="9" y2="20" />
+    </svg>
+  );
+}
+
+// Mesmo painel com a coluna "escondida" — estado "recolhido" (clicar expande).
+function PanelRightIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <line x1="9" y1="4" x2="9" y2="20" strokeDasharray="2 2" />
     </svg>
   );
 }

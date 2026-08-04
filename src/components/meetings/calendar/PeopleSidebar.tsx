@@ -15,12 +15,15 @@ export default function PeopleSidebar({
   currentUserId,
   onToggle,
   onOnlyMe,
+  onCollapse,
 }: {
   people: DirectoryUser[];
   selected: Set<string>;
   currentUserId: string;
   onToggle: (id: string) => void;
   onOnlyMe: () => void;
+  // Recolhe o painel (desktop). No mobile a gaveta fecha pela barra.
+  onCollapse: () => void;
 }) {
   const [query, setQuery] = useState("");
   const q = norm(query.trim());
@@ -36,27 +39,45 @@ export default function PeopleSidebar({
   const onlyMe = selected.size === 1 && selected.has(currentUserId);
 
   return (
-    <aside className="flex w-full flex-col rounded-2xl border border-line bg-surface p-4 shadow-card lg:w-64">
-      <div className="mb-3 flex items-center justify-between">
+    <aside className="flex w-full flex-col rounded-2xl border border-line bg-surface p-4 shadow-card lg:h-full lg:min-h-0 lg:w-52">
+      <div className="mb-3 flex shrink-0 items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-fg">Agendas</h3>
-        {!onlyMe && (
+        <div className="flex items-center gap-2">
+          {!onlyMe && (
+            <button
+              type="button"
+              onClick={onOnlyMe}
+              className="text-xs font-medium text-risd transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
+            >
+              Só eu
+            </button>
+          )}
           <button
             type="button"
-            onClick={onOnlyMe}
-            className="text-xs font-medium text-risd transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
+            onClick={onCollapse}
+            aria-label="Recolher agendas"
+            title="Recolher"
+            className="hidden rounded-md p-1 text-fg-subtle transition hover:bg-surface-2 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd lg:inline-flex"
           >
-            Só eu
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="m15 18-6-6 6-6" />
+            </svg>
           </button>
-        )}
+        </div>
       </div>
 
       {people.length > 6 && (
-        <div className="mb-2">
-          <SearchBox value={query} onChange={setQuery} placeholder="Buscar pessoa…" />
+        <div className="mb-2 shrink-0">
+          <SearchBox
+            value={query}
+            onChange={setQuery}
+            placeholder="Buscar pessoa…"
+            wrapperClassName="relative w-full"
+          />
         </div>
       )}
 
-      <ul className="-mr-1 max-h-[60vh] space-y-0.5 overflow-y-auto pr-1">
+      <ul className="-mr-1 max-h-[60vh] space-y-0.5 overflow-y-auto pr-1 lg:max-h-none lg:min-h-0 lg:flex-1">
         {filtered.length === 0 ? (
           <li className="py-2 text-center text-xs text-fg-subtle">
             Ninguém corresponde à busca.

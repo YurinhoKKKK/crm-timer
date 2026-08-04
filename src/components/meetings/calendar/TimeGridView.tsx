@@ -38,11 +38,30 @@ export default function TimeGridView({
   onEventClick: (m: MeetingRow) => void;
   onSlotClick: (day: Civil, hour: number, minute: number) => void;
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const multi = days.length > 1;
 
-  // Rola até ~7h ao montar (foco no horário comercial, como o Google).
+  // Largura da barra de rolagem VERTICAL do corpo (0 em scrollbars sobrepostas,
+  // ~17px no Windows). O cabeçalho NÃO rola, então precisa desse padding à
+  // direita para as colunas dele baterem exatamente com as do corpo — o
+  // desalinhamento clássico entre header e grade. Como o corpo tem 24h fixas,
+  // ele SEMPRE transborda na vertical, então a medida é estável.
+  const [scrollbarW, setScrollbarW] = useState(0);
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = 7 * HOUR_PX;
+    const measure = () => {
+      const el = bodyRef.current;
+      if (!el) return;
+      const w = el.offsetWidth - el.clientWidth;
+      setScrollbarW((prev) => (prev === w ? prev : w));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [multi]);
+
+  // Rola até o horário comercial (8h) ao montar — não para a meia-noite.
+  useEffect(() => {
+    if (bodyRef.current) bodyRef.current.scrollTop = BIZ_START * HOUR_PX;
   }, []);
 
   // "Tick" para reposicionar a linha da hora atual (a cada minuto).
@@ -52,48 +71,55 @@ export default function TimeGridView({
     return () => clearInterval(t);
   }, []);
 
+  // Altura vem do contêiner pai via CSS var (--agenda-h), definida em Calendar a
+  // partir do topo REAL da área — mesma altura para grade e painel, sem área
+  // morta. h-[var] no mobile; lg:h-full preenche a linha no desktop. O max-h é só
+  // teto para o primeiro paint (antes de a var existir).
   return (
-    <div
-      ref={scrollRef}
-      className="max-h-[calc(100vh-16rem)] overflow-auto rounded-2xl border border-line bg-surface shadow-card"
-    >
-      <div className={days.length > 1 ? "min-w-[680px]" : "min-w-0"}>
-        {/* Cabeçalho de dias (fica fixo no topo ao rolar) */}
-        <div className="sticky top-0 z-10 flex border-b border-line bg-surface/95 backdrop-blur">
-          <div className="w-14 shrink-0" />
-          {days.map((d) => (
-            <DayHeader key={`${d.y}-${d.m}-${d.d}`} day={d} single={days.length === 1} />
-          ))}
-        </div>
-
-        {/* Corpo: gutter de horas + colunas */}
-        <div className="flex">
-          <div className="w-14 shrink-0" style={{ height: DAY_MIN * (HOUR_PX / 60) }}>
-            {HOURS.map((h) => (
-              <div
-                key={h}
-                className="relative"
-                style={{ height: HOUR_PX }}
-              >
-                {h > 0 && (
-                  <span className="absolute -top-2 right-1.5 text-[11px] tabular-nums text-fg-subtle">
-                    {hourLabel(h)}
-                  </span>
-                )}
-              </div>
+    <div className="flex h-[var(--agenda-h)] max-h-[calc(100dvh-10rem)] flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-card lg:h-full">
+      {/* Rolagem HORIZONTAL compartilhada (semana estreita): cabeçalho e corpo
+          rolam juntos no eixo X; só o corpo rola no eixo Y. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-x-auto">
+        <div className={`flex min-h-0 flex-1 flex-col ${multi ? "min-w-[680px]" : ""}`}>
+          {/* Cabeçalho dos dias — barra sólida, não rola. paddingRight compensa a
+              scrollbar vertical do corpo para as colunas alinharem. */}
+          <div
+            className="flex shrink-0 border-b border-line bg-surface"
+            style={{ paddingRight: scrollbarW }}
+          >
+            <div className="w-14 shrink-0" />
+            {days.map((d) => (
+              <DayHeader key={`${d.y}-${d.m}-${d.d}`} day={d} single={!multi} />
             ))}
           </div>
 
-          {days.map((day) => (
-            <DayColumn
-              key={`${day.y}-${day.m}-${day.d}`}
-              day={day}
-              meetings={meetings}
-              colorOf={colorOf}
-              onEventClick={onEventClick}
-              onSlotClick={onSlotClick}
-            />
-          ))}
+          {/* Corpo: gutter de horas + colunas (rola na vertical) */}
+          <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto">
+            <div className="flex" style={{ height: DAY_MIN * (HOUR_PX / 60) }}>
+              <div className="w-14 shrink-0">
+                {HOURS.map((h) => (
+                  <div key={h} className="relative" style={{ height: HOUR_PX }}>
+                    {h > 0 && (
+                      <span className="absolute -top-2 right-1.5 text-[11px] tabular-nums text-fg-subtle">
+                        {hourLabel(h)}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {days.map((day) => (
+                <DayColumn
+                  key={`${day.y}-${day.m}-${day.d}`}
+                  day={day}
+                  meetings={meetings}
+                  colorOf={colorOf}
+                  onEventClick={onEventClick}
+                  onSlotClick={onSlotClick}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -176,6 +202,15 @@ function DayColumn({
           key={h}
           className="pointer-events-none absolute inset-x-0 border-t border-line/60"
           style={{ top: h * HOUR_PX }}
+        />
+      ))}
+      {/* Linhas de meia-hora (mais fracas) — deixam VISÍVEL a granularidade de
+          30 min do clique, como no Google; sem elas a grade "parece" só de horas. */}
+      {HOURS.map((h) => (
+        <div
+          key={`half-${h}`}
+          className="pointer-events-none absolute inset-x-0 border-t border-line/25"
+          style={{ top: h * HOUR_PX + HOUR_PX / 2 }}
         />
       ))}
 

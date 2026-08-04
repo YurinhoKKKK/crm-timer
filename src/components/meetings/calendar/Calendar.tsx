@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import Modal from "@/components/Modal";
 import MeetingForm from "@/components/meetings/MeetingForm";
 import MeetingCard from "@/components/meetings/MeetingCard";
@@ -32,6 +39,9 @@ import {
 } from "./datetime";
 
 const DAY_MS = 24 * 60 * 60000;
+const SIDEBAR_PREF_KEY = "agenda:sidebar"; // preferência de recolher no desktop
+const BOTTOM_GAP = 24; // respiro até a base da viewport (pb-6 do <main>)
+const MIN_AREA_PX = 360; // piso de altura em telas muito baixas
 
 // Dias visíveis conforme a visão.
 function visibleDays(view: CalendarView, anchor: Civil): Civil[] {
@@ -96,7 +106,46 @@ export default function Calendar({
   const [reload, setReload] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Duas noções de visibilidade do painel de agendas:
+  //  - sidebarOpen: gaveta no MOBILE (fechada por padrão; abre por cima da grade).
+  //  - sidebarCollapsed: recolhido no DESKTOP, liberando a largura para a grade.
+  //    A preferência é lembrada entre navegações (localStorage).
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    try {
+      setSidebarCollapsed(
+        localStorage.getItem(SIDEBAR_PREF_KEY) === "collapsed"
+      );
+    } catch {
+      /* localStorage indisponível — mantém expandido */
+    }
+  }, []);
+
+  // Um só controle (na barra): no desktop recolhe/expande (e lembra); no mobile
+  // abre/fecha a gaveta. Decide pela largura no momento do clique.
+  const toggleSidebar = useCallback(() => {
+    const isDesktop =
+      typeof window !== "undefined" &&
+      window.matchMedia("(min-width: 1024px)").matches;
+    if (isDesktop) {
+      setSidebarCollapsed((c) => {
+        const next = !c;
+        try {
+          localStorage.setItem(
+            SIDEBAR_PREF_KEY,
+            next ? "collapsed" : "expanded"
+          );
+        } catch {
+          /* ignora falha de persistência */
+        }
+        return next;
+      });
+    } else {
+      setSidebarOpen((o) => !o);
+    }
+  }, []);
 
   const [createDraft, setCreateDraft] = useState<Draft | null>(null);
   const [detail, setDetail] = useState<MeetingRow | null>(null);
@@ -106,6 +155,33 @@ export default function Calendar({
   useEffect(() => {
     if (window.matchMedia("(max-width: 640px)").matches) setView("day");
   }, []);
+
+  // Altura disponível da ÁREA (painel + grade): do topo REAL da linha até a base
+  // da viewport (menos o pb-6 do <main>). Medir o CONTÊINER PAI e distribuir a
+  // mesma altura para grade e painel (via CSS var) garante que nenhum dos dois
+  // sobre área morta nem estoure. Remede em resize, quando o banner aparece/some
+  // e no próximo frame (para pegar o layout já assentado).
+  const areaRef = useRef<HTMLDivElement>(null);
+  const [areaH, setAreaH] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    const measure = () => {
+      const el = areaRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top;
+      const h = Math.max(
+        MIN_AREA_PX,
+        Math.round(window.innerHeight - top - BOTTOM_GAP)
+      );
+      setAreaH((prev) => (prev !== undefined && Math.abs(prev - h) < 1 ? prev : h));
+    };
+    measure();
+    const raf = requestAnimationFrame(measure);
+    window.addEventListener("resize", measure);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", measure);
+    };
+  }, [result]);
 
   const { fromISO, toISO, key } = useMemo(() => rangeOf(view, anchor), [view, anchor]);
 
@@ -223,21 +299,37 @@ export default function Calendar({
         onPrev={() => setAnchor((a) => shiftAnchor(view, a, -1))}
         onNext={() => setAnchor((a) => shiftAnchor(view, a, 1))}
         onCreate={() => setCreateDraft({})}
-        onToggleSidebar={() => setSidebarOpen((o) => !o)}
+        onToggleSidebar={toggleSidebar}
+        sidebarCollapsed={sidebarCollapsed}
       />
 
-      <div className="flex flex-col gap-4 lg:flex-row">
-        <div className={`${sidebarOpen ? "block" : "hidden"} lg:block`}>
+      {/* Área (painel + grade): a linha recebe a altura disponível (CSS var) e
+          filhos preenchem com lg:h-full; grade e painel rolam por dentro. */}
+      <div
+        ref={areaRef}
+        style={
+          areaH !== undefined
+            ? ({ ["--agenda-h" as string]: `${areaH}px` } as CSSProperties)
+            : undefined
+        }
+        className="flex flex-col gap-4 lg:h-[var(--agenda-h)] lg:min-h-0 lg:flex-row lg:overflow-hidden"
+      >
+        <div
+          className={`${sidebarOpen ? "block" : "hidden"} ${
+            sidebarCollapsed ? "lg:hidden" : "lg:block"
+          } lg:h-full lg:min-h-0`}
+        >
           <PeopleSidebar
             people={directory}
             selected={selected}
             currentUserId={currentUserId}
             onToggle={toggle}
             onOnlyMe={() => setSelected(new Set([currentUserId]))}
+            onCollapse={toggleSidebar}
           />
         </div>
 
-        <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col lg:h-full lg:min-h-0">
           {error ? (
             <div className="rounded-2xl border border-red-300/60 bg-red-50 p-8 text-center text-sm text-red-700 shadow-card dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
               <p>{error}</p>
@@ -256,30 +348,34 @@ export default function Calendar({
           ) : (
             <>
               {visible.length === 0 && (
-                <p className="mb-2 text-xs text-fg-subtle">
+                <p className="mb-2 shrink-0 text-xs text-fg-subtle">
                   Nenhuma reunião das agendas selecionadas neste período.
                 </p>
               )}
-              {view === "month" ? (
-                <MonthView
-                  anchorMonth={anchor}
-                  meetings={visible}
-                  onEventClick={setDetail}
-                  onDayClick={(d) => {
-                    setAnchor(d);
-                    setView("day");
-                  }}
-                  onCreateDay={openCreateDay}
-                />
-              ) : (
-                <TimeGridView
-                  days={visibleDays(view, anchor)}
-                  meetings={visible}
-                  colorOf={personColor}
-                  onEventClick={setDetail}
-                  onSlotClick={openSlot}
-                />
-              )}
+              <div className="min-h-0 flex-1">
+                {view === "month" ? (
+                  <div className="lg:h-full lg:overflow-y-auto">
+                    <MonthView
+                      anchorMonth={anchor}
+                      meetings={visible}
+                      onEventClick={setDetail}
+                      onDayClick={(d) => {
+                        setAnchor(d);
+                        setView("day");
+                      }}
+                      onCreateDay={openCreateDay}
+                    />
+                  </div>
+                ) : (
+                  <TimeGridView
+                    days={visibleDays(view, anchor)}
+                    meetings={visible}
+                    colorOf={personColor}
+                    onEventClick={setDetail}
+                    onSlotClick={openSlot}
+                  />
+                )}
+              </div>
             </>
           )}
         </div>
@@ -290,6 +386,7 @@ export default function Calendar({
         open={createDraft !== null}
         onClose={() => setCreateDraft(null)}
         maxWidth="max-w-lg"
+        flush
       >
         {createDraft !== null && (
           <MeetingForm

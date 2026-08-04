@@ -160,7 +160,8 @@
       "Bash(node _gcal_run.js)",
       "Bash(./node_modules/.bin/tsc --noEmit --skipLibCheck -p tsconfig.json)",
       "Bash(tee ./_gcal_build/tsc_full.txt)",
-      "Bash(xargs echo \"total linhas de saída tsc:\")"
+      "Bash(xargs echo \"total linhas de saída tsc:\")",
+      "Bash(taskkill //F //IM node.exe)"
     ]
   }
 }

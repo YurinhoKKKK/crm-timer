@@ -16,8 +16,15 @@ import CalendarToolbar, { type CalendarView } from "./CalendarToolbar";
 import PeopleSidebar from "./PeopleSidebar";
 import TimeGridView from "./TimeGridView";
 import MonthView from "./MonthView";
-import { fetchMeetingsRange } from "@/app/meeting-actions";
+import {
+  fetchMeetingsRange,
+  updateMeeting,
+  checkMeetingConflicts,
+  type ConflictRow,
+} from "@/app/meeting-actions";
 import { personColor } from "@/lib/meeting-colors";
+import { formatMeetingRange } from "@/lib/meetings";
+import { btnPrimary, btnSecondary } from "@/lib/ui";
 import type {
   DirectoryUser,
   MeetingActionsContext,
@@ -72,6 +79,23 @@ function shiftAnchor(view: CalendarView, anchor: Civil, dir: 1 | -1): Civil {
   if (view === "day") return addDays(anchor, dir);
   if (view === "week") return addDays(anchor, 7 * dir);
   return addMonths(anchor, dir);
+}
+
+// Move otimista de UMA reunião dentro do período visível. Arrastar nunca cruza a
+// chave (mesma semana/dia), então basta atualizar as linhas da chave atual.
+function moveInKey(
+  map: Map<string, MeetingRow[]>,
+  key: string,
+  id: string,
+  startISO: string,
+  endISO: string
+): Map<string, MeetingRow[]> {
+  const rows = map.get(key);
+  if (!rows) return map;
+  const next = rows.map((r) =>
+    r.id === id ? { ...r, startsAt: startISO, endsAt: endISO } : r
+  );
+  return new Map(map).set(key, next);
 }
 
 type Draft = { startISO?: string; endISO?: string };
@@ -150,6 +174,15 @@ export default function Calendar({
   const [createDraft, setCreateDraft] = useState<Draft | null>(null);
   const [detail, setDetail] = useState<MeetingRow | null>(null);
   const [result, setResult] = useState<{ warning: string | null; successText: string } | null>(null);
+  // Arrasto solto que caiu em conflito — aguarda a confirmação do usuário.
+  // `backup` guarda as reuniões do período para reverter se ele cancelar.
+  const [dragConfirm, setDragConfirm] = useState<{
+    meeting: MeetingRow;
+    startISO: string;
+    endISO: string;
+    conflicts: ConflictRow[];
+    backup: MeetingRow[];
+  } | null>(null);
 
   // Mobile: a grade de semana não cabe — abre em Dia. Só no primeiro render.
   useEffect(() => {
@@ -259,12 +292,93 @@ export default function Calendar({
     setReload((n) => n + 1);
   }, []);
 
+  const nameById = useMemo(
+    () => new Map(directory.map((u) => [u.id, u.name])),
+    [directory]
+  );
+
   function handleResult(warning: string | null, successText: string) {
     setResult({ warning, successText });
     setDetail(null);
     setCreateDraft(null);
     invalidate();
   }
+
+  // Grava o reagendamento: banco → Google (fluxo da fatia 1.1). No sucesso,
+  // reconcilia o período em SILÊNCIO (sem limpar o cache → sem "Carregando…",
+  // mantendo o otimismo até a resposta chegar). Na falha, REVERTE para o backup
+  // e avisa — a mudança não fica pela metade.
+  const finishReschedule = useCallback(
+    async (
+      meeting: MeetingRow,
+      startISO: string,
+      endISO: string,
+      backup: MeetingRow[]
+    ) => {
+      const res = await updateMeeting({
+        meetingId: meeting.id,
+        companyId: meeting.companyId,
+        companyName: meeting.companyName,
+        title: meeting.title,
+        description: meeting.description ?? "",
+        type: meeting.type,
+        startISO,
+        endISO,
+        participantIds: meeting.participants.map((p) => p.id),
+      });
+      if (!res.ok) {
+        setCache((prev) => new Map(prev).set(key, backup));
+        setResult({
+          warning: `Não foi possível reagendar: ${res.error}`,
+          successText: "",
+        });
+        return;
+      }
+      setResult({ warning: res.warning, successText: "Reunião reagendada." });
+      try {
+        const rows = await fetchMeetingsRange(fromISO, toISO);
+        setCache((prev) => new Map(prev).set(key, rows));
+      } catch {
+        /* mantém a versão otimista já visível */
+      }
+    },
+    [key, fromISO, toISO]
+  );
+
+  // Soltou o arrasto: aplica o feedback otimista, roda a MESMA verificação de
+  // conflito (todos os participantes + o criador, no servidor) e, havendo
+  // sobreposição, PEDE CONFIRMAÇÃO sem bloquear. Sem conflito, grava direto.
+  const onReschedule = useCallback(
+    async (meeting: MeetingRow, startISO: string, endISO: string) => {
+      const backup = cache.get(key) ?? [];
+      setCache((prev) => moveInKey(prev, key, meeting.id, startISO, endISO));
+      let conflicts: ConflictRow[] = [];
+      try {
+        conflicts = await checkMeetingConflicts(
+          startISO,
+          endISO,
+          meeting.participants.map((p) => p.id),
+          meeting.id
+        );
+      } catch {
+        conflicts = [];
+      }
+      if (conflicts.length > 0) {
+        setDragConfirm({ meeting, startISO, endISO, conflicts, backup });
+        return;
+      }
+      await finishReschedule(meeting, startISO, endISO, backup);
+    },
+    [cache, key, finishReschedule]
+  );
+
+  // Cancela o arrasto em conflito: reverte o otimismo ao lugar de origem.
+  const cancelDragConfirm = useCallback(() => {
+    setDragConfirm((c) => {
+      if (c) setCache((prev) => new Map(prev).set(key, c.backup));
+      return null;
+    });
+  }, [key]);
 
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -371,8 +485,10 @@ export default function Calendar({
                     days={visibleDays(view, anchor)}
                     meetings={visible}
                     colorOf={personColor}
+                    currentUserId={currentUserId}
                     onEventClick={setDetail}
                     onSlotClick={openSlot}
+                    onReschedule={onReschedule}
                   />
                 )}
               </div>
@@ -418,6 +534,60 @@ export default function Calendar({
             ctx={ctx}
             onResult={handleResult}
           />
+        )}
+      </Modal>
+
+      {/* Conflito ao arrastar — avisa com quem/qual, mas NÃO bloqueia. Fechar
+          (ESC/fora/Cancelar) devolve a reunião ao lugar de origem. */}
+      <Modal open={dragConfirm !== null} onClose={cancelDragConfirm} maxWidth="max-w-md">
+        {dragConfirm && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="font-semibold text-fg">Possível conflito de horário</h2>
+              <p className="mt-1 text-sm text-fg-muted">
+                Mover “{dragConfirm.meeting.title}” para{" "}
+                {formatMeetingRange(dragConfirm.startISO, dragConfirm.endISO)}{" "}
+                sobrepõe:
+              </p>
+            </div>
+            <ul className="space-y-1.5 rounded-xl border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+              {dragConfirm.conflicts.map((c) => {
+                const who = c.userIds
+                  .map((id) => nameById.get(id) ?? "alguém")
+                  .join(", ");
+                return (
+                  <li key={c.meetingId}>
+                    <span className="font-medium">{who}</span> já tem “{c.title}” (
+                    {c.companyName}) das {formatMeetingRange(c.startsAt, c.endsAt)}.
+                  </li>
+                );
+              })}
+            </ul>
+            <p className="text-xs text-fg-subtle">
+              É só um aviso — você pode mover mesmo assim. A verificação cobre
+              apenas reuniões deste sistema.
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className={btnPrimary}
+                onClick={() => {
+                  const c = dragConfirm;
+                  setDragConfirm(null);
+                  finishReschedule(c.meeting, c.startISO, c.endISO, c.backup);
+                }}
+              >
+                Mover mesmo assim
+              </button>
+              <button
+                type="button"
+                className={btnSecondary}
+                onClick={cancelDragConfirm}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
         )}
       </Modal>
     </div>

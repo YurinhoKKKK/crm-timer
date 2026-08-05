@@ -1,6 +1,6 @@
 "use client";
 
-import type { MeetingRow } from "@/lib/meetings";
+import { isImported, type GridItem } from "@/lib/meetings";
 import { personColor } from "@/lib/meeting-colors";
 import {
   addDays,
@@ -13,21 +13,23 @@ import {
 } from "./datetime";
 
 const WEEKDAY_HEADERS = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
-const CAP = 3; // reuniões visíveis por célula antes do "+N mais"
+const CAP = 3; // eventos visíveis por célula antes do "+N mais"
 
-// Visão de Mês: 6 semanas × 7 dias (domingo→sábado), reuniões compactas por
-// célula e "+N mais" quando não couber. Dia clicado → visão de Dia; clique no
-// vazio da célula → criar naquele dia.
+// Visão de Mês: 6 semanas × 7 dias (domingo→sábado), eventos compactos por
+// célula e "+N mais" quando não couber. Mostra reuniões do sistema E eventos
+// importados do Google (estes com marcador vazado/tracejado e "Ocupado" quando
+// particulares de terceiros). Dia clicado → visão de Dia; clique no vazio da
+// célula → criar naquele dia.
 export default function MonthView({
   anchorMonth,
-  meetings,
+  items,
   onEventClick,
   onDayClick,
   onCreateDay,
 }: {
   anchorMonth: Civil;
-  meetings: MeetingRow[];
-  onEventClick: (m: MeetingRow) => void;
+  items: GridItem[];
+  onEventClick: (item: GridItem) => void;
   onDayClick: (day: Civil) => void;
   onCreateDay: (day: Civil) => void;
 }) {
@@ -55,7 +57,7 @@ export default function MonthView({
             inMonth={day.m === anchorMonth.m}
             lastRow={i >= 35}
             lastCol={(i + 1) % 7 === 0}
-            meetings={meetings}
+            items={items}
             onEventClick={onEventClick}
             onDayClick={onDayClick}
             onCreateDay={onCreateDay}
@@ -71,7 +73,7 @@ function MonthCell({
   inMonth,
   lastRow,
   lastCol,
-  meetings,
+  items,
   onEventClick,
   onDayClick,
   onCreateDay,
@@ -80,14 +82,14 @@ function MonthCell({
   inMonth: boolean;
   lastRow: boolean;
   lastCol: boolean;
-  meetings: MeetingRow[];
-  onEventClick: (m: MeetingRow) => void;
+  items: GridItem[];
+  onEventClick: (item: GridItem) => void;
   onDayClick: (day: Civil) => void;
   onCreateDay: (day: Civil) => void;
 }) {
   const dayStart = civilMidnightMs(day);
   const dayEnd = dayStart + 24 * 60 * 60000;
-  const items = meetings
+  const dayItems = items
     .filter((m) => {
       const s = new Date(m.startsAt).getTime();
       const e = new Date(m.endsAt).getTime();
@@ -95,8 +97,8 @@ function MonthCell({
     })
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
 
-  const shown = items.slice(0, CAP);
-  const extra = items.length - shown.length;
+  const shown = dayItems.slice(0, CAP);
+  const extra = dayItems.length - shown.length;
   const today = isToday(day);
 
   return (
@@ -128,29 +130,46 @@ function MonthCell({
       </div>
 
       <div className="space-y-1">
-        {shown.map((m) => (
-          <button
-            key={m.id}
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEventClick(m);
-            }}
-            title={`${m.title} · ${timeLabel(m.startsAt)}`}
-            className="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left transition hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
-          >
-            <span
-              className="h-2 w-2 shrink-0 rounded-full"
-              style={{ backgroundColor: personColor(m.creator.id) }}
-            />
-            <span className="truncate text-[11px] text-fg">
-              <span className="tabular-nums text-fg-subtle">
-                {timeLabel(m.startsAt)}
-              </span>{" "}
-              {m.title}
-            </span>
-          </button>
-        ))}
+        {shown.map((m) => {
+          const imported = isImported(m);
+          const color = personColor(imported ? m.ownerId : m.creator.id);
+          const label = imported ? m.title ?? "Ocupado" : m.title;
+          return (
+            <button
+              key={m.id}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEventClick(m);
+              }}
+              title={`${label} · ${timeLabel(m.startsAt)}${
+                imported ? " — Google, somente leitura" : ""
+              }`}
+              className="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left transition hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
+            >
+              <span
+                className={`h-2 w-2 shrink-0 rounded-full ${
+                  imported ? "border" : ""
+                }`}
+                style={
+                  imported
+                    ? { borderColor: color, backgroundColor: "transparent" }
+                    : { backgroundColor: color }
+                }
+              />
+              <span
+                className={`truncate text-[11px] ${
+                  imported ? "text-fg-muted" : "text-fg"
+                }`}
+              >
+                <span className="tabular-nums text-fg-subtle">
+                  {timeLabel(m.startsAt)}
+                </span>{" "}
+                {label}
+              </span>
+            </button>
+          );
+        })}
         {extra > 0 && (
           <button
             type="button"

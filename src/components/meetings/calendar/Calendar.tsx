@@ -22,15 +22,18 @@ import {
   checkMeetingConflicts,
   type ConflictRow,
 } from "@/app/meeting-actions";
+import { syncMyGoogleCalendar } from "@/app/google-import-actions";
 import { personColor } from "@/lib/meeting-colors";
-import { formatMeetingRange } from "@/lib/meetings";
+import { describeConflict, formatMeetingRange, isImported } from "@/lib/meetings";
 import { btnPrimary, btnSecondary } from "@/lib/ui";
 import type {
   DirectoryUser,
+  GridItem,
   MeetingActionsContext,
   MeetingRow,
   ReachableCompany,
 } from "@/lib/meetings";
+import ImportedEventDetail from "./ImportedEventDetail";
 import {
   addDays,
   addMonths,
@@ -46,6 +49,9 @@ import {
 } from "./datetime";
 
 const DAY_MS = 24 * 60 * 60000;
+// Ao abrir a agenda, se a última sincronização com o Google for mais velha que
+// isto, dispara um sync em segundo plano (sem travar a tela).
+const SYNC_STALE_MS = 10 * 60 * 1000;
 const SIDEBAR_PREF_KEY = "agenda:sidebar"; // preferência de recolher no desktop
 const BOTTOM_GAP = 24; // respiro até a base da viewport (pb-6 do <main>)
 const MIN_AREA_PX = 360; // piso de altura em telas muito baixas
@@ -82,14 +88,15 @@ function shiftAnchor(view: CalendarView, anchor: Civil, dir: 1 | -1): Civil {
 }
 
 // Move otimista de UMA reunião dentro do período visível. Arrastar nunca cruza a
-// chave (mesma semana/dia), então basta atualizar as linhas da chave atual.
+// chave (mesma semana/dia), então basta atualizar as linhas da chave atual. Só
+// reuniões do sistema arrastam; importados ficam intocados.
 function moveInKey(
-  map: Map<string, MeetingRow[]>,
+  map: Map<string, GridItem[]>,
   key: string,
   id: string,
   startISO: string,
   endISO: string
-): Map<string, MeetingRow[]> {
+): Map<string, GridItem[]> {
   const rows = map.get(key);
   if (!rows) return map;
   const next = rows.map((r) =>
@@ -110,7 +117,8 @@ export default function Calendar({
   directory,
   companies,
   managedCompanyIds,
-  initialMeetings,
+  initialItems,
+  initialLastSync,
 }: {
   currentUserId: string;
   isAdmin: boolean;
@@ -118,7 +126,10 @@ export default function Calendar({
   directory: DirectoryUser[];
   companies: ReachableCompany[];
   managedCompanyIds: string[];
-  initialMeetings: MeetingRow[];
+  initialItems: GridItem[];
+  // Última sincronização da agenda Google do usuário (ISO) — para "sincronizado
+  // há X" e para decidir o sync automático em segundo plano. null = nunca.
+  initialLastSync: string | null;
 }) {
   const today = todayCivil();
   const initialKey = `w:${civilKey(weekStart(today))}`;
@@ -126,8 +137,8 @@ export default function Calendar({
   const [view, setView] = useState<CalendarView>("week");
   const [anchor, setAnchor] = useState<Civil>(today);
   const [selected, setSelected] = useState<Set<string>>(new Set([currentUserId]));
-  const [cache, setCache] = useState<Map<string, MeetingRow[]>>(
-    () => new Map([[initialKey, initialMeetings]])
+  const [cache, setCache] = useState<Map<string, GridItem[]>>(
+    () => new Map([[initialKey, initialItems]])
   );
   const [reload, setReload] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -174,16 +185,20 @@ export default function Calendar({
   }, []);
 
   const [createDraft, setCreateDraft] = useState<Draft | null>(null);
-  const [detail, setDetail] = useState<MeetingRow | null>(null);
+  const [detail, setDetail] = useState<GridItem | null>(null);
   const [result, setResult] = useState<{ warning: string | null; successText: string } | null>(null);
+  // Sincronização com o Google (Fatia 2): carimbo da última vez e estado do botão.
+  const [lastSync, setLastSync] = useState<string | null>(initialLastSync);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
   // Arrasto solto que caiu em conflito — aguarda a confirmação do usuário.
-  // `backup` guarda as reuniões do período para reverter se ele cancelar.
+  // `backup` guarda os itens do período para reverter se ele cancelar.
   const [dragConfirm, setDragConfirm] = useState<{
     meeting: MeetingRow;
     startISO: string;
     endISO: string;
     conflicts: ConflictRow[];
-    backup: MeetingRow[];
+    backup: GridItem[];
   } | null>(null);
 
   // Mobile: a grade de semana não cabe — abre em Dia. Só no primeiro render.
@@ -262,14 +277,16 @@ export default function Calendar({
   }, [key]);
 
   const rows = cache.get(key) ?? [];
-  // Filtro de pessoas: a reunião aparece se alguma pessoa LIGADA é criadora ou
-  // participante (decisão: todos os internos podem ver as reuniões uns dos outros).
+  // Filtro de pessoas: reunião do sistema aparece se alguém LIGADO é criador ou
+  // participante; evento importado aparece se o DONO da agenda está ligado
+  // (decisão: todos os internos veem as agendas uns dos outros).
   const visible = useMemo(
     () =>
-      rows.filter(
-        (m) =>
-          selected.has(m.creator.id) ||
-          m.participants.some((p) => selected.has(p.id))
+      rows.filter((m) =>
+        isImported(m)
+          ? selected.has(m.ownerId)
+          : selected.has(m.creator.id) ||
+            m.participants.some((p) => selected.has(p.id))
       ),
     [rows, selected]
   );
@@ -295,6 +312,45 @@ export default function Calendar({
     setReload((n) => n + 1);
   }, []);
 
+  // Sincroniza a agenda do Google do PRÓPRIO usuário (só o token dele é
+  // alcançável — ver google-import-actions). No sucesso, recarrega o período para
+  // os importados aparecerem/atualizarem. `silent` (auto-sync no load) não mostra
+  // erro na cara do usuário; o botão manual mostra.
+  const runSync = useCallback(
+    async (silent: boolean) => {
+      if (syncing) return;
+      setSyncing(true);
+      if (!silent) setSyncMsg(null);
+      const res = await syncMyGoogleCalendar();
+      setSyncing(false);
+      if (res.status === "ok") {
+        setLastSync(res.lastSyncedAt);
+        invalidate();
+        if (!silent) setSyncMsg(null);
+      } else if (res.status === "nao_conectado") {
+        if (!silent)
+          setSyncMsg("Conecte sua conta Google no seu perfil para importar a agenda.");
+      } else {
+        if (!silent) setSyncMsg(res.message);
+      }
+    },
+    [syncing, invalidate]
+  );
+
+  // Auto-sync ao abrir, se a última for velha (ou nunca) e houver conta conectada.
+  // Roda uma vez, em segundo plano; erros ficam silenciosos aqui.
+  const autoSyncedRef = useRef(false);
+  useEffect(() => {
+    if (autoSyncedRef.current) return;
+    if (!googleConnected) return;
+    const stale =
+      !lastSync || Date.now() - new Date(lastSync).getTime() > SYNC_STALE_MS;
+    if (!stale) return;
+    autoSyncedRef.current = true;
+    void runSync(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [googleConnected]);
+
   const nameById = useMemo(
     () => new Map(directory.map((u) => [u.id, u.name])),
     [directory]
@@ -316,7 +372,7 @@ export default function Calendar({
       meeting: MeetingRow,
       startISO: string,
       endISO: string,
-      backup: MeetingRow[]
+      backup: GridItem[]
     ) => {
       const res = await updateMeeting({
         meetingId: meeting.id,
@@ -418,7 +474,16 @@ export default function Calendar({
         onCreate={() => setCreateDraft({})}
         onToggleSidebar={toggleSidebar}
         sidebarCollapsed={sidebarCollapsed}
+        googleConnected={googleConnected}
+        lastSync={lastSync}
+        syncing={syncing}
+        onSync={() => runSync(false)}
       />
+      {syncMsg && (
+        <p className="mb-3 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+          {syncMsg}
+        </p>
+      )}
 
       {/* Área (painel + grade): a linha recebe a altura disponível (CSS var) e
           filhos preenchem com lg:h-full; grade e painel rolam por dentro. */}
@@ -474,7 +539,7 @@ export default function Calendar({
                   <div className="lg:h-full lg:overflow-y-auto">
                     <MonthView
                       anchorMonth={anchor}
-                      meetings={visible}
+                      items={visible}
                       onEventClick={setDetail}
                       onDayClick={(d) => {
                         setAnchor(d);
@@ -486,9 +551,10 @@ export default function Calendar({
                 ) : (
                   <TimeGridView
                     days={visibleDays(view, anchor)}
-                    meetings={visible}
+                    items={visible}
                     colorOf={personColor}
                     currentUserId={currentUserId}
+                    nameById={nameById}
                     onEventClick={setDetail}
                     onSlotClick={openSlot}
                     onReschedule={onReschedule}
@@ -527,17 +593,26 @@ export default function Calendar({
         )}
       </Modal>
 
-      {/* Detalhe do evento (com as ações da fatia 1.1) */}
+      {/* Detalhe do evento: reunião do sistema (ações da fatia 1.1) ou evento
+          importado do Google (somente-leitura). */}
       <Modal open={detail !== null} onClose={() => setDetail(null)} maxWidth="max-w-xl">
-        {detail !== null && (
-          <MeetingCard
-            key={detail.id}
-            meeting={detail}
-            showCompany
-            ctx={ctx}
-            onResult={handleResult}
-          />
-        )}
+        {detail !== null &&
+          (isImported(detail) ? (
+            <ImportedEventDetail
+              key={detail.id}
+              event={detail}
+              ownerName={nameById.get(detail.ownerId) ?? "colega"}
+              isOwn={detail.ownerId === currentUserId}
+            />
+          ) : (
+            <MeetingCard
+              key={detail.id}
+              meeting={detail}
+              showCompany
+              ctx={ctx}
+              onResult={handleResult}
+            />
+          ))}
       </Modal>
 
       {/* Conflito ao arrastar — avisa com quem/qual, mas NÃO bloqueia. Fechar
@@ -555,20 +630,18 @@ export default function Calendar({
             </div>
             <ul className="space-y-1.5 rounded-xl border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
               {dragConfirm.conflicts.map((c) => {
-                const who = c.userIds
-                  .map((id) => nameById.get(id) ?? "alguém")
-                  .join(", ");
+                const { who, tail } = describeConflict(c, nameById);
                 return (
-                  <li key={c.meetingId}>
-                    <span className="font-medium">{who}</span> já tem “{c.title}” (
-                    {c.companyName}) das {formatMeetingRange(c.startsAt, c.endsAt)}.
+                  <li key={`${c.source}-${c.refId}`}>
+                    <span className="font-medium">{who}</span>
+                    {tail}
                   </li>
                 );
               })}
             </ul>
             <p className="text-xs text-fg-subtle">
-              É só um aviso — você pode mover mesmo assim. A verificação cobre
-              apenas reuniões deste sistema.
+              É só um aviso — você pode mover mesmo assim. A verificação cobre as
+              reuniões deste sistema e os eventos da sua agenda do Google.
             </p>
             <div className="flex items-center gap-2">
               <button

@@ -2,11 +2,12 @@ import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import Calendar from "@/components/meetings/calendar/Calendar";
 import {
-  loadMeetings,
+  loadAgendaItems,
   loadMeetingDirectory,
   loadReachableCompanies,
   loadGoogleConnected,
   loadManagedCompanyIds,
+  loadLastGoogleSync,
 } from "@/lib/meetings";
 import {
   addDays,
@@ -37,13 +38,14 @@ export default async function AgendaPage() {
   const fromISO = new Date(civilMidnightMs(wk)).toISOString();
   const toISO = new Date(civilMidnightMs(addDays(wk, 7))).toISOString();
 
-  const [meetings, directory, companies, googleConnected, managedCompanyIds] =
+  const [items, directory, companies, googleConnected, managedCompanyIds, lastSync] =
     await Promise.all([
-      loadMeetings(supabase, { fromISO, toISO }),
+      loadAgendaItems(supabase, { fromISO, toISO }),
       loadMeetingDirectory(supabase),
       loadReachableCompanies(supabase),
       loadGoogleConnected(supabase),
       loadManagedCompanyIds(supabase),
+      loadLastGoogleSync(supabase),
     ]);
 
   return (
@@ -63,7 +65,8 @@ export default async function AgendaPage() {
         directory={directory}
         companies={companies}
         managedCompanyIds={managedCompanyIds}
-        initialMeetings={meetings}
+        initialItems={items}
+        initialLastSync={lastSync}
       />
     </AppShell>
   );

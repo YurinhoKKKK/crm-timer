@@ -9,8 +9,8 @@ import {
   deleteCalendarEvent,
 } from "@/lib/google-calendar";
 import { GoogleError } from "@/lib/google-oauth";
-import { loadMeetings } from "@/lib/meetings";
-import type { GoogleSyncStatus, MeetingRow, MeetingType } from "@/lib/meetings";
+import { loadAgendaItems } from "@/lib/meetings";
+import type { GoogleSyncStatus, GridItem, MeetingType } from "@/lib/meetings";
 
 // =====================================================================
 // Reuniões (Fatia 1 + 1.1) — criar, editar, excluir, sincronizar depois.
@@ -427,17 +427,18 @@ export async function setMeetingClientHidden(
 // ---------------------------------------------------------------------
 // Leitura por INTERVALO — para o calendário navegar (semana/dia/mês) buscando só
 // a janela visível (+ folga), nunca a base inteira. A RLS já escopa (todo interno
-// vê tudo); o filtro de pessoas é aplicado no cliente sobre esta janela.
+// vê tudo); o filtro de pessoas é aplicado no cliente sobre esta janela. Traz as
+// reuniões do sistema E os eventos importados do Google (Fatia 2), já unidos.
 // ---------------------------------------------------------------------
 export async function fetchMeetingsRange(
   fromISO: string,
   toISO: string
-): Promise<MeetingRow[]> {
+): Promise<GridItem[]> {
   const from = new Date(fromISO).getTime();
   const to = new Date(toISO).getTime();
   if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) return [];
   const supabase = await createClient();
-  return loadMeetings(supabase, { fromISO, toISO });
+  return loadAgendaItems(supabase, { fromISO, toISO });
 }
 
 // =====================================================================
@@ -657,18 +658,20 @@ function buildEventDescription(
 }
 
 // ---------------------------------------------------------------------
-// Aviso de conflito — reuniões DO SISTEMA que se sobrepõem à janela para o
-// criador ou os participantes. É AVISO, não bloqueio: o formulário mostra e
-// deixa seguir. Na EDIÇÃO, exclua a própria reunião (excludeMeetingId) para ela
-// não conflitar consigo mesma. Eventos criados direto no Google ainda não são
-// vistos (Fatia 2).
+// Aviso de conflito — sobreposições de horário para o criador ou os
+// participantes, tanto de reuniões DO SISTEMA quanto de eventos IMPORTADOS do
+// Google (Fatia 2). É AVISO, não bloqueio: o formulário/arrasto mostra e deixa
+// seguir. Na EDIÇÃO, exclua a própria reunião (excludeMeetingId) para ela não
+// conflitar consigo mesma. `source` distingue a origem; `title`/`companyName`
+// podem ser null (evento particular de outro / evento sem empresa).
 // ---------------------------------------------------------------------
 export type ConflictRow = {
-  meetingId: string;
-  title: string;
+  source: "sistema" | "google";
+  refId: string;
+  title: string | null;
   startsAt: string;
   endsAt: string;
-  companyName: string;
+  companyName: string | null;
   userIds: string[]; // quais dos consultados batem
 };
 
@@ -698,7 +701,7 @@ export async function checkMeetingConflicts(
   );
   if (ids.length === 0) return [];
 
-  const { data, error } = await supabase.rpc("meeting_conflicts", {
+  const { data, error } = await supabase.rpc("schedule_conflicts", {
     p_starts: new Date(start).toISOString(),
     p_ends: new Date(end).toISOString(),
     p_user_ids: ids,
@@ -708,15 +711,17 @@ export async function checkMeetingConflicts(
 
   return (
     data as {
-      meeting_id: string;
-      title: string;
+      source: "sistema" | "google";
+      ref_id: string;
+      title: string | null;
       starts_at: string;
       ends_at: string;
-      company_name: string;
+      company_name: string | null;
       conflicting_user_ids: string[] | null;
     }[]
   ).map((r) => ({
-    meetingId: r.meeting_id,
+    source: r.source,
+    refId: r.ref_id,
     title: r.title,
     startsAt: r.starts_at,
     endsAt: r.ends_at,

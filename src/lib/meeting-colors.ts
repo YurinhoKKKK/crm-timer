@@ -40,3 +40,24 @@ export function eventBlockStyle(hex: string): {
     borderLeft: `3px solid ${hex}`,
   };
 }
+
+// Estilo de um evento IMPORTADO do Google (Fatia 2): mantém a cor da PESSOA (para
+// cruzar agendas), mas com HACHURA diagonal + borda tracejada e barra mais fina —
+// deixando óbvio, à distância, que veio do Google e é somente-leitura (não se
+// arrasta nem edita por aqui). A hachura usa a própria cor bem apagada sobre uma
+// tinta mínima, legível nos dois temas.
+export function importedBlockStyle(hex: string): {
+  backgroundColor: string;
+  backgroundImage: string;
+  backgroundSize: string;
+  borderLeft: string;
+  border: string;
+} {
+  return {
+    backgroundColor: `${hex}14`, // ~8% alpha (base bem suave)
+    backgroundImage: `repeating-linear-gradient(45deg, ${hex}2e 0, ${hex}2e 1px, transparent 1px, transparent 7px)`,
+    backgroundSize: "auto",
+    borderLeft: `3px dashed ${hex}`,
+    border: `1px dashed ${hex}55`,
+  };
+}

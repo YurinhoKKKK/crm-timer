@@ -29,6 +29,9 @@ type GoogleAccountRow = {
 const CALENDAR_EVENTS_ENDPOINT =
   "https://www.googleapis.com/calendar/v3/calendars/primary/events";
 const TIME_ZONE = "America/Sao_Paulo";
+// Teto defensivo de páginas na LEITURA (250 eventos/página): ~10k eventos na
+// janela é folga larga; se estourar, para em vez de laçar sem fim.
+const MAX_LIST_PAGES = 40;
 // Renova o access_token se faltar menos que isto para vencer (evita usar um
 // token que expira no meio da chamada).
 const EXPIRY_BUFFER_MS = 2 * 60 * 1000;
@@ -271,6 +274,106 @@ export async function deleteCalendarEvent(
       ? (err as { message: string }).message
       : "O Google recusou a exclusão do evento.";
   throw new GoogleError(msg);
+}
+
+// =====================================================================
+// LEITURA de eventos (Fatia 2 — importação). O escopo calendar.events.owned já
+// concedido (0043) PERMITE ler os eventos da conta; ninguém reconecta. Lemos SÓ
+// a agenda primária do PRÓPRIO usuário (o access_token é dele, via
+// google_get_account) — jamais a de outra pessoa. Nada aqui escreve no Google.
+// =====================================================================
+
+// Evento cru do Google que nos interessa. Campos além destes são ignorados.
+export type RawGoogleEvent = {
+  id?: string;
+  status?: string; // 'confirmed' | 'tentative' | 'cancelled'
+  summary?: string;
+  visibility?: string; // 'default' | 'public' | 'private' | 'confidential'
+  start?: { dateTime?: string; date?: string };
+  end?: { dateTime?: string; date?: string };
+  attendees?: { self?: boolean; responseStatus?: string }[];
+};
+
+export type EventsPage = {
+  events: RawGoogleEvent[];
+  nextSyncToken: string | null;
+};
+
+// syncToken vencido/ inválido (HTTP 410) — o chamador refaz um sync COMPLETO.
+export class SyncTokenExpired extends Error {
+  constructor() {
+    super("O token de sincronização do Google expirou; refazendo do zero.");
+    this.name = "SyncTokenExpired";
+  }
+}
+
+// Lista eventos da agenda primária, paginando até o fim e devolvendo o
+// nextSyncToken (para o próximo sync incremental). Dois modos:
+//  · completo:    { timeMin, timeMax } — janela limitada (passado+futuro).
+//  · incremental: { syncToken } — só o que mudou desde a última vez; showDeleted
+//    para receber os cancelados (o chamador os remove do espelho). 410 => refaz.
+// singleEvents=true expande recorrências em ocorrências concretas (com horário),
+// e precisa ser CONSISTENTE entre o sync que criou o token e os seguintes.
+export async function listCalendarEvents(
+  accessToken: string,
+  mode: { timeMin: string; timeMax: string } | { syncToken: string }
+): Promise<EventsPage> {
+  const events: RawGoogleEvent[] = [];
+  let pageToken: string | undefined;
+  let nextSyncToken: string | null = null;
+
+  for (let page = 0; page < MAX_LIST_PAGES; page++) {
+    const url = new URL(CALENDAR_EVENTS_ENDPOINT);
+    url.searchParams.set("singleEvents", "true");
+    url.searchParams.set("maxResults", "250");
+    if ("syncToken" in mode) {
+      url.searchParams.set("syncToken", mode.syncToken);
+      url.searchParams.set("showDeleted", "true"); // recebe cancelados p/ remover
+    } else {
+      url.searchParams.set("timeMin", mode.timeMin);
+      url.searchParams.set("timeMax", mode.timeMax);
+      url.searchParams.set("showDeleted", "false");
+    }
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: "no-store",
+      });
+    } catch {
+      throw new GoogleError(
+        "Não foi possível ler sua agenda do Google. Tente de novo."
+      );
+    }
+
+    // 410 GONE: syncToken inválido (janela passou / token velho) — refaz do zero.
+    if (res.status === 410) throw new SyncTokenExpired();
+
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok) {
+      const err = json.error;
+      const msg =
+        err &&
+        typeof err === "object" &&
+        typeof (err as { message?: unknown }).message === "string"
+          ? (err as { message: string }).message
+          : "O Google recusou a leitura da agenda.";
+      throw new GoogleError(msg);
+    }
+
+    if (Array.isArray(json.items)) {
+      events.push(...(json.items as RawGoogleEvent[]));
+    }
+    nextSyncToken =
+      typeof json.nextSyncToken === "string" ? json.nextSyncToken : nextSyncToken;
+    pageToken =
+      typeof json.nextPageToken === "string" ? json.nextPageToken : undefined;
+    if (!pageToken) break; // última página
+  }
+
+  return { events, nextSyncToken };
 }
 
 // Link do Meet: prefere o entryPoint de vídeo do conferenceData; cai no

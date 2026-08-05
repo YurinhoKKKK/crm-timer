@@ -1,8 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { MeetingRow } from "@/lib/meetings";
-import { eventBlockStyle } from "@/lib/meeting-colors";
+import {
+  isImported,
+  type GridItem,
+  type ImportedEventRow,
+  type MeetingRow,
+} from "@/lib/meetings";
+import { eventBlockStyle, importedBlockStyle } from "@/lib/meeting-colors";
 import { layoutDay, type Placed } from "./layout";
 import {
   civilMidnightMs,
@@ -86,21 +91,25 @@ function computeTarget(
 // reagendar (mover) ou puxar a borda para mudar a duração (redimensionar).
 export default function TimeGridView({
   days,
-  meetings,
+  items,
   colorOf,
   currentUserId,
+  nameById,
   onEventClick,
   onSlotClick,
   onReschedule,
 }: {
   days: Civil[];
-  meetings: MeetingRow[];
+  items: GridItem[];
   colorOf: (userId: string) => string;
   currentUserId: string;
-  onEventClick: (m: MeetingRow) => void;
+  // Nome por id — para rótulo/tooltip dos eventos importados ("agenda de X").
+  nameById: Map<string, string>;
+  onEventClick: (item: GridItem) => void;
   onSlotClick: (day: Civil, hour: number, minute: number) => void;
   // Soltar um arrasto: o pai confere conflito e grava (banco → Google), com
-  // feedback otimista e reversão. Recebe o novo intervalo em ISO (UTC).
+  // feedback otimista e reversão. Recebe o novo intervalo em ISO (UTC). Só as
+  // reuniões DO SISTEMA arrastam — importados são somente-leitura.
   onReschedule: (m: MeetingRow, startISO: string, endISO: string) => void;
 }) {
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -278,9 +287,10 @@ export default function TimeGridView({
                   key={`${day.y}-${day.m}-${day.d}`}
                   day={day}
                   dayIndex={dayIndex}
-                  meetings={meetings}
+                  items={items}
                   colorOf={colorOf}
                   currentUserId={currentUserId}
+                  nameById={nameById}
                   drag={drag}
                   justDraggedRef={justDraggedRef}
                   onBeginDrag={beginDrag}
@@ -326,9 +336,10 @@ function DayHeader({ day, single }: { day: Civil; single: boolean }) {
 function DayColumn({
   day,
   dayIndex,
-  meetings,
+  items,
   colorOf,
   currentUserId,
+  nameById,
   drag,
   justDraggedRef,
   onBeginDrag,
@@ -337,9 +348,10 @@ function DayColumn({
 }: {
   day: Civil;
   dayIndex: number;
-  meetings: MeetingRow[];
+  items: GridItem[];
   colorOf: (userId: string) => string;
   currentUserId: string;
+  nameById: Map<string, string>;
   drag: DragView | null;
   justDraggedRef: React.MutableRefObject<boolean>;
   onBeginDrag: (
@@ -348,15 +360,17 @@ function DayColumn({
     dayIndex: number,
     mode: "move" | "resize"
   ) => void;
-  onEventClick: (m: MeetingRow) => void;
+  onEventClick: (item: GridItem) => void;
   onSlotClick: (day: Civil, hour: number, minute: number) => void;
 }) {
   const dayStart = civilMidnightMs(day);
   const dayEnd = dayStart + DAY_MIN * 60000;
 
-  // Eventos que tocam este dia, clampados à janela [0, 1440).
+  // Eventos que tocam este dia, clampados à janela [0, 1440). Reuniões do sistema
+  // e importados dividem a MESMA coluna: quando se sobrepõem, ficam lado a lado —
+  // o que torna o conflito com a agenda do Google visível na própria grade.
   const placed = layoutDay(
-    meetings
+    items
       .filter((m) => {
         const s = new Date(m.startsAt).getTime();
         const e = new Date(m.endsAt).getTime();
@@ -411,26 +425,42 @@ function DayColumn({
       {/* Linha da hora atual (só hoje) */}
       {isToday(day) && <NowLine />}
 
-      {/* Eventos */}
-      {placed.map((p) => (
-        <EventBlock
-          key={p.item.id}
-          placed={p}
-          color={colorOf(p.item.creator.id)}
-          isOwn={p.item.creator.id === currentUserId}
-          dimmed={drag?.meetingId === p.item.id}
-          onMovePointerDown={(e) => onBeginDrag(e, p.item, dayIndex, "move")}
-          onResizePointerDown={(e) => {
-            e.stopPropagation();
-            onBeginDrag(e, p.item, dayIndex, "resize");
-          }}
-          onClick={(ev) => {
-            ev.stopPropagation();
-            if (justDraggedRef.current) return; // acabou de arrastar: não abre
-            onEventClick(p.item);
-          }}
-        />
-      ))}
+      {/* Eventos — reuniões do sistema (arrastáveis) e importados (só-leitura) */}
+      {placed.map((p) =>
+        isImported(p.item) ? (
+          <ImportedBlock
+            key={p.item.id}
+            placed={p as Placed<ImportedEventRow>}
+            color={colorOf(p.item.ownerId)}
+            ownerName={nameById.get(p.item.ownerId) ?? "colega"}
+            isOwn={p.item.ownerId === currentUserId}
+            onClick={(ev) => {
+              ev.stopPropagation();
+              onEventClick(p.item);
+            }}
+          />
+        ) : (
+          <EventBlock
+            key={p.item.id}
+            placed={p as Placed<MeetingRow>}
+            color={colorOf(p.item.creator.id)}
+            isOwn={p.item.creator.id === currentUserId}
+            dimmed={drag?.meetingId === p.item.id}
+            onMovePointerDown={(e) =>
+              onBeginDrag(e, p.item as MeetingRow, dayIndex, "move")
+            }
+            onResizePointerDown={(e) => {
+              e.stopPropagation();
+              onBeginDrag(e, p.item as MeetingRow, dayIndex, "resize");
+            }}
+            onClick={(ev) => {
+              ev.stopPropagation();
+              if (justDraggedRef.current) return; // acabou de arrastar: não abre
+              onEventClick(p.item);
+            }}
+          />
+        )
+      )}
 
       {/* Fantasma do arrasto (posição destino) */}
       {drag && drag.dayIndex === dayIndex && (
@@ -540,5 +570,81 @@ function EventBlock({
         />
       )}
     </button>
+  );
+}
+
+// Evento IMPORTADO do Google: hachurado, tracejado e SEM arrasto/alça — deixa
+// claro que veio do Google e não se edita por aqui. Título particular de outro
+// aparece como "Ocupado" (o banco não enviou o título). Clicável para um detalhe
+// somente-leitura.
+function ImportedBlock({
+  placed,
+  color,
+  ownerName,
+  isOwn,
+  onClick,
+}: {
+  placed: Placed<ImportedEventRow>;
+  color: string;
+  ownerName: string;
+  isOwn: boolean;
+  onClick: (e: React.MouseEvent) => void;
+}) {
+  const ev = placed.item;
+  const top = (placed.startMin / 60) * HOUR_PX;
+  const height = Math.max(
+    MIN_EVENT_PX,
+    ((placed.endMin - placed.startMin) / 60) * HOUR_PX
+  );
+  const widthPct = 100 / placed.cols;
+  const compact = height < 34;
+  // Título: o dono sempre vê o próprio; de outro, "Ocupado" quando particular.
+  const label = ev.title ?? "Ocupado";
+  const whose = isOwn ? "sua agenda do Google" : `agenda de ${ownerName} (Google)`;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`${label} · ${timeLabel(ev.startsAt)}–${timeLabel(
+        ev.endsAt
+      )} — ${whose}, somente leitura`}
+      style={{
+        position: "absolute",
+        top,
+        height: height - 2,
+        left: `calc(${placed.col * widthPct}% + 2px)`,
+        width: `calc(${widthPct}% - 4px)`,
+        cursor: "pointer",
+        ...importedBlockStyle(color),
+      }}
+      className="z-10 flex flex-col overflow-hidden rounded-md px-1.5 py-0.5 text-left text-fg-muted transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd dark:hover:brightness-110"
+    >
+      <span className="flex items-center gap-1 truncate text-[11px] font-medium leading-tight">
+        <GoogleGlyph />
+        <span className="truncate">{label}</span>
+      </span>
+      {!compact && (
+        <span className="truncate text-[10px] leading-tight text-fg-subtle">
+          {timeLabel(ev.startsAt)}–{timeLabel(ev.endsAt)}
+        </span>
+      )}
+    </button>
+  );
+}
+
+// "G" discreto para marcar origem Google no bloco importado.
+function GoogleGlyph() {
+  return (
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+      className="shrink-0 opacity-70"
+    >
+      <path d="M12 11v2.6h4.3c-.2 1-1.3 3-4.3 3a4.6 4.6 0 0 1 0-9.2c1.3 0 2.3.5 2.9 1l2-1.9A7.6 7.6 0 1 0 12 19.6c4.4 0 7.3-3.1 7.3-7.4 0-.5 0-.9-.1-1.2H12z" />
+    </svg>
   );
 }

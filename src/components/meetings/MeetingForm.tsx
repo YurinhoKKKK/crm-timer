@@ -10,7 +10,7 @@ import {
 } from "@/app/meeting-actions";
 import {
   MEETING_TYPE_OPTIONS,
-  formatMeetingRange,
+  describeConflict,
   type ConflictLike,
   type DirectoryUser,
   type MeetingType,
@@ -443,21 +443,18 @@ function ConflictNotice({
       </p>
       <ul className="mt-1.5 space-y-1 text-amber-800 dark:text-amber-200">
         {conflicts.map((c) => {
-          const who = c.userIds
-            .map((id) => nameById.get(id) ?? "alguém")
-            .join(", ");
+          const { who, tail } = describeConflict(c, nameById);
           return (
-            <li key={c.meetingId}>
-              <span className="font-medium">{who}</span> já tem “{c.title}” (
-              {c.companyName}) das {formatMeetingRange(c.startsAt, c.endsAt)}.
+            <li key={`${c.source}-${c.refId}`}>
+              <span className="font-medium">{who}</span>
+              {tail}
             </li>
           );
         })}
       </ul>
       <p className="mt-2 text-xs text-amber-700/90 dark:text-amber-300/80">
-        É só um aviso — você pode salvar mesmo assim. A verificação cobre apenas
-        reuniões deste sistema; eventos marcados direto no Google ainda não são
-        vistos.
+        É só um aviso — você pode salvar mesmo assim. A verificação cobre as
+        reuniões deste sistema e os eventos da sua agenda do Google.
       </p>
     </div>
   );

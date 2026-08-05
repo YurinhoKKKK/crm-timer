@@ -22,6 +22,10 @@ export default function CalendarToolbar({
   onCreate,
   onToggleSidebar,
   sidebarCollapsed,
+  googleConnected,
+  lastSync,
+  syncing,
+  onSync,
 }: {
   view: CalendarView;
   label: string;
@@ -33,6 +37,11 @@ export default function CalendarToolbar({
   onToggleSidebar: () => void;
   // Só afeta o desktop: quando recolhido, o botão mostra "expandir" (»).
   sidebarCollapsed: boolean;
+  // Sincronização com o Google (Fatia 2). Sem conta conectada, o botão some.
+  googleConnected: boolean;
+  lastSync: string | null; // ISO da última sincronização; null = nunca
+  syncing: boolean;
+  onSync: () => void;
 }) {
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -76,6 +85,10 @@ export default function CalendarToolbar({
         {label}
       </h2>
 
+      {googleConnected && (
+        <SyncButton lastSync={lastSync} syncing={syncing} onSync={onSync} />
+      )}
+
       <div
         role="tablist"
         aria-label="Visão do calendário"
@@ -103,6 +116,67 @@ export default function CalendarToolbar({
       </div>
     </div>
   );
+}
+
+// "Sincronizar agora" + quando foi a última vez. Rótulo curto ("há 3 min") num
+// title acessível. Desabilita enquanto sincroniza.
+function SyncButton({
+  lastSync,
+  syncing,
+  onSync,
+}: {
+  lastSync: string | null;
+  syncing: boolean;
+  onSync: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSync}
+      disabled={syncing}
+      title={
+        lastSync
+          ? `Agenda do Google sincronizada ${relativeTime(lastSync)}`
+          : "Agenda do Google ainda não sincronizada"
+      }
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-2 text-xs font-medium text-fg-muted shadow-sm transition hover:border-risd/50 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+        className={syncing ? "animate-spin" : ""}
+      >
+        <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+        <path d="M21 3v6h-6" />
+      </svg>
+      <span className="hidden sm:inline">
+        {syncing
+          ? "Sincronizando…"
+          : lastSync
+          ? relativeTime(lastSync)
+          : "Sincronizar Google"}
+      </span>
+    </button>
+  );
+}
+
+// "há X" curto em português, sem lib. Aproxima; não precisa de precisão.
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const min = Math.round(diff / 60000);
+  if (min < 1) return "agora mesmo";
+  if (min < 60) return `há ${min} min`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `há ${h} h`;
+  const d = Math.round(h / 24);
+  return `há ${d} d`;
 }
 
 function ArrowButton({ dir, onClick }: { dir: "prev" | "next"; onClick: () => void }) {

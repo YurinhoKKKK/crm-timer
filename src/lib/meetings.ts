@@ -49,6 +49,30 @@ export type MeetingRow = {
   participants: MeetingPerson[];
 };
 
+// Evento IMPORTADO da agenda Google de um interno (Fatia 2). Somente-leitura:
+// não tem empresa, participantes, tipo nem sincronização — é um espelho. `title`
+// null = evento PARTICULAR de outro (o banco escondeu o título; a grade mostra
+// "Ocupado"). `ownerId` é o dono da agenda; a cor/label sai daí. O `kind`
+// discrimina do MeetingRow na grade (ver GridItem/isImported).
+export type ImportedEventRow = {
+  kind: "imported";
+  id: string;
+  ownerId: string;
+  title: string | null;
+  startsAt: string; // ISO (UTC)
+  endsAt: string; // ISO (UTC)
+  isPrivate: boolean;
+};
+
+// A grade do calendário renderiza os dois: reuniões do sistema e eventos
+// importados. MeetingRow não tem `kind` (fica implícito "sistema"); isImported
+// estreita para o caso importado.
+export type GridItem = MeetingRow | ImportedEventRow;
+
+export function isImported(item: GridItem): item is ImportedEventRow {
+  return (item as ImportedEventRow).kind === "imported";
+}
+
 // Usuário interno para o seletor de participantes (sem e-mail: o cliente do
 // navegador só precisa de nome/foto; o e-mail fica no servidor, ver meetings
 // actions). Vem de meeting_directory() (SECURITY DEFINER).
@@ -81,12 +105,16 @@ export type MeetingActionsContext = {
 // Forma estrutural de uma linha de conflito de horário — o que o aviso do
 // formulário precisa exibir. Compatível com o ConflictRow devolvido por
 // checkMeetingConflicts (ver src/app/meeting-actions.ts).
+// Uma sobreposição de horário — de reunião DO SISTEMA ('sistema') ou de evento
+// IMPORTADO do Google ('google'). `title` null = evento particular de outro
+// (mostra "Ocupado"); `companyName` null = importado (não tem empresa).
 export type ConflictLike = {
-  meetingId: string;
-  title: string;
+  source: "sistema" | "google";
+  refId: string;
+  title: string | null;
   startsAt: string;
   endsAt: string;
-  companyName: string;
+  companyName: string | null;
   userIds: string[];
 };
 
@@ -127,6 +155,25 @@ export function formatMeetingRange(startISO: string, endISO: string): string {
     ? formatMeetingTime(endISO)
     : `${formatMeetingDay(endISO)}, ${formatMeetingTime(endISO)}`;
   return `${start} – ${end}`;
+}
+
+// Frase de um conflito para a UI (arrasto e formulário compartilham). Devolve o
+// "quem" separado para a tela poder destacá-lo. Trata as origens e os nulos:
+// evento particular de outro (title null) vira "um compromisso particular";
+// importado não tem empresa. `who` = nomes dos consultados que batem.
+export function describeConflict(
+  c: ConflictLike,
+  nameById: Map<string, string>
+): { who: string; tail: string } {
+  const who = c.userIds.map((id) => nameById.get(id) ?? "alguém").join(", ");
+  const when = formatMeetingRange(c.startsAt, c.endsAt);
+  if (c.source === "google") {
+    const label = c.title ? `“${c.title}”` : "um compromisso particular";
+    return { who, tail: ` tem ${label} na agenda do Google das ${when}.` };
+  }
+  const label = c.title ?? "(sem título)";
+  const co = c.companyName ? ` (${c.companyName})` : "";
+  return { who, tail: ` já tem “${label}”${co} das ${when}.` };
 }
 
 // ---------------------------------------------------------------------
@@ -278,6 +325,65 @@ export async function loadReachableCompanies(
     id: c.id,
     name: c.name,
   }));
+}
+
+// Eventos IMPORTADOS do Google que tocam a janela (Fatia 2), de TODOS os
+// internos — a grade cruza agendas. Vem de imported_events_range() (SECURITY
+// DEFINER), que já esconde o título de eventos particulares de terceiros
+// (title null => a grade mostra "Ocupado"). anon nunca recebe nada.
+export async function loadImportedEvents(
+  supabase: Client,
+  range: { fromISO: string; toISO: string }
+): Promise<ImportedEventRow[]> {
+  const { data } = await supabase.rpc("imported_events_range", {
+    p_from: range.fromISO,
+    p_to: range.toISO,
+  });
+  const rows =
+    (data as
+      | {
+          id: string;
+          owner_id: string;
+          title: string | null;
+          starts_at: string;
+          ends_at: string;
+          is_private: boolean;
+        }[]
+      | null) ?? [];
+  return rows.map((r) => ({
+    kind: "imported" as const,
+    id: r.id,
+    ownerId: r.owner_id,
+    title: r.title,
+    startsAt: r.starts_at,
+    endsAt: r.ends_at,
+    isPrivate: r.is_private,
+  }));
+}
+
+// Tudo que a grade mostra num período: reuniões do sistema + eventos importados,
+// já unidos. As duas leituras são independentes — em paralelo.
+export async function loadAgendaItems(
+  supabase: Client,
+  range: { fromISO: string; toISO: string }
+): Promise<GridItem[]> {
+  const [meetings, imported] = await Promise.all([
+    loadMeetings(supabase, range),
+    loadImportedEvents(supabase, range),
+  ]);
+  return [...meetings, ...imported];
+}
+
+// Última sincronização da agenda Google do próprio usuário (para "sincronizado
+// há X" na /agenda). RLS gcis_select_own só devolve a linha dele.
+export async function loadLastGoogleSync(
+  supabase: Client
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("google_calendar_import_state")
+    .select("last_synced_at")
+    .maybeSingle();
+  return (data as { last_synced_at: string | null } | null)?.last_synced_at ?? null;
 }
 
 // Empresas que o usuário gerencia como CONSULTOR (para habilitar o toggle

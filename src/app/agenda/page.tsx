@@ -6,6 +6,7 @@ import {
   loadMeetingDirectory,
   loadReachableCompanies,
   loadGoogleConnected,
+  loadManagedCompanyIds,
 } from "@/lib/meetings";
 import {
   addDays,
@@ -36,12 +37,14 @@ export default async function AgendaPage() {
   const fromISO = new Date(civilMidnightMs(wk)).toISOString();
   const toISO = new Date(civilMidnightMs(addDays(wk, 7))).toISOString();
 
-  const [meetings, directory, companies, googleConnected] = await Promise.all([
-    loadMeetings(supabase, { fromISO, toISO }),
-    loadMeetingDirectory(supabase),
-    loadReachableCompanies(supabase),
-    loadGoogleConnected(supabase),
-  ]);
+  const [meetings, directory, companies, googleConnected, managedCompanyIds] =
+    await Promise.all([
+      loadMeetings(supabase, { fromISO, toISO }),
+      loadMeetingDirectory(supabase),
+      loadReachableCompanies(supabase),
+      loadGoogleConnected(supabase),
+      loadManagedCompanyIds(supabase),
+    ]);
 
   return (
     <AppShell
@@ -59,6 +62,7 @@ export default async function AgendaPage() {
         googleConnected={googleConnected}
         directory={directory}
         companies={companies}
+        managedCompanyIds={managedCompanyIds}
         initialMeetings={meetings}
       />
     </AppShell>

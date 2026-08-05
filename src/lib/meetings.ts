@@ -42,6 +42,9 @@ export type MeetingRow = {
   syncStatus: GoogleSyncStatus;
   syncError: string | null;
   meetLink: string | null;
+  // Opt-out do portal do cliente (default false = aparece). Só criador/admin/
+  // consultor da empresa alteram, via setMeetingClientHidden.
+  clientHidden: boolean;
   creator: MeetingPerson;
   participants: MeetingPerson[];
 };
@@ -68,6 +71,11 @@ export type MeetingActionsContext = {
   directory: DirectoryUser[]; // para o seletor de participantes na edição
   companies?: ReachableCompany[]; // /agenda: empresa editável
   lockedCompany?: ReachableCompany; // central: empresa travada
+  // Empresas que o usuário gerencia como CONSULTOR (na /agenda, cross-empresa).
+  // Habilita o toggle "ocultar do cliente" para o consultor nas reuniões da
+  // empresa dele mesmo quando ele não é o criador. Admin usa isAdmin; na central
+  // o acesso já implica gestão (lockedCompany).
+  managedCompanyIds?: string[];
 };
 
 // Forma estrutural de uma linha de conflito de horário — o que o aviso do
@@ -136,6 +144,7 @@ type MeetingDbRow = {
   meet_link: string | null;
   google_sync_status: GoogleSyncStatus;
   google_sync_error: string | null;
+  client_hidden: boolean;
   company: { name: string } | { name: string }[] | null;
 };
 
@@ -165,7 +174,7 @@ export async function loadMeetings(
   let query = supabase
     .from("meetings")
     .select(
-      "id, company_id, title, description, starts_at, ends_at, meeting_type, created_by, meet_link, google_sync_status, google_sync_error, company:companies(name)"
+      "id, company_id, title, description, starts_at, ends_at, meeting_type, created_by, meet_link, google_sync_status, google_sync_error, client_hidden, company:companies(name)"
     )
     .order("starts_at", { ascending: true });
 
@@ -215,6 +224,7 @@ export async function loadMeetings(
     syncStatus: r.google_sync_status,
     syncError: r.google_sync_error,
     meetLink: r.meet_link,
+    clientHidden: r.client_hidden,
     creator: person(r.created_by, people),
     participants: (byMeeting.get(r.id) ?? []).map((uid) => person(uid, people)),
   }));
@@ -268,4 +278,22 @@ export async function loadReachableCompanies(
     id: c.id,
     name: c.name,
   }));
+}
+
+// Empresas que o usuário gerencia como CONSULTOR (para habilitar o toggle
+// "ocultar do cliente" na /agenda em reuniões da empresa dele, mesmo sem ser o
+// criador). cc_select deixa o consultor ler as PRÓPRIAS linhas; admin usa o
+// isAdmin; colaborador não gerencia nenhuma (fica vazio).
+export async function loadManagedCompanyIds(supabase: Client): Promise<string[]> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data } = await supabase
+    .from("company_consultants")
+    .select("company_id")
+    .eq("consultant_id", user.id);
+  return ((data as { company_id: string }[] | null) ?? []).map(
+    (r) => r.company_id
+  );
 }

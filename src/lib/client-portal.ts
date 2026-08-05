@@ -86,6 +86,43 @@ export type PortalMessages = {
 
 export const PORTAL_MESSAGES_PAGE = 30;
 
+// --- Reuniões no portal (portal do cliente · aba Reuniões) -----------------
+// Formato devolvido por client_portal_meetings — SÓ o conteúdo curado. Sem
+// participantes, descrição, criador, status de sincronização ou qualquer campo
+// interno: eles não saem do banco (a função de payload não os seleciona).
+// `meet_link` vem APENAS nas PRÓXIMAS e do tipo online ('meet'); nas anteriores
+// nunca (o backend não o envia).
+export type PortalMeetingType =
+  | "meet"
+  | "presencial_escritorio"
+  | "presencial_cliente";
+
+export type PortalMeeting = {
+  title: string;
+  starts_at: string; // ISO (UTC) — formatado em BRT na exibição
+  ends_at: string; // ISO (UTC)
+  type: PortalMeetingType;
+  meet_link?: string | null;
+};
+
+// Anteriores são paginadas (o histórico cresce); próximas vêm inteiras.
+export type PortalPastMeetings = { total: number; items: PortalMeeting[] };
+
+export type PortalMeetings = {
+  upcoming: PortalMeeting[];
+  past: PortalPastMeetings;
+};
+
+export const PORTAL_MEETINGS_PAGE = 20;
+
+// Rótulos em LINGUAGEM DO CLIENTE (não os internos). Constante local do portal
+// para manter a tela self-contained — nada de reusar componentes internos.
+export const PORTAL_MEETING_TYPE_LABEL: Record<PortalMeetingType, string> = {
+  meet: "Online",
+  presencial_escritorio: "Presencial · escritório Monvatti",
+  presencial_cliente: "Presencial · na sua empresa",
+};
+
 // De onde o "ver mais" do Andamento puxa a próxima página. São dois caminhos
 // com autorizações DIFERENTES, e por isso explicitados no tipo:
 //  · portal  — sessão do cliente (token + segredo no cookie HttpOnly).

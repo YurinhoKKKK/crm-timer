@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import Avatar from "@/components/Avatar";
+import CopyLinkButton from "@/components/CopyLinkButton";
 import MeetingForm, { type MeetingInitial } from "./MeetingForm";
 import {
   deleteMeeting,
   adminRemoveMeeting,
   syncMeetingToGoogle,
+  setMeetingClientHidden,
 } from "@/app/meeting-actions";
 import {
   MEETING_TYPE_LABEL,
@@ -50,6 +52,28 @@ export default function MeetingCard({
     ctx.googleConnected &&
     (m.syncStatus === "nao_conectado" || m.syncStatus === "falhou");
   const adminOrphan = ctx.isAdmin && !isCreator;
+
+  // Quem pode ocultar/mostrar ao cliente: criador, admin, ou consultor da
+  // empresa. Na central o acesso já implica gestão (lockedCompany). O banco é
+  // quem autoriza de fato (set_meeting_client_hidden); aqui só decidimos exibir.
+  const canToggleClient =
+    isCreator ||
+    ctx.isAdmin ||
+    !!ctx.lockedCompany ||
+    (ctx.managedCompanyIds?.includes(m.companyId) ?? false);
+
+  async function onToggleClientHidden() {
+    await run(async () => {
+      const res = await setMeetingClientHidden(m.id, !m.clientHidden);
+      if (!res.ok) return setError(res.error ?? "Não foi possível alterar.");
+      onResult(
+        null,
+        m.clientHidden
+          ? "Reunião agora aparece no portal do cliente."
+          : "Reunião ocultada do portal do cliente."
+      );
+    });
+  }
 
   async function run(
     fn: () => Promise<void>,
@@ -171,30 +195,72 @@ export default function MeetingCard({
         </div>
 
         {m.type === "meet" && m.meetLink && (
-          <a
-            href={m.meetLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-risd px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-chrysler focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
+          <div className="flex shrink-0 items-center gap-2">
+            <a
+              href={m.meetLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-risd px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-chrysler focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
             >
-              <path d="m23 7-7 5 7 5V7z" />
-              <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-            </svg>
-            Entrar no Meet
-          </a>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m23 7-7 5 7 5V7z" />
+                <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+              </svg>
+              Entrar no Meet
+            </a>
+            <CopyLinkButton value={m.meetLink} />
+          </div>
         )}
       </div>
+
+      {/* Visibilidade ao cliente (discreto): a equipe vê que o TÍTULO desta
+          reunião é lido pelo cliente no portal, e alterna. */}
+      {canToggleClient && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-surface-2/40 px-2.5 py-1.5">
+          <span
+            className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+              m.clientHidden ? "text-fg-subtle" : "text-fg-muted"
+            }`}
+          >
+            {m.clientHidden ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 8 10 8a18.5 18.5 0 0 1-2.16 3.19M6.61 6.61A18.5 18.5 0 0 0 2 12s3 8 10 8a9.12 9.12 0 0 0 5.39-1.61" />
+                <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24M1 1l22 22" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M2 12s3-8 10-8 10 8 10 8-3 8-10 8-10-8-10-8Z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            )}
+            {m.clientHidden
+              ? "Oculta do portal do cliente"
+              : "Aparece no portal do cliente"}
+          </span>
+          <button
+            type="button"
+            onClick={onToggleClientHidden}
+            disabled={busy}
+            className="rounded text-xs font-medium text-risd transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {busy
+              ? "Salvando…"
+              : m.clientHidden
+              ? "Mostrar ao cliente"
+              : "Ocultar do cliente"}
+          </button>
+        </div>
+      )}
 
       {/* -------- Barra de ações -------- */}
       <div className="mt-3 border-t border-line pt-3">

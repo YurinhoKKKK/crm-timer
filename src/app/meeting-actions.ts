@@ -389,6 +389,42 @@ export async function syncMeetingToGoogle(
 }
 
 // ---------------------------------------------------------------------
+// OCULTAR / MOSTRAR AO CLIENTE — opt-out por exceção do portal (aba Reuniões).
+// A autorização (criador OU admin OU consultor da empresa) é feita no BANCO,
+// dentro de set_meeting_client_hidden (SECURITY DEFINER). A action é um repasse:
+// não decide nada; 42501 vira mensagem clara.
+// ---------------------------------------------------------------------
+export async function setMeetingClientHidden(
+  meetingId: string,
+  hidden: boolean
+): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: SESSION_MSG };
+
+  const { error } = await supabase.rpc("set_meeting_client_hidden", {
+    p_meeting: meetingId,
+    p_hidden: hidden,
+  });
+  if (error) {
+    logDbError("setMeetingClientHidden", error, { meetingId, userId: user.id });
+    if (error.code === "42501")
+      return {
+        ok: false,
+        error:
+          "Só o criador ou admin/consultor da empresa podem alterar a visibilidade ao cliente.",
+      };
+    return {
+      ok: false,
+      error: "Não foi possível alterar a visibilidade ao cliente.",
+    };
+  }
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------
 // Leitura por INTERVALO — para o calendário navegar (semana/dia/mês) buscando só
 // a janela visível (+ folga), nunca a base inteira. A RLS já escopa (todo interno
 // vê tudo); o filtro de pessoas é aplicado no cliente sobre esta janela.

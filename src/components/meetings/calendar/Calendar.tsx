@@ -109,6 +109,7 @@ export default function Calendar({
   googleConnected,
   directory,
   companies,
+  managedCompanyIds,
   initialMeetings,
 }: {
   currentUserId: string;
@@ -116,6 +117,7 @@ export default function Calendar({
   googleConnected: boolean;
   directory: DirectoryUser[];
   companies: ReachableCompany[];
+  managedCompanyIds: string[];
   initialMeetings: MeetingRow[];
 }) {
   const today = todayCivil();
@@ -278,6 +280,7 @@ export default function Calendar({
     googleConnected,
     directory,
     companies,
+    managedCompanyIds,
   };
 
   const label =

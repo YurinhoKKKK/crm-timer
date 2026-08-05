@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type {
   PortalListing,
+  PortalMeetings,
   PortalMessages,
   PortalProgress,
   PortalSource,
@@ -12,6 +13,7 @@ import PortalListings from "./PortalListings";
 import PortalUpdates from "./PortalUpdates";
 import PortalProgressFeed from "./PortalProgressFeed";
 import PortalMessagesTab from "./PortalMessages";
+import PortalMeetingsTab from "./PortalMeetings";
 
 // Corpo do portal do cliente em abas: Listagens, Andamento (só aparece se o
 // feed curado tiver ao menos 1 item) e Atualizações do projeto. Componente
@@ -19,7 +21,12 @@ import PortalMessagesTab from "./PortalMessages";
 // página server buscou (client_portal_data / client_portal_progress) — aqui
 // não existe nenhuma consulta, só apresentação.
 
-type Tab = "listagens" | "andamento" | "atualizacoes" | "mensagens";
+type Tab =
+  | "listagens"
+  | "andamento"
+  | "reunioes"
+  | "atualizacoes"
+  | "mensagens";
 
 export default function PortalContent({
   source,
@@ -27,19 +34,29 @@ export default function PortalContent({
   progress,
   updates,
   messages,
+  meetings,
 }: {
   source: PortalSource;
   listings: PortalListing[];
   progress: PortalProgress;
   updates: PortalUpdate[];
   messages: PortalMessages;
+  meetings: PortalMeetings;
 }) {
   const [tab, setTab] = useState<Tab>("listagens");
   const showProgress = progress.total > 0;
+  // A aba de reuniões só existe se houver ao menos uma reunião VISÍVEL (próxima
+  // ou anterior não oculta).
+  const meetingsCount = meetings.upcoming.length + meetings.past.total;
+  const showMeetings = meetingsCount > 0;
 
   // Se a aba ativa deixou de existir (feed esvaziou entre renders), volta
   // para Listagens.
-  const active: Tab = tab === "andamento" && !showProgress ? "listagens" : tab;
+  const active: Tab =
+    (tab === "andamento" && !showProgress) ||
+    (tab === "reunioes" && !showMeetings)
+      ? "listagens"
+      : tab;
 
   return (
     <div>
@@ -62,6 +79,15 @@ export default function PortalContent({
             onClick={() => setTab("andamento")}
             label="Andamento"
             count={progress.total}
+          />
+        )}
+        {showMeetings && (
+          <TabButton
+            id="tab-reunioes"
+            active={active === "reunioes"}
+            onClick={() => setTab("reunioes")}
+            label="Reuniões"
+            count={meetingsCount}
           />
         )}
         <TabButton
@@ -93,6 +119,8 @@ export default function PortalContent({
           <PortalListings listings={listings} source={source} />
         ) : active === "andamento" ? (
           <PortalProgressFeed source={source} initial={progress} />
+        ) : active === "reunioes" ? (
+          <PortalMeetingsTab source={source} initial={meetings} />
         ) : active === "mensagens" ? (
           <PortalMessagesTab source={source} initial={messages} />
         ) : (

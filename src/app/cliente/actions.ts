@@ -6,8 +6,11 @@ import {
   CLIENT_SESSION_COOKIE as SESSION_COOKIE,
   PORTAL_PROGRESS_PAGE,
   PORTAL_MESSAGES_PAGE,
+  PORTAL_MEETINGS_PAGE,
   type PortalProgress,
   type PortalMessages,
+  type PortalMeetings,
+  type PortalPastMeetings,
   type ListingValidationEvent,
 } from "@/lib/client-portal";
 
@@ -206,4 +209,24 @@ export async function clientPortalMessagesPage(
     p_offset: Math.max(0, Math.floor(offset)),
   });
   return (data as PortalMessages | null) ?? null;
+}
+
+// "Ver mais" das reuniões ANTERIORES (as próximas vêm inteiras no primeiro
+// load). O segredo vem SEMPRE do cookie HttpOnly; a função no banco deriva a
+// empresa da sessão. Sessão inválida => null (o histórico para de crescer).
+export async function clientPortalMeetingsPage(
+  token: string,
+  offset: number
+): Promise<PortalPastMeetings | null> {
+  const secret = cookies().get(SESSION_COOKIE)?.value ?? null;
+  if (!secret || !token) return null;
+
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("client_portal_meetings", {
+    p_token: token,
+    p_session: secret,
+    p_limit: PORTAL_MEETINGS_PAGE,
+    p_offset: Math.max(0, Math.floor(offset)),
+  });
+  return (data as PortalMeetings | null)?.past ?? null;
 }

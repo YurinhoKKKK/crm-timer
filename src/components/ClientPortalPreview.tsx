@@ -7,7 +7,9 @@ import { getNoteSanitizer } from "@/lib/notes";
 import {
   PORTAL_PROGRESS_PAGE,
   PORTAL_MESSAGES_PAGE,
+  PORTAL_MEETINGS_PAGE,
   type PortalData,
+  type PortalMeetings,
   type PortalMessages,
   type PortalProgress,
 } from "@/lib/client-portal";
@@ -38,7 +40,7 @@ export default async function ClientPortalPreview({
 }) {
   const supabase = await createClient();
 
-  const [dataRes, progressRes, messagesRes] = await Promise.all([
+  const [dataRes, progressRes, messagesRes, meetingsRes] = await Promise.all([
     supabase.rpc("client_portal_preview", { p_company: companyId }),
     supabase.rpc("client_portal_preview_progress", {
       p_company: companyId,
@@ -48,6 +50,11 @@ export default async function ClientPortalPreview({
     supabase.rpc("client_portal_preview_messages", {
       p_company: companyId,
       p_limit: PORTAL_MESSAGES_PAGE,
+      p_offset: 0,
+    }),
+    supabase.rpc("client_portal_preview_meetings", {
+      p_company: companyId,
+      p_limit: PORTAL_MEETINGS_PAGE,
       p_offset: 0,
     }),
   ]);
@@ -63,6 +70,10 @@ export default async function ClientPortalPreview({
   const messages = (messagesRes.data as PortalMessages | null) ?? {
     total: 0,
     items: [],
+  };
+  const meetings = (meetingsRes.data as PortalMeetings | null) ?? {
+    upcoming: [],
+    past: { total: 0, items: [] },
   };
 
   // Mesmo ponto único de sanitização do portal real, e igualmente preguiçoso:
@@ -82,6 +93,7 @@ export default async function ClientPortalPreview({
       progress={progress}
       updates={updates}
       messages={messages}
+      meetings={meetings}
       source={{ mode: "preview", companyId }}
       banner={
         <div className="border-b border-line bg-surface-2">

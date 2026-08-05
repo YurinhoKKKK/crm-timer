@@ -7,7 +7,9 @@ import {
   CLIENT_SESSION_COOKIE,
   PORTAL_PROGRESS_PAGE,
   PORTAL_MESSAGES_PAGE,
+  PORTAL_MEETINGS_PAGE,
   type PortalData,
+  type PortalMeetings,
   type PortalMessages,
   type PortalProgress,
 } from "@/lib/client-portal";
@@ -38,12 +40,13 @@ export default async function ClientePortalPage({
   let data: PortalData | null = null;
   let progress: PortalProgress | null = null;
   let messages: PortalMessages | null = null;
+  let meetings: PortalMeetings | null = null;
   if (secret) {
     const supabase = await createClient();
-    // Conteúdo + primeira página do Andamento e das Mensagens (paginados no
-    // servidor), todos derivados da MESMA sessão validada — nenhuma outra
-    // fonte de dados. Em paralelo: são independentes entre si.
-    const [dataRes, progressRes, messagesRes] = await Promise.all([
+    // Conteúdo + primeira página do Andamento, das Mensagens e das Reuniões
+    // (paginados no servidor), todos derivados da MESMA sessão validada —
+    // nenhuma outra fonte de dados. Em paralelo: são independentes entre si.
+    const [dataRes, progressRes, messagesRes, meetingsRes] = await Promise.all([
       supabase.rpc("client_portal_data", {
         p_token: params.token,
         p_session: secret,
@@ -60,10 +63,17 @@ export default async function ClientePortalPage({
         p_limit: PORTAL_MESSAGES_PAGE,
         p_offset: 0,
       }),
+      supabase.rpc("client_portal_meetings", {
+        p_token: params.token,
+        p_session: secret,
+        p_limit: PORTAL_MEETINGS_PAGE,
+        p_offset: 0,
+      }),
     ]);
     data = (dataRes.data as PortalData | null) ?? null;
     progress = (progressRes.data as PortalProgress | null) ?? null;
     messages = (messagesRes.data as PortalMessages | null) ?? null;
+    meetings = (meetingsRes.data as PortalMeetings | null) ?? null;
   }
 
   // Sem sessão válida PARA ESTE token (expirada, revogada ou de outra
@@ -93,6 +103,7 @@ export default async function ClientePortalPage({
       progress={progress ?? { total: 0, items: [] }}
       updates={updates}
       messages={messages ?? { total: 0, items: [] }}
+      meetings={meetings ?? { upcoming: [], past: { total: 0, items: [] } }}
       source={{ mode: "portal", token: params.token }}
       actions={
         <>

@@ -4,8 +4,11 @@ import { createClient } from "@/lib/supabase-server";
 import {
   PORTAL_PROGRESS_PAGE,
   PORTAL_MESSAGES_PAGE,
+  PORTAL_MEETINGS_PAGE,
   type PortalProgress,
   type PortalMessages,
+  type PortalMeetings,
+  type PortalPastMeetings,
 } from "@/lib/client-portal";
 
 // "Ver como cliente" (passo 30) — paginação do Andamento na pré-visualização.
@@ -59,4 +62,28 @@ export async function clientPreviewMessagesPage(
   });
   if (error) return null;
   return (data as PortalMessages | null) ?? null;
+}
+
+// "Ver mais" das reuniões anteriores na pré-visualização. Autoriza pelo cargo
+// (client_portal_preview_meetings exige admin ou consultor da empresa); mesma
+// curadoria do portal real.
+export async function clientPreviewMeetingsPage(
+  companyId: string,
+  offset: number
+): Promise<PortalPastMeetings | null> {
+  if (!companyId) return null;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data, error } = await supabase.rpc("client_portal_preview_meetings", {
+    p_company: companyId,
+    p_limit: PORTAL_MEETINGS_PAGE,
+    p_offset: Math.max(0, Math.floor(offset)),
+  });
+  if (error) return null;
+  return (data as PortalMeetings | null)?.past ?? null;
 }

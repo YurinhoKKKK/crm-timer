@@ -1,6 +1,7 @@
 import Logo from "@/components/Logo";
 import type {
   PortalListing,
+  PortalMeetings,
   PortalMessages,
   PortalProgress,
   PortalUpdate,
@@ -25,6 +26,7 @@ export default function PortalView({
   progress,
   updates,
   messages,
+  meetings,
   source,
   actions,
   banner,
@@ -34,6 +36,7 @@ export default function PortalView({
   progress: PortalProgress;
   updates: PortalUpdate[];
   messages: PortalMessages;
+  meetings: PortalMeetings;
   // De onde o "ver mais" do Andamento puxa a próxima página.
   source: PortalSource;
   // Canto superior direito: tema + sair (portal) ou tema + voltar (preview).
@@ -77,6 +80,7 @@ export default function PortalView({
           progress={progress}
           updates={updates}
           messages={messages}
+          meetings={meetings}
         />
 
         <footer className="mt-8 pb-4 text-center text-xs text-fg-subtle">

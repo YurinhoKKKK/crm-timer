@@ -110,6 +110,26 @@ export async function loadAllLabelsByCompany(
   return map;
 }
 
+// Etiquetas EM USO por alguma empresa ALCANÇÁVEL pelo usuário — para o filtro da
+// tela de Empresas não oferecer opção que retornaria vazio. O escopo é da RLS:
+// cl_select em company_labels já restringe às empresas de admin/consultor/
+// colaborador; o distinct sobre essas linhas dá exatamente as etiquetas em uso no
+// escopo. Uma query só; company_labels(label_id) é indexada (migration 0020).
+export async function loadInUseLabels(
+  supabase: SupabaseServer
+): Promise<Label[]> {
+  const { data } = await supabase
+    .from("company_labels")
+    .select("label:labels(id, name, bg_color, text_color, highlight)");
+
+  const seen = new Map<string, Label>();
+  for (const row of (data as { label: Joined<Label> }[]) ?? []) {
+    const l = first(row.label);
+    if (l && !seen.has(l.id)) seen.set(l.id, l);
+  }
+  return sortLabels(Array.from(seen.values()));
+}
+
 // Destaques primeiro (para se sobressaírem nas listas), depois por nome.
 function sortLabels(list: Label[]): Label[] {
   return list.sort((a, b) => {

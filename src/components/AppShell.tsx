@@ -69,6 +69,9 @@ const ic = {
   chat: (
     <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
   ),
+  pulse: (
+    <path d="M3 12h4l2 7 4-14 2 7h6" />
+  ),
 };
 
 function Icon({ children }: { children: ReactNode }) {
@@ -94,6 +97,7 @@ const NAV: Record<Role, NavItem[]> = {
     { href: "/admin", label: "Dashboard", icon: <Icon>{ic.dashboard}</Icon> },
     { href: "/admin/usuarios", label: "Usuários", icon: <Icon>{ic.users}</Icon> },
     { href: "/admin/empresas", label: "Empresas", icon: <Icon>{ic.building}</Icon> },
+    { href: "/acompanhamento", label: "Acompanhamento", icon: <Icon>{ic.pulse}</Icon> },
     { href: "/admin/tarefas", label: "Tarefas", icon: <Icon>{ic.tasks}</Icon> },
     { href: "/agenda", label: "Agenda", icon: <Icon>{ic.calendar}</Icon> },
     { href: "/admin/mensagens", label: "Mensagens", icon: <Icon>{ic.chat}</Icon>, unread: true },
@@ -101,6 +105,7 @@ const NAV: Record<Role, NavItem[]> = {
   ],
   consultor: [
     { href: "/consultor", label: "Painel", icon: <Icon>{ic.briefcase}</Icon> },
+    { href: "/acompanhamento", label: "Acompanhamento", icon: <Icon>{ic.pulse}</Icon> },
     { href: "/consultor/tarefas", label: "Tarefas", icon: <Icon>{ic.tasks}</Icon> },
     { href: "/agenda", label: "Agenda", icon: <Icon>{ic.calendar}</Icon> },
     { href: "/consultor/mensagens", label: "Mensagens", icon: <Icon>{ic.chat}</Icon>, unread: true },

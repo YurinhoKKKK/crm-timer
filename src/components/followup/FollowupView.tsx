@@ -70,10 +70,12 @@ function periodSummary(p: FollowupRow["period"]): string {
 export default function FollowupView({
   rows,
   period,
+  desc,
   role,
 }: {
   rows: FollowupRow[];
   period: number;
+  desc: boolean; // sentido da fila: true = críticos no topo (padrão)
   role: "admin" | "consultor";
 }) {
   const router = useRouter();
@@ -139,6 +141,16 @@ export default function FollowupView({
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
+  // Inverte o SENTIDO da fila no servidor (parâmetro na URL → a RPC reordena e
+  // repagina). Nunca invertemos o array aqui, senão a ordem quebraria entre
+  // páginas. `desc` (padrão) some da URL; o invertido vira `dir=asc`.
+  function toggleDir() {
+    const params = new URLSearchParams(searchParams.toString());
+    if (desc) params.set("dir", "asc");
+    else params.delete("dir");
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
   const total = base.length;
 
   return (
@@ -167,6 +179,38 @@ export default function FollowupView({
             ))}
           </select>
         )}
+        {/* Sentido da MESMA fila (um botão, dois estados) — não é escolha de
+            campo. Descendente = críticos no topo; ascendente = a lista lida da
+            outra ponta. A seta e o rótulo dizem o sentido ATUAL. */}
+        <button
+          type="button"
+          onClick={toggleDir}
+          aria-label={
+            desc
+              ? "Ordenação: mais críticos no topo. Clique para inverter."
+              : "Ordenação: atendidos há menos tempo no topo. Clique para inverter."
+          }
+          title="Inverter o sentido da fila"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg shadow-sm transition hover:border-risd/40 focus:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+        >
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            className={desc ? "" : "rotate-180"}
+          >
+            <path d="M12 5v14M19 12l-7 7-7-7" />
+          </svg>
+          <span className="whitespace-nowrap">
+            {desc ? "Críticos no topo" : "Recentes no topo"}
+          </span>
+        </button>
       </FilterBar>
 
       {/* Faixas do semáforo — também filtram a lista ao clicar. */}

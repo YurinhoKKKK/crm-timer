@@ -1,7 +1,7 @@
 import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import FollowupView from "@/components/followup/FollowupView";
-import { loadFollowup, clampPeriod } from "@/lib/followup";
+import { loadFollowup, clampPeriod, clampDir } from "@/lib/followup";
 
 // Acompanhamento de clientes — monitora se TODOS os clientes estão sendo
 // atendidos de forma constante ("quais estão esfriando?"), não ranqueia ninguém.
@@ -16,11 +16,12 @@ export const dynamic = "force-dynamic";
 export default async function AcompanhamentoPage({
   searchParams,
 }: {
-  searchParams: { periodo?: string | string[] };
+  searchParams: { periodo?: string | string[]; dir?: string | string[] };
 }) {
   const { supabase, profile } = await guardRole(["admin", "consultor"]);
   const period = clampPeriod(searchParams.periodo);
-  const rows = await loadFollowup(supabase, period);
+  const desc = clampDir(searchParams.dir);
+  const rows = await loadFollowup(supabase, period, desc);
 
   return (
     <AppShell
@@ -35,6 +36,7 @@ export default async function AcompanhamentoPage({
       <FollowupView
         rows={rows}
         period={period}
+        desc={desc}
         role={profile.role as "admin" | "consultor"}
       />
     </AppShell>

@@ -49,6 +49,14 @@ export function clampPeriod(raw: string | string[] | undefined): FollowupPeriod 
     : 30;
 }
 
+// Sentido da MESMA fila de prioridade (não é troca de critério). Descendente por
+// urgência é o padrão (mais críticos no topo); `dir=asc` na URL inverte para os
+// atendidos mais recentemente no topo. Retorna `p_desc` para a RPC.
+export function clampDir(raw: string | string[] | undefined): boolean {
+  const v = (Array.isArray(raw) ? raw[0] : raw) ?? "";
+  return v !== "asc"; // qualquer coisa fora de "asc" = descendente (padrão)
+}
+
 // Semáforo pelos prazos definidos: verde até 7 dias, amarelo de 7 a 15, vermelho
 // acima de 15. Nunca contatado é o caso mais urgente → vermelho (a tela mostra o
 // texto "Nunca contatado", não um número). O texto SEMPRE acompanha a cor
@@ -73,10 +81,12 @@ export const KIND_LABEL: Record<FollowupKind, string> = {
 // de empresas do escopo — nunca linhas cruas de sinais).
 export async function loadFollowup(
   supabase: SupabaseServer,
-  periodDays: FollowupPeriod
+  periodDays: FollowupPeriod,
+  desc: boolean
 ): Promise<FollowupRow[]> {
   const { data } = await supabase.rpc("client_followup", {
     p_period_days: periodDays,
+    p_desc: desc,
   });
   const rows =
     (data as

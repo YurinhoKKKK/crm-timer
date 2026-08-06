@@ -13,6 +13,7 @@ import {
   type Farol,
   type FollowupRow,
 } from "@/lib/followup";
+import { FAROL_UI } from "@/components/followup/FarolBadge";
 
 const TZ = "America/Sao_Paulo";
 
@@ -32,30 +33,9 @@ function fmtDate(iso: string): string {
 // tela existe para dizer quem precisa de atenção primeiro, e ordenar por empresa
 // ou consultor a aproximaria de um ranking — que é o que não queremos.
 
-// Identidade do semáforo (cor + rótulo em TEXTO — a cor nunca é o único sinal).
-const FAROL_UI: Record<
-  Farol,
-  { label: string; dot: string; chip: string; text: string }
-> = {
-  verde: {
-    label: "Em dia",
-    dot: "bg-emerald-500",
-    chip: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
-    text: "text-emerald-700 dark:text-emerald-300",
-  },
-  amarelo: {
-    label: "Atenção",
-    dot: "bg-amber-500",
-    chip: "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30",
-    text: "text-amber-700 dark:text-amber-300",
-  },
-  vermelho: {
-    label: "Sem contato",
-    dot: "bg-red-500",
-    chip: "bg-red-500/10 text-red-700 dark:text-red-300 border-red-500/30",
-    text: "text-red-700 dark:text-red-300",
-  },
-};
+// A identidade visual do semáforo (FAROL_UI) e os prazos (farolOf) são fonte
+// única, compartilhados com a badge dos cards de empresa — ver
+// @/components/followup/FarolBadge.
 
 function periodSummary(p: FollowupRow["period"]): string {
   const parts: string[] = [];

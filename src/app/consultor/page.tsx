@@ -6,6 +6,7 @@ import CompanySummaryGrid, {
   type CompanyCardItem,
 } from "@/components/CompanySummaryGrid";
 import { withSelf } from "@/lib/people";
+import { perfRoute } from "@/lib/perf";
 
 type Option = { id: string; name: string };
 type PersonOption = { id: string; full_name: string; email: string };
@@ -28,21 +29,54 @@ type CompanySummary = {
 export default async function ConsultorPage() {
   const { supabase, profile } = await guardRole(["consultor"]);
 
-  const [{ data: companiesData }, { data: collaboratorsData }, { data: instancesData, error }] =
-    await Promise.all([
-      // RLS (companies_select) limita às empresas atribuídas a este consultor.
-      supabase.from("companies").select("id, name").order("name", { ascending: true }),
+  // O acompanhamento vem JUNTO das consultas que já existiam, em paralelo (uma
+  // ida a mais ao banco no total, nunca uma por card). A MESMA RPC da página
+  // /acompanhamento (fonte única): SECURITY INVOKER escopada por companies_select
+  // ⇒ devolve só as empresas deste consultor. Período/sentido não afetam o
+  // days_since da badge; usamos os padrões.
+  const perf = perfRoute("/consultor (painel)");
+  const [
+    { data: companiesData },
+    { data: collaboratorsData },
+    { data: instancesData, error },
+    { data: followupData },
+  ] = await Promise.all([
+    // RLS (companies_select) limita às empresas atribuídas a este consultor.
+    perf.timed(
+      "companies",
+      supabase.from("companies").select("id, name").order("name", { ascending: true })
+    ),
+    perf.timed(
+      "profiles",
       supabase
         .from("profiles")
         .select("id, full_name, email")
         // Admins também podem ser responsáveis de tarefas.
         .in("role", ["colaborador", "admin"])
-        .order("full_name", { ascending: true }),
-      // RLS (ti_select) limita às instâncias das empresas dele.
-      supabase.from("task_instances").select("company_id, status, due_at"),
-    ]);
+        .order("full_name", { ascending: true })
+    ),
+    // RLS (ti_select) limita às instâncias das empresas dele.
+    perf.timed(
+      "task_instances",
+      supabase.from("task_instances").select("company_id, status, due_at")
+    ),
+    // Semáforo de contato por empresa (mesma fonte da /acompanhamento).
+    perf.timed(
+      "rpc client_followup (badge de contato)",
+      supabase.rpc("client_followup", { p_period_days: 30, p_desc: true })
+    ),
+  ]);
+  perf.done();
 
   const companies = (companiesData as Option[]) ?? [];
+
+  // Mapa empresa → dias desde o último contato (null = nunca). A RPC já é
+  // escopada pela RLS, então nunca traz empresa fora da carteira do consultor.
+  const contactDays = new Map<string, number | null>(
+    ((followupData as { company_id: string; days_since: number | null }[]) ?? []).map(
+      (r) => [r.company_id, r.days_since]
+    )
+  );
   // O consultor também pode se atribuir como responsável de tarefas (Passo 14).
   const collaborators = withSelf(
     (collaboratorsData as PersonOption[]) ?? [],
@@ -121,6 +155,7 @@ export default async function ConsultorPage() {
                   total: c.total,
                   pending: c.pending,
                   overdue: c.overdue,
+                  contact: { days: contactDays.get(c.id) ?? null },
                 })
               )}
             />

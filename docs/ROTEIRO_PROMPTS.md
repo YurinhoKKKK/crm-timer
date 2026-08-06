@@ -1904,6 +1904,57 @@
 
   ---
 
+  ## Acompanhamento de clientes — quem está esfriando (Feito)
+
+  Tela em `/acompanhamento` (admin e consultor; colaborador NÃO acessa) que
+  responde "quais clientes estão esfriando?" e monitora se TODOS estão sendo
+  atendidos de forma CONSTANTE. **Não ranqueia ninguém** — é uma fila de "ligue
+  para estes primeiro", acionável, não acusatória. Uma linha por empresa:
+  consultor responsável, dias sem contato, qual foi o último (tipo + data BRT),
+  resumo do período e a reunião marcada (futuro).
+
+  **O que conta como CONTATO** (só estes; nada de tempo cronometrado nem volume):
+  reunião REALIZADA, anotação visível ao cliente, listagem entregue (com link),
+  reajuste concluído, e tarefa PONTUAL concluída (`kind='unica'` E
+  `template_type='padrao'` E `standard_task_id IS NULL` E `status='finalizada'`).
+  **Diárias e catálogo padrão ficam de FORA de propósito:** concluem sozinhas
+  todo dia e fariam todo cliente parecer sempre atendido — sem esse corte a tela
+  não teria valor.
+
+  **Semáforo** (texto SEMPRE junto da cor — acessibilidade): verde até 7 dias ·
+  amarelo 7–15 · vermelho acima de 15; nunca contatado = vermelho.
+
+  **Reunião FUTURA não zera o contador** (decisão do usuário): contá-la como
+  contato esconderia o cliente frio há 20 dias com conversa marcada para daqui a
+  duas semanas. Vem à parte (`next_meeting_at`), engajamento planejado, distinta
+  da realizada.
+
+  **Aplicado (migration `0051`):**
+  - RPC `client_followup(p_period_days)`, **SECURITY INVOKER** partindo de
+    `companies` (a RLS `companies_select` escopa: admin todas, consultor só a
+    carteira dele). Uma linha por empresa (bounded pelo nº de empresas, nunca
+    linhas cruas de sinais). Datas em America/Sao_Paulo. Custo ~12ms p/ 124
+    empresas, sem índice novo.
+  - **Busca + filtros COMPÕEM entre si** (pedido do usuário — não "um ou outro"):
+    período (30/60/90, na URL), busca por nome da empresa (em memória, sem
+    acentos), consultor e faixa do semáforo.
+  - **Ordenação por PRIORIDADE é o padrão** — mais tempo sem contato primeiro,
+    nunca-contatados no topo de tudo (a RPC já devolve nessa ordem); alterna para
+    nome da empresa e para consultor.
+  - **Paginação:** revelação incremental client-side (`usePaged`, 25 por vez).
+    Como a RPC devolve o dataset inteiro, busca+filtro+ordenação agem sobre TODAS
+    as linhas ANTES do corte — nunca só sobre a página visível. Server-side de
+    verdade só quando o volume crescer (o `order by` da RPC já é priority-first,
+    então dá para paginar no banco depois sem mudar a lógica).
+  - Recorte secundário "Carteira por consultor" (só admin): clientes de cada um
+    por faixa, ordem alfabética, SEM pódio. Estados vazios positivos.
+
+  Validado: conta aberta de 2 empresas bate com a RPC; diárias/catálogo excluídas
+  (65 numa delas); consultor vê só a carteira (17/124, 0 vazamento); semáforo
+  pelos prazos; navegador claro/escuro; build verde.
+
+  ---
+
   # ITENS ARQUIVADOS E DECISÕES EM ABERTO
 
   Registro do que foi CONSCIENTEMENTE deixado de lado, para não parecer

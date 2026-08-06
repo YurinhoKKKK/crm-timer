@@ -161,7 +161,18 @@
       "Bash(./node_modules/.bin/tsc --noEmit --skipLibCheck -p tsconfig.json)",
       "Bash(tee ./_gcal_build/tsc_full.txt)",
       "Bash(xargs echo \"total linhas de saída tsc:\")",
-      "Bash(taskkill //F //IM node.exe)"
+      "Bash(taskkill //F //IM node.exe)",
+      "Bash(git diff *)",
+      "Bash(taskkill //PID 1556 //F)",
+      "Bash(powershell -Command 'Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }')",
+      "Bash(python -c ' *)",
+      "Bash(taskkill //F //FI \"IMAGENAME eq node.exe\")",
+      "Bash(powershell -Command 'Get-NetTCPConnection -LocalPort 3000,3001 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }')",
+      "Bash(node -e \"console.log\\(require.resolve\\('@supabase/supabase-js'\\)\\)\")",
+      "Bash(node -e \"const p=require\\('./node_modules/@supabase/supabase-js/package.json'\\); console.log\\('main:',p.main,'| module:',p.module\\)\")",
+      "Bash(rm -f \"C:/Users/renat/AppData/Local/Temp/claude/C--Users-renat-OneDrive-Desktop-crm-timer/7a55a40e-357a-4649-aaea-5e52c1844895/scratchpad/update-email.mjs\")",
+      "Bash(NODE_PATH=\"C:/Users/renat/OneDrive/Desktop/crm-timer/node_modules\" node update-email.cjs)",
+      "Bash(NODE_PATH=\"C:/Users/renat/OneDrive/Desktop/crm-timer/node_modules\" node update-email.cjs \"C:/Users/renat/Downloads/key.txt\")"
     ]
   }
 }

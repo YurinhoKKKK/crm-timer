@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { TaskTemplate } from "@/lib/types";
-import { updateTaskTemplate } from "../../actions";
+import { updateTaskTemplate, type TodayGenStatus } from "../../actions";
 import Combobox from "@/components/Combobox";
 import ListingFields, {
   emptyListingForm,
@@ -40,6 +40,44 @@ const WEEKDAYS = [
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+// Status que MERECEM uma nota. Só mostramos o que INFORMA algo:
+//   'gerada'        → aconteceu algo relevante;
+//   'nao_e_dia' / 'inativa' / 'fora_do_periodo' → explica por que a tarefa de
+//     hoje não apareceu (o silêncio que queríamos matar).
+// De fora, de propósito: 'ja_existia' (caso rotineiro — avisar em todo
+// salvamento vira ruído, e ruído constante faz ignorarem os avisos que importam)
+// e 'nao_aplica' (não é diária).
+type NotedStatus = "gerada" | "nao_e_dia" | "inativa" | "fora_do_periodo";
+
+const TODAY_NOTE: Record<NotedStatus, { tone: "ok" | "warn"; text: string }> = {
+  gerada: {
+    tone: "ok",
+    text: "A tarefa de hoje foi gerada. Se o horário-limite de hoje já passou, ela aparece como atrasada — o que é esperado, já que foi incluída agora.",
+  },
+  nao_e_dia: {
+    tone: "warn",
+    text: "Hoje não está marcado na recorrência, então nenhuma tarefa foi gerada para hoje.",
+  },
+  inativa: {
+    tone: "warn",
+    text: "A tarefa está inativa, então nenhuma ocorrência de hoje foi gerada.",
+  },
+  fora_do_periodo: {
+    tone: "warn",
+    text: "Hoje está fora do período de vigência (início/fim), então nenhuma tarefa foi gerada para hoje.",
+  },
+};
+
+const TODAY_NOTE_CLASS: Record<"ok" | "warn", string> = {
+  ok: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  warn: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+};
+
+// Só os status com nota; estreita o tipo para indexar TODAY_NOTE com segurança.
+function isNotedStatus(s: TodayGenStatus): s is NotedStatus {
+  return s === "gerada" || s === "nao_e_dia" || s === "inativa" || s === "fora_do_periodo";
 }
 
 export default function TaskEditor({
@@ -84,6 +122,9 @@ export default function TaskEditor({
   const [active, setActive] = useState(template.active);
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Nota persistente sobre a ocorrência de HOJE (só para diárias). Fica até o
+  // próximo salvar; não some com o flash "Salvo".
+  const [todayNote, setTodayNote] = useState<TodayGenStatus | null>(null);
   const [, startTransition] = useTransition();
 
   function toggleWeekday(value: number) {
@@ -99,9 +140,10 @@ export default function TaskEditor({
     e.preventDefault();
     setStatus("saving");
     setErrorMsg(null);
+    setTodayNote(null);
 
     const isListing = mode === "listagem";
-    const { error } = await updateTaskTemplate(template.id, {
+    const { error, todayStatus } = await updateTaskTemplate(template.id, {
       title,
       description,
       instructions,
@@ -130,6 +172,7 @@ export default function TaskEditor({
     }
 
     setStatus("saved");
+    setTodayNote(todayStatus ?? null);
     startTransition(() => router.refresh());
     window.setTimeout(() => setStatus("idle"), 1500);
   }
@@ -330,6 +373,17 @@ export default function TaskEditor({
 
       {status === "error" && errorMsg && (
         <p className="text-sm text-red-600 dark:text-red-400">{errorMsg}</p>
+      )}
+
+      {todayNote && isNotedStatus(todayNote) && (
+        <p
+          role="status"
+          className={`rounded-lg border px-3 py-2 text-sm ${
+            TODAY_NOTE_CLASS[TODAY_NOTE[todayNote].tone]
+          }`}
+        >
+          {TODAY_NOTE[todayNote].text}
+        </p>
       )}
 
       <div className="flex items-center gap-3">

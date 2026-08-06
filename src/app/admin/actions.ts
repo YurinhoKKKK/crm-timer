@@ -504,10 +504,21 @@ export async function createTaskTemplate(
 
 // Atualiza um task_template existente. Obs.: a edição NÃO altera instâncias já
 // geradas — vale para as próximas gerações da tarefa.
+// Resultado da geração da ocorrência de HOJE ao editar uma diária (fonte:
+// generate_template_today_edit no banco). 'nao_aplica' = não é diária. A UI usa
+// isto para explicar ao usuário o que aconteceu (em vez de silêncio).
+export type TodayGenStatus =
+  | "gerada"
+  | "ja_existia"
+  | "nao_e_dia"
+  | "inativa"
+  | "fora_do_periodo"
+  | "nao_aplica";
+
 export async function updateTaskTemplate(
   templateId: string,
   input: TaskTemplateInput
-): Promise<{ error: string | null }> {
+): Promise<{ error: string | null; todayStatus?: TodayGenStatus | null }> {
   const result = validateTemplateInput(input);
   if ("error" in result) {
     return { error: result.error };
@@ -562,9 +573,28 @@ export async function updateTaskTemplate(
     return { error: `Tarefa salva, mas falhou ao propagar: ${syncError.message}` };
   }
 
+  // Diária: gera a ocorrência de HOJE se hoje passou a fazer parte da recorrência
+  // e ainda não existe (ex.: usuário incluiu a quinta depois que o cron já rodou).
+  // Caminho de edição ignora o due_time de propósito (a pessoa corrige agora; a
+  // tarefa pode nascer atrasada) — o cron e o trigger de INSERT seguem intactos.
+  // Autorização já veio da RLS do UPDATE acima; não duplica (on conflict no banco).
+  let todayStatus: TodayGenStatus | null = null;
+  if (input.kind === "diaria") {
+    const { data, error: genError } = await supabase.rpc(
+      "generate_template_today_edit",
+      { p_template: templateId }
+    );
+    if (genError) {
+      return {
+        error: `Tarefa salva, mas falhou ao gerar a ocorrência de hoje: ${genError.message}`,
+      };
+    }
+    todayStatus = (data as TodayGenStatus) ?? null;
+  }
+
   revalidatePath("/admin/tarefas");
   revalidatePath(`/admin/tarefas/${templateId}`);
-  return { error: null };
+  return { error: null, todayStatus };
 }
 
 // Exclui um task_template e, em cascata (migration 0008), todas as suas

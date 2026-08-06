@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Avatar from "@/components/Avatar";
 import { avatarUrl } from "@/lib/avatar";
+import { SearchBox, FilterBar, ShowMore, usePaged, norm } from "@/components/ListControls";
 import {
   farolOf,
   KIND_LABEL,
@@ -23,6 +24,13 @@ function fmtDate(iso: string): string {
     year: "numeric",
   });
 }
+
+// A ordenação da fila é FIXA e vem pronta do banco (RPC client_followup):
+// nunca-contatados primeiro (cadastro mais antigo primeiro), depois os demais por
+// mais tempo sem contato. A tela NUNCA reordena — só filtra, preservando a ordem
+// do servidor, para não quebrar sob paginação. Não há seletor de ordenação: a
+// tela existe para dizer quem precisa de atenção primeiro, e ordenar por empresa
+// ou consultor a aproximaria de um ranking — que é o que não queremos.
 
 // Identidade do semáforo (cor + rótulo em TEXTO — a cor nunca é o único sinal).
 const FAROL_UI: Record<
@@ -72,6 +80,7 @@ export default function FollowupView({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
+  const [query, setQuery] = useState("");
   const [consultantId, setConsultantId] = useState("");
   const [farol, setFarol] = useState<Farol | "">("");
 
@@ -95,17 +104,34 @@ export default function FollowupView({
     [rows, consultantId]
   );
 
-  // Contagem por faixa (sobre o recorte de consultor, ignorando o filtro de faixa).
+  // Busca por nome da empresa — COMPÕE com os filtros (não substitui). Sem
+  // acentos, qualquer trecho do nome (os nomes começam com código interno).
+  const base = useMemo(() => {
+    const q = norm(query.trim());
+    if (!q) return byConsultant;
+    return byConsultant.filter((r) => norm(r.companyName).includes(q));
+  }, [byConsultant, query]);
+
+  // Contagem por faixa sobre o recorte já com consultor + busca (mas ignorando o
+  // filtro de faixa, para os números do semáforo continuarem fazendo sentido).
   const bands = useMemo(() => {
     const b = { verde: 0, amarelo: 0, vermelho: 0 };
-    for (const r of byConsultant) b[farolOf(r.daysSince)] += 1;
+    for (const r of base) b[farolOf(r.daysSince)] += 1;
     return b;
-  }, [byConsultant]);
+  }, [base]);
 
-  const filtered = useMemo(
-    () => (farol ? byConsultant.filter((r) => farolOf(r.daysSince) === farol) : byConsultant),
-    [byConsultant, farol]
+  // Só filtra pela faixa do semáforo; a ORDEM já vem pronta do banco e é
+  // preservada pelo filter. A paginação (usePaged) corta DEPOIS. Nunca
+  // reordenamos aqui — senão a fila quebraria quando houver paginação.
+  const sorted = useMemo(
+    () => (farol ? base.filter((r) => farolOf(r.daysSince) === farol) : base),
+    [base, farol]
   );
+
+  // Revelação incremental "ver mais": renderiza uma janela por vez, mas a busca,
+  // os filtros e a ordenação já agiram sobre a lista toda acima — nunca filtramos
+  // apenas a página visível.
+  const { visible, hasMore, remaining, showMore } = usePaged(sorted, 25);
 
   function setPeriod(p: number) {
     const params = new URLSearchParams(searchParams.toString());
@@ -113,19 +139,25 @@ export default function FollowupView({
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
-  const total = byConsultant.length;
+  const total = base.length;
 
   return (
     <div className="space-y-6">
-      {/* Controles */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+      {/* Controles — período, busca e consultor compõem entre si. A ordenação é
+          fixa (prioridade) e definida no banco; não há seletor. */}
+      <FilterBar>
         <PeriodTabs period={period} onChange={setPeriod} />
+        <SearchBox
+          value={query}
+          onChange={setQuery}
+          placeholder="Buscar empresa…"
+        />
         {role === "admin" && consultantOptions.length > 0 && (
           <select
             value={consultantId}
             onChange={(e) => setConsultantId(e.target.value)}
             aria-label="Filtrar por consultor responsável"
-            className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg shadow-sm transition focus:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
+            className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg shadow-sm transition focus:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
           >
             <option value="">Todos os consultores</option>
             {consultantOptions.map((c) => (
@@ -135,7 +167,7 @@ export default function FollowupView({
             ))}
           </select>
         )}
-      </div>
+      </FilterBar>
 
       {/* Faixas do semáforo — também filtram a lista ao clicar. */}
       <div className="flex flex-wrap gap-2">
@@ -165,9 +197,11 @@ export default function FollowupView({
         <EmptyCard>
           Você ainda não tem empresas na carteira para acompanhar.
         </EmptyCard>
-      ) : filtered.length === 0 ? (
-        <EmptyCard good>
-          {farol === "verde"
+      ) : sorted.length === 0 ? (
+        <EmptyCard good={!query}>
+          {query
+            ? `Nenhuma empresa corresponde a “${query.trim()}” neste recorte.`
+            : farol === "verde"
             ? "Nenhum cliente marcado como “em dia” neste recorte."
             : farol === "amarelo"
             ? "Nenhum cliente na faixa de atenção. 👏"
@@ -176,18 +210,19 @@ export default function FollowupView({
             : "Nenhum cliente neste recorte."}
         </EmptyCard>
       ) : (
-        <ul className="space-y-2.5">
-          {filtered.map((r) => (
-            <CompanyRow key={r.companyId} row={r} role={role} />
-          ))}
-        </ul>
+        <>
+          <ul className="space-y-2.5">
+            {visible.map((r) => (
+              <CompanyRow key={r.companyId} row={r} role={role} />
+            ))}
+          </ul>
+          {hasMore && <ShowMore remaining={remaining} onClick={showMore} />}
+        </>
       )}
 
       {/* Recorte por consultor (visão secundária) — carteira precisando de
           atenção, NUNCA ranking. Só faz sentido para o admin (vários). */}
-      {role === "admin" && (
-        <ConsultantBreakdown rows={rows} />
-      )}
+      {role === "admin" && <ConsultantBreakdown rows={rows} />}
     </div>
   );
 }

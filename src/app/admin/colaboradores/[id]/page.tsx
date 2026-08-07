@@ -437,9 +437,10 @@ export default async function CollaboratorDetailPage({
             </h3>
             {listTruncated && (
               <p className="mb-2 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-                Mostrando as {LIST_CAP} primeiras tarefas (por prazo). Os números
-                do cabeçalho consideram todas; refine por período para ver o
-                restante na lista.
+                Lista limitada às {LIST_CAP} tarefas mais próximas do prazo. As
+                contagens acima (total, concluídas, atrasadas) consideram TODAS as
+                tarefas — só esta lista foi limitada. Refine por período para ver
+                as demais.
               </p>
             )}
             <p className="mb-4 text-xs text-fg-subtle">

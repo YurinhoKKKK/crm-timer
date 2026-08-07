@@ -1,6 +1,5 @@
 import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
-import type { TaskStatus } from "@/lib/types";
 import NewTaskForm from "@/app/admin/tarefas/NewTaskForm";
 import CompanySummaryGrid, {
   type CompanyCardItem,
@@ -11,10 +10,12 @@ import { perfRoute } from "@/lib/perf";
 type Option = { id: string; name: string };
 type PersonOption = { id: string; full_name: string; email: string };
 
-type InstanceRow = {
+type CompanyCountRow = {
   company_id: string;
-  status: TaskStatus;
-  due_at: string | null;
+  total: number;
+  done: number;
+  pending: number;
+  overdue: number;
 };
 
 type CompanySummary = {
@@ -38,7 +39,7 @@ export default async function ConsultorPage() {
   const [
     { data: companiesData },
     { data: collaboratorsData },
-    { data: instancesData, error },
+    { data: countData, error },
     { data: followupData },
   ] = await Promise.all([
     // RLS (companies_select) limita às empresas atribuídas a este consultor.
@@ -55,10 +56,12 @@ export default async function ConsultorPage() {
         .in("role", ["colaborador", "admin"])
         .order("full_name", { ascending: true })
     ),
-    // RLS (ti_select) limita às instâncias das empresas dele.
+    // Contagens por empresa AGREGADAS NO BANCO (não contando linhas em JS, que
+    // trunca em 1000 do PostgREST — carteira grande zeraria empresas em
+    // silêncio). RLS (ti_select) limita às empresas dele. Sem período aqui.
     perf.timed(
-      "task_instances",
-      supabase.from("task_instances").select("company_id, status, due_at")
+      "rpc company_task_counts",
+      supabase.rpc("company_task_counts", { p_start: null })
     ),
     // Semáforo de contato por empresa (mesma fonte da /acompanhamento).
     perf.timed(
@@ -82,10 +85,8 @@ export default async function ConsultorPage() {
     (collaboratorsData as PersonOption[]) ?? [],
     profile
   );
-  const instances = (instancesData as InstanceRow[]) ?? [];
-
-  const now = Date.now();
-
+  // Cada empresa da carteira começa zerada (mesmo as sem tarefa) e recebe as
+  // contagens do banco. Empresas sem tarefa simplesmente ficam em 0.
   const summaries = new Map<string, CompanySummary>();
   for (const c of companies) {
     summaries.set(c.id, {
@@ -97,16 +98,13 @@ export default async function ConsultorPage() {
       overdue: 0,
     });
   }
-  for (const r of instances) {
+  for (const r of (countData as CompanyCountRow[]) ?? []) {
     const s = summaries.get(r.company_id);
     if (!s) continue;
-    s.total += 1;
-    if (r.status === "finalizada") {
-      s.done += 1;
-    } else if (r.status !== "cancelada") {
-      s.pending += 1;
-      if (r.due_at && new Date(r.due_at).getTime() < now) s.overdue += 1;
-    }
+    s.total = Number(r.total);
+    s.done = Number(r.done);
+    s.pending = Number(r.pending);
+    s.overdue = Number(r.overdue);
   }
 
   const companyList = Array.from(summaries.values());

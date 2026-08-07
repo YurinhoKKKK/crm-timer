@@ -115,14 +115,20 @@ export default async function CollaboratorDetailPage({
   };
   const personName = person.full_name || person.email;
 
-  // Tarefas do colaborador no período (RLS: is_admin() libera).
+  // Tarefas do colaborador no período (RLS: is_admin() libera). A LISTA é
+  // limitada a um teto (CAP+1 para detectar corte) — os NÚMEROS do cabeçalho
+  // (total/concluídas/atrasadas) NÃO saem daqui: vêm de task_status_counts
+  // (agregado no banco), senão acima de 1000 tarefas contaríamos errado por
+  // truncamento silencioso do PostgREST.
+  const LIST_CAP = 500;
   let instancesQuery = supabase
     .from("task_instances")
     .select(
       "id, title, status, due_at, task_date, template_id, total_seconds, company_id, company:companies!task_instances_company_id_fkey(name)"
     )
     .eq("collaborator_id", params.id)
-    .order("due_at", { ascending: true, nullsFirst: false });
+    .order("due_at", { ascending: true, nullsFirst: false })
+    .limit(LIST_CAP + 1);
   if (start) instancesQuery = instancesQuery.gte("task_date", start);
 
   // Histórico recente de atividades do colaborador no período.
@@ -140,6 +146,7 @@ export default async function CollaboratorDetailPage({
     { data: instancesData, error },
     { data: activityData },
     { data: timeByCompanyData },
+    { data: countData },
   ] = await Promise.all([
     instancesQuery,
     activityQuery,
@@ -148,10 +155,18 @@ export default async function CollaboratorDetailPage({
     // e do gráfico — o total_seconds das instâncias (por task_date) inflava
     // dias errados.
     supabase.rpc("time_by_company", { p_start: start, p_collaborator: params.id }),
+    // Contagens do cabeçalho (total/concluídas/atrasadas) agregadas no banco,
+    // escopadas a este responsável — imunes ao teto de linhas da lista.
+    supabase.rpc("task_status_counts", { p_start: start, p_collaborator: params.id }),
   ]);
 
-  const instances = (instancesData as InstanceRow[]) ?? [];
+  const allInstances = (instancesData as InstanceRow[]) ?? [];
+  const listTruncated = allInstances.length > LIST_CAP;
+  const instances = allInstances.slice(0, LIST_CAP);
   const activities = (activityData as ActivityRow[]) ?? [];
+  const headerCounts = (countData as
+    | { total: number; finalizada: number; overdue: number }[]
+    | null)?.[0];
   const timeRows =
     (timeByCompanyData as { company_id: string; seconds: number }[]) ?? [];
 
@@ -193,14 +208,12 @@ export default async function CollaboratorDetailPage({
   }
 
   // --- Métricas do cabeçalho ---
-  // Contagens (concluídas/total) por task_date; TEMPO por time_entries (RPC).
-  let done = 0;
-  const total = instances.length;
+  // Contagens (concluídas/total/atrasadas) por task_date/due_at vêm do banco
+  // (task_status_counts) — não da lista, que é limitada por teto. TEMPO por
+  // time_entries (RPC).
+  const total = Number(headerCounts?.total ?? 0);
+  const done = Number(headerCounts?.finalizada ?? 0);
   const now = Date.now();
-
-  for (const r of instances) {
-    if (r.status === "finalizada") done += 1;
-  }
   const percent = total > 0 ? Math.round((done / total) * 100) : 0;
 
   const totalSeconds = timeRows.reduce((s, r) => s + Number(r.seconds), 0);
@@ -272,7 +285,8 @@ export default async function CollaboratorDetailPage({
       if (!b.due_at) return -1;
       return new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
     });
-  const overdueCount = attention.filter((a) => a.overdue).length;
+  // Contagem autoritativa de atrasadas vem do banco (imune ao teto da lista).
+  const overdueCount = Number(headerCounts?.overdue ?? 0);
 
   return (
     <AppShell
@@ -421,6 +435,13 @@ export default async function CollaboratorDetailPage({
             <h3 className="mb-1 text-sm font-semibold text-fg">
               Tarefas previstas para o período ({total})
             </h3>
+            {listTruncated && (
+              <p className="mb-2 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                Mostrando as {LIST_CAP} primeiras tarefas (por prazo). Os números
+                do cabeçalho consideram todas; refine por período para ver o
+                restante na lista.
+              </p>
+            )}
             <p className="mb-4 text-xs text-fg-subtle">
               Estas são as tarefas com prazo no período — o tempo de cada uma é o
               total gasto nela. O &ldquo;Tempo trabalhado no período&rdquo; acima

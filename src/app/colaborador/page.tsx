@@ -1,34 +1,20 @@
 import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
-import type { TaskStatus } from "@/lib/types";
 import CompanySummaryGrid, {
   type CompanyCardItem,
 } from "@/components/CompanySummaryGrid";
 import { loadAllLabelsByCompany } from "@/lib/labels";
 import { perfRoute } from "@/lib/perf";
 
-type InstanceRow = {
-  id: string;
+type CompanyCountRow = {
   company_id: string;
-  status: TaskStatus;
-  due_at: string | null;
-  company: { name: string } | { name: string }[] | null;
-};
-
-type CompanySummary = {
-  id: string;
-  name: string;
+  company_name: string | null;
   total: number;
   done: number;
   pending: number;
   overdue: number;
-  dueSoon: number;
+  due_soon: number;
 };
-
-function first<T>(value: T | T[] | null): T | null {
-  if (Array.isArray(value)) return value[0] ?? null;
-  return value;
-}
 
 export default async function ColaboradorPage() {
   const { supabase, profile } = await guardRole([
@@ -38,60 +24,34 @@ export default async function ColaboradorPage() {
   ]);
 
   const perf = perfRoute("/colaborador (Meu Trabalho)");
-  // As duas leituras rodam juntas. As etiquetas antes esperavam a lista de
-  // tarefas só para saber quais company_id filtrar; agora vêm todas as que a
-  // RLS (cl_select) permite a este usuário — exatamente as empresas onde ele
-  // tem tarefa, que é o mesmo conjunto de antes.
-  const [{ data, error }, labelsByCompany] = await Promise.all([
+  // As duas leituras rodam juntas. As contagens por empresa são AGREGADAS NO
+  // BANCO (não contando linhas em JS, que trunca em 1000 do PostgREST): a RPC,
+  // escopada ao próprio usuário, já devolve uma linha por empresa onde ele tem
+  // tarefa — o mesmo conjunto de antes. As etiquetas vêm de todas as empresas
+  // que a RLS (cl_select) permite (mesmo conjunto).
+  const [{ data: countData, error }, labelsByCompany] = await Promise.all([
     perf.timed(
-      "task_instances do usuário (join companies)",
-      supabase
-        .from("task_instances")
-        .select(
-          "id, company_id, status, due_at, company:companies!task_instances_company_id_fkey(name)"
-        )
-        .eq("collaborator_id", profile.id)
+      "rpc company_task_counts (do usuário)",
+      supabase.rpc("company_task_counts", {
+        p_start: null,
+        p_collaborator: profile.id,
+      })
     ),
     perf.timed("company_labels (paralela)", loadAllLabelsByCompany(supabase)),
   ]);
   perf.done();
 
-  const rows = (data as InstanceRow[]) ?? [];
-
-  const now = Date.now();
-  const SOON_MS = 24 * 60 * 60 * 1000;
-
-  // Agrupa as instâncias do colaborador por empresa.
-  const byCompany = new Map<string, CompanySummary>();
-  for (const r of rows) {
-    const summary = byCompany.get(r.company_id) ?? {
+  const companies = ((countData as CompanyCountRow[]) ?? [])
+    .map((r) => ({
       id: r.company_id,
-      name: first(r.company)?.name ?? "(empresa)",
-      total: 0,
-      done: 0,
-      pending: 0,
-      overdue: 0,
-      dueSoon: 0,
-    };
-
-    summary.total += 1;
-    if (r.status === "finalizada") {
-      summary.done += 1;
-    } else if (r.status !== "cancelada") {
-      summary.pending += 1;
-      if (r.due_at) {
-        const due = new Date(r.due_at).getTime();
-        if (due < now) summary.overdue += 1;
-        else if (due - now <= SOON_MS) summary.dueSoon += 1;
-      }
-    }
-
-    byCompany.set(r.company_id, summary);
-  }
-
-  const companies = Array.from(byCompany.values()).sort((a, b) =>
-    a.name.localeCompare(b.name, "pt-BR")
-  );
+      name: r.company_name ?? "(empresa)",
+      total: Number(r.total),
+      done: Number(r.done),
+      pending: Number(r.pending),
+      overdue: Number(r.overdue),
+      dueSoon: Number(r.due_soon),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
   return (
     <AppShell

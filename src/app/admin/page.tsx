@@ -10,13 +10,6 @@ import CollaboratorSummary, {
 } from "./CollaboratorSummary";
 import { periodStart } from "@/lib/period";
 
-type InstanceRow = {
-  company_id: string;
-  collaborator_id: string;
-  status: TaskStatus;
-  due_at: string | null;
-};
-
 type Named = { id: string; name: string };
 type Person = {
   id: string;
@@ -82,23 +75,30 @@ export default async function AdminPage({
   const period = normalizePeriod(searchParams?.periodo);
   const start = periodStart(period);
 
-  // Contagens por status e overdue seguem por task_date (a fazer/prazo). O
-  // TEMPO por período NÃO sai daqui: vem das RPCs time_by_* (time_entries por
-  // started_at), porque task_date é o prazo, não o dia trabalhado.
-  let instancesQuery = supabase
-    .from("task_instances")
-    .select("company_id, collaborator_id, status, due_at");
-  if (start) instancesQuery = instancesQuery.gte("task_date", start);
-
+  // Contagens por status, atrasadas e total/concluídas por responsável são
+  // AGREGADAS NO BANCO (task_status_counts / collaborator_task_counts). Antes
+  // buscávamos todas as task_instances e contávamos em JS — o PostgREST trunca
+  // em 1000 linhas sem avisar, então acima de 1000 tarefas os cards mostravam
+  // menos que a verdade (e um recorte curto podia exibir MAIS que o "Tudo").
+  // As contagens/atrasadas seguem por task_date/due_at; o TEMPO vem das RPCs
+  // time_by_* (time_entries por started_at BRT), que já agregam no banco.
   const perf = perfRoute("/admin (dashboard)");
   const [
-    { data: instancesData, error: instancesError },
+    { data: statusData, error: statusError },
+    { data: collabCountData, error: collabCountError },
     { data: companiesData },
     { data: collaboratorsData },
     { data: companyTimeData },
     { data: collaboratorTimeData },
   ] = await Promise.all([
-    perf.timed("task_instances (contagens por período, sem limit)", instancesQuery),
+    perf.timed(
+      "rpc task_status_counts",
+      supabase.rpc("task_status_counts", { p_start: start })
+    ),
+    perf.timed(
+      "rpc collaborator_task_counts",
+      supabase.rpc("collaborator_task_counts", { p_start: start })
+    ),
     perf.timed("companies", supabase.from("companies").select("id, name")),
     // Todos os perfis (não só role=colaborador): admin/consultor que executam
     // tarefas também contam como responsáveis pelo tempo (Passo 14). Os que não
@@ -121,7 +121,7 @@ export default async function AdminPage({
   ]);
   perf.done();
 
-  const instances = (instancesData as InstanceRow[]) ?? [];
+  const instancesError = statusError ?? collabCountError;
   const companies = (companiesData as Named[]) ?? [];
   const collaborators = (collaboratorsData as Person[]) ?? [];
 
@@ -144,37 +144,39 @@ export default async function AdminPage({
     0
   );
 
+  // Contagens por status + atrasadas (linha única do banco).
+  const counts = (statusData as
+    | {
+        total: number;
+        a_fazer: number;
+        iniciada: number;
+        finalizada: number;
+        cancelada: number;
+        overdue: number;
+      }[]
+    | null)?.[0];
   const statusCount: Record<TaskStatus, number> = {
-    a_fazer: 0,
-    iniciada: 0,
-    finalizada: 0,
-    cancelada: 0,
+    a_fazer: Number(counts?.a_fazer ?? 0),
+    iniciada: Number(counts?.iniciada ?? 0),
+    finalizada: Number(counts?.finalizada ?? 0),
+    cancelada: Number(counts?.cancelada ?? 0),
   };
+  const overdue = Number(counts?.overdue ?? 0);
 
-  let overdue = 0;
-  const now = Date.now();
-
-  // Contagens por responsável (total/concluídas) por task_date; o TEMPO vem do
-  // mapa collaboratorSeconds (time_entries).
-  const perCollaborator = new Map<string, { total: number; done: number }>();
-
-  for (const r of instances) {
-    statusCount[r.status] += 1;
-
-    if (
-      r.status !== "finalizada" &&
-      r.status !== "cancelada" &&
-      r.due_at &&
-      new Date(r.due_at).getTime() < now
-    ) {
-      overdue += 1;
-    }
-
-    const c = perCollaborator.get(r.collaborator_id) ?? { total: 0, done: 0 };
-    c.total += 1;
-    if (r.status === "finalizada") c.done += 1;
-    perCollaborator.set(r.collaborator_id, c);
-  }
+  // Contagens por responsável (total/concluídas) por task_date, do banco; o
+  // TEMPO vem do mapa collaboratorSeconds (time_entries).
+  const perCollaborator = new Map<string, { total: number; done: number }>(
+    (
+      (collabCountData as {
+        collaborator_id: string;
+        total: number;
+        done: number;
+      }[]) ?? []
+    ).map((r) => [
+      r.collaborator_id,
+      { total: Number(r.total), done: Number(r.done) },
+    ])
+  );
 
   // Lista completa; o gráfico faz Top N + agrupamento da cauda (Passo 18).
   const chartData: CompanyTime[] = Array.from(companyTime.entries())

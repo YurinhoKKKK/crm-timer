@@ -70,33 +70,46 @@ export async function getCompanyTimeBreakdown(
     ])
   );
   const ids = Array.from(secondsByTask.keys());
+  // Total = soma do que a RPC (agregada no banco) devolveu, NÃO da leitura de
+  // metadados abaixo — esta pode ser truncada/lotada e subestimaria o total.
+  const totalSeconds = Array.from(secondsByTask.values()).reduce(
+    (sum, s) => sum + s,
+    0
+  );
   if (ids.length === 0) return { error: null, tasks: [], totalSeconds: 0 };
 
   // 2) Metadados das tarefas com tempo no período (título, status, responsável).
-  const { data, error } = await supabase
-    .from("task_instances")
-    .select(
-      "id, title, status, collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email, avatar_path)"
-    )
-    .in("id", ids);
-  if (error) return { error: error.message };
+  // O `.in(...)` do PostgREST trunca em 1000 linhas; se houver mais tarefas com
+  // tempo no período, buscamos em lotes para não perder nenhuma em silêncio.
+  const CHUNK = 500;
+  const metaById = new Map<string, Row>();
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const { data, error } = await supabase
+      .from("task_instances")
+      .select(
+        "id, title, status, collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email, avatar_path)"
+      )
+      .in("id", ids.slice(i, i + CHUNK));
+    if (error) return { error: error.message };
+    for (const r of (data as Row[]) ?? []) metaById.set(r.id, r);
+  }
 
-  const tasks: BreakdownTask[] = ((data as Row[]) ?? [])
-    .map((r) => {
-      const collab = first(r.collaborator);
+  const tasks: BreakdownTask[] = ids
+    .map((id) => {
+      const r = metaById.get(id);
+      const collab = r ? first(r.collaborator) : null;
       return {
-        id: r.id,
-        title: r.title,
-        status: r.status,
+        id,
+        title: r?.title ?? "(tarefa)",
+        status: (r?.status ?? "a_fazer") as TaskStatus,
         collaboratorName:
           collab?.full_name || collab?.email || "(sem responsável)",
         collaboratorAvatarUrl: avatarUrl(collab?.avatar_path),
-        seconds: secondsByTask.get(r.id) ?? 0,
+        seconds: secondsByTask.get(id) ?? 0,
       };
     })
     .filter((t) => t.seconds > 0)
     .sort((a, b) => b.seconds - a.seconds);
 
-  const totalSeconds = tasks.reduce((sum, t) => sum + t.seconds, 0);
   return { error: null, tasks, totalSeconds };
 }

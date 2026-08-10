@@ -108,27 +108,124 @@ seguintes). O que entrou:
   (`router.refresh`) após editar/excluir/enviar; o banner de resultado fica ACIMA
   da lista (o cartão some no refresh após excluir).
 
-## Fatia 2 — IMPORTAÇÃO de eventos do Google (futuro)
+## Visão de calendário `/agenda` (pronta, validada no navegador)
 
-Ainda NÃO construída. Registro das **decisões pendentes** para não se perder:
+A lista agrupada por dia da Fatia 1 deu lugar a um **calendário Dia / Semana / Mês**
+(commit `0413427` + overhaul de UX `b1bd807`/`6ce1b78`):
 
-### Privacidade × visibilidade total entre colegas (a resolver antes de importar)
+- Grade com linhas de 30 min que **preenche a viewport** (altura medida no pai via
+  CSS var, scrollbar compensada), painel lateral de pessoas **retrátil**, e modal
+  de detalhe com **rodapé fixo**.
+- **Arrastar para reagendar** — mover e redimensionar, sem biblioteca; ao soltar
+  roda a MESMA verificação de conflito (todos os participantes + o criador) e, se
+  houver sobreposição, **pede confirmação sem bloquear** (feedback otimista, revertido
+  ao cancelar).
+- **Cache por janela** (`Map<intervalo, itens>`) com pré-busca dos vizinhos para a
+  navegação ser instantânea; cada leitura busca só o intervalo visível (+ folga),
+  nunca a base inteira. A grade renderiza reuniões do sistema **e** eventos importados
+  (Fatia 2) unidos.
+- Filtro de pessoas: reunião do sistema aparece se alguém ligado é criador/participante;
+  evento importado aparece se o DONO da agenda está ligado.
 
-O achado da Tarefa 0 muda o cálculo de privacidade que havíamos combinado:
+## Fatia 2a — aba "Reuniões" no PORTAL DO CLIENTE (pronta, migration `0049`)
 
-- Como o escopo lê a **agenda inteira** da conta, a importação traz também
-  eventos que **terceiros criaram** e para os quais o usuário só foi convidado —
-  cujos títulos ele **não controla**.
-- Isso **enfraquece** a proteção que havíamos combinado (marcar como "particular"
-  no Google): ela cobre o que a pessoa CRIA, não o que CAI na agenda dela.
-- Combinado com a nossa regra de **visibilidade total entre colegas**, um título
-  alheio e sensível poderia ficar exposto a toda a equipe.
+O cliente passa a ver as reuniões da própria empresa no portal, com **curadoria
+estrita**: modelo **opt-out** (`meetings.client_hidden`, default false = aparece),
+alternável pela equipe (criador/admin/consultor) via `setMeetingClientHidden`. O
+cliente vê título/horário/tipo — nunca a lista de participantes internos. Eventos
+importados do Google (Fatia 2b) **não** entram no portal.
 
-**Direção provável (a confirmar na Fatia 2):** importar tudo para efeito de
-**DETECÇÃO DE CONFLITO**, mas exibir aos colegas apenas **"ocupado"** nos eventos
-que o usuário **não criou** (usando `creator.self` / `organizer.self`), mostrando
-detalhes só nas reuniões **criadas pelo sistema** e nas que **ele próprio criou**.
-Considerar também tratar `visibility != public` como "ocupado, sem detalhes".
+## Fatia 2b — IMPORTAÇÃO da agenda Google + conflito real (pronta, migration `0050`)
 
-Fora de escopo por enquanto: tela de calendário/grade, importação de eventos do
-Google, reserva de salas, aba de reuniões no portal do cliente.
+Resolve o dilema de privacidade registrado antes de construir:
+
+- Tabela **`imported_google_events`** (espelho **só-leitura** da agenda de cada
+  interno) alimentada por `syncMyGoogleCalendar` (auto ao abrir a `/agenda` se a
+  última sync for velha, + botão manual). **Ninguém sincroniza agenda alheia:** o
+  token e a escrita derivam de `auth.uid()`, sem `service_role`.
+- **Privacidade resolvida:** evento que o usuário **não criou** (ou `visibility`
+  privada) entra como **"Ocupado"** — o banco **esconde o título** (`title` null →
+  a grade mostra "Ocupado"). Detalhe só nas reuniões do sistema e nas que ele mesmo
+  criou. `imported_events_range()` (SECURITY DEFINER) já devolve assim; `anon` nunca
+  recebe nada.
+- **Detecção de conflito** passou a unir sistema + Google (`checkMeetingConflicts`),
+  então o aviso de sobreposição cobre também eventos criados direto no Google.
+- As reuniões DO SISTEMA são **descartadas** da importação (`toImportRow` faz
+  `if (systemIds.has(ev.id)) return null`) — senão apareceriam duplicadas. É por isso
+  que o status delas exige o read dirigido da Fatia B (abaixo), não a `events.list`.
+
+## Fatia A — RESERVAR SALA do escritório (pronta, migration `0056`)
+
+Duas salas (Grande / Pequena), escolhíveis só em `presencial_escritorio`
+(`meetings.room`). Mecanismo: **convidar o endereço de agenda da sala como
+participante** do evento na agenda de quem cria — um só evento-fonte, sem novo
+escopo OAuth. O `accepted`/`declined` DA SALA é a confirmação/negação real da reserva
+(choque de horário → decline) e flui pelo mesmo read das Fatias B/C. Os endereços são
+config de servidor (`src/lib/rooms.ts`, `server-only`) — não vão ao banco nem ao
+cliente; aqui mora só o rótulo. **A verificar no teste:** se essas agendas de sala
+auto-aceitam convites (senão o status fica `needsAction` e a reserva não "confirma"
+sozinha).
+
+## Fatia B — LER o responseStatus dos convidados (pronta, migration `0057`)
+
+Quem aceitou/recusou o convite. **Princípio invertido só aqui:** para respostas, o
+**Google é a verdade**; o banco guarda um **espelho display-only**.
+
+- `getCalendarEvent` faz **`events.get` por `google_event_id`** (não a `events.list`
+  da importação, que descarta as reuniões do sistema). Só o **CRIADOR** consegue —
+  só ele tem o token da agenda onde o evento vive.
+- `refreshMeetingResponses(meetingId)` grava o espelho: `meeting_participants.response`
+  (por `user_id`, casando attendee-email→id via `directoryEmailById` — e-mail nunca
+  vai ao cliente) e `meetings.room_response` / `responses_synced_at`. Os demais internos
+  só **LEEM**; o espelho nunca é autoridade. `EventGone` (attendee/evento sumiu no
+  Google) avisa sem quebrar.
+- Domínio dos valores = os do Google (`accepted`/`declined`/`tentative`/`needsAction`);
+  `null` = ainda não lido / participante fora do evento.
+
+## Fatia C — quadro de status no cartão (pronta, sem migration nova)
+
+No `MeetingCard`: bolinha de status por participante (accepted=emerald, declined=red,
+tentative=amber, needsAction=slate; `null` não desenha nada, para diferenciar "não lido"
+de "lido e sem resposta") + bolinha na `RoomBadge` + painel-resumo (contagem por status
+= legenda) com "lido há X" e botão **"Atualizar status"** (só do criador + Google
+conectado; não-criador vê "Só {criador} atualiza"). Usa as colunas da 0057.
+
+## Fatia D — participante ACEITA/RECUSA dentro do CRM (pronta, migration `0058`)
+
+Pedida depois de A/B/C ("não achei a função de aceitar/recusar" — A/B/C eram só
+LEITURA de resposta; responder era no Google Agenda). Botão Aceitar/Talvez/Recusar,
+só para quem **é participante** (o criador é organizador, sem RSVP) e tem Google
+conectado.
+
+- O write vai ao Google com o token **do próprio participante** (`setMyResponseStatus`:
+  GET cru → muda só o attendee `self` → PATCH com a lista inteira; `sendUpdates=none`,
+  o Google já avisa o organizador). Mesma agenda/mesmo `google_event_id` — cada um age
+  só na própria cópia, sem `service_role`.
+- Espelho: RPC **`set_my_meeting_response`** (SECURITY DEFINER, migration `0058`) grava
+  `response` SÓ da linha `(meeting, auth.uid())` — contorna a `mp_write` criador-only
+  sem afrouxá-la. Se o espelho falhar, a resposta no Google já valeu e o próximo
+  "Atualizar status" reconcilia.
+- Depende do e-mail do perfil casar com a conta Google conectada (`self=true`); senão,
+  erro claro.
+
+### Correção: o espelho de status "não persistia" na `/agenda`
+
+Sintoma relatado: os status sumiam ao **reabrir** o evento; era preciso "Atualizar
+status" toda vez. **Diagnóstico:** o BANCO persistia certo (`meeting_participants.response`
+/ `responses_synced_at` gravados; RLS `mp_write` `for all` autoriza o criador). O
+problema era só no cliente do calendário — `Calendar.tsx` mantém um `cache` da sessão
+e o modal `detail` renderiza o cartão a partir dele. O "Atualizar status" / RSVP
+guardava o valor só no estado LOCAL do `MeetingCard` (de propósito, para não fechar o
+modal via `onResult`), mas **nunca no cache do pai**; fechar+reabrir remontava o cartão
+com props velhos (`response=null`) — só um reload de página (que relê o banco) trazia o
+valor. **Fix:** `MeetingCard` ganhou o callback opcional `onResponses(meetingId, patch)`,
+disparado no sucesso do refresh (byUser+room+syncedAt) e do RSVP (só o próprio user);
+`Calendar` implementa `applyResponses`, que espelha o patch em TODAS as janelas do cache
+E no `detail` aberto, **sem fechar o modal** (≠ `invalidate`). `MeetingList` (central da
+empresa) omite o callback — já dá `router.refresh`, que relê do banco. Sem migration.
+
+## Fora de escopo / a fazer
+
+- **Multi-agenda:** hoje só a agenda **primária** de cada interno é lida/importada.
+- **Teste ponta-a-ponta** da importação e das respostas com a agenda Google real do
+  usuário (as Fatias A–D estão no ar aguardando validação no navegador).

@@ -7,10 +7,20 @@ import {
   insertCalendarEvent,
   patchCalendarEvent,
   deleteCalendarEvent,
+  getCalendarEvent,
+  setMyResponseStatus,
+  EventGone,
 } from "@/lib/google-calendar";
 import { GoogleError } from "@/lib/google-oauth";
 import { loadAgendaItems } from "@/lib/meetings";
-import type { GoogleSyncStatus, GridItem, MeetingType } from "@/lib/meetings";
+import type {
+  GoogleSyncStatus,
+  GridItem,
+  MeetingResponse,
+  MeetingRoom,
+  MeetingType,
+} from "@/lib/meetings";
+import { roomCalendarEmail } from "@/lib/rooms";
 
 // =====================================================================
 // Reuniões (Fatia 1 + 1.1) — criar, editar, excluir, sincronizar depois.
@@ -46,6 +56,9 @@ export type CreateMeetingInput = {
   title: string;
   description: string;
   type: MeetingType;
+  // Sala do escritório a reservar. Só vale para presencial_escritorio; a action
+  // NORMALIZA (força null nos outros tipos) — o servidor é a fonte da verdade.
+  room: MeetingRoom | null;
   startISO: string;
   endISO: string;
   participantIds: string[];
@@ -81,6 +94,8 @@ export async function createMeeting(
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: SESSION_MSG };
 
+  const room = normalizeRoom(input.type, input.room);
+
   // ---- 1. grava no banco PRIMEIRO (RLS meetings_insert cuida do acesso)
   const { data: created, error: insErr } = await supabase
     .from("meetings")
@@ -91,6 +106,7 @@ export async function createMeeting(
       starts_at: new Date(fields.start).toISOString(),
       ends_at: new Date(fields.end).toISOString(),
       meeting_type: input.type,
+      room,
       created_by: user.id,
       google_sync_status: "pendente",
     })
@@ -131,6 +147,7 @@ export async function createMeeting(
       startISO: new Date(fields.start).toISOString(),
       endISO: new Date(fields.end).toISOString(),
       attendeeIds: participantIds,
+      roomEmail: roomCalendarEmail(room),
       withMeet: input.type === "meet",
     },
     { existingEventId: null, hadMeet: false }
@@ -171,6 +188,8 @@ export async function updateMeeting(
   if (existing.created_by !== user.id)
     return { ok: false, error: NOT_CREATOR_EDIT };
 
+  const room = normalizeRoom(input.type, input.room);
+
   // ---- 1. atualiza o banco (RLS meetings_update: só o criador). Sem .select()
   // (não precisa do RETORNO) — e por isso sem a armadilha do RETURNING.
   const { error: updErr } = await supabase
@@ -182,6 +201,7 @@ export async function updateMeeting(
       starts_at: new Date(fields.start).toISOString(),
       ends_at: new Date(fields.end).toISOString(),
       meeting_type: input.type,
+      room,
       updated_at: new Date().toISOString(),
     })
     .eq("id", input.meetingId);
@@ -216,6 +236,7 @@ export async function updateMeeting(
       startISO: new Date(fields.start).toISOString(),
       endISO: new Date(fields.end).toISOString(),
       attendeeIds: participantIds,
+      roomEmail: roomCalendarEmail(room),
       withMeet: input.type === "meet",
     },
     {
@@ -332,7 +353,7 @@ export async function syncMeetingToGoogle(
   const { data: m, error } = await supabase
     .from("meetings")
     .select(
-      "created_by, google_sync_status, google_event_id, meeting_type, title, description, starts_at, ends_at, company:companies(name)"
+      "created_by, google_sync_status, google_event_id, meeting_type, room, title, description, starts_at, ends_at, company:companies(name)"
     )
     .eq("id", meetingId)
     .single();
@@ -363,6 +384,7 @@ export async function syncMeetingToGoogle(
       startISO: m.starts_at as string,
       endISO: m.ends_at as string,
       attendeeIds,
+      roomEmail: roomCalendarEmail(m.room as string | null),
       withMeet: m.meeting_type === "meet",
     },
     { existingEventId: null, hadMeet: false }
@@ -425,6 +447,209 @@ export async function setMeetingClientHidden(
 }
 
 // ---------------------------------------------------------------------
+// ATUALIZAR STATUS DOS PARTICIPANTES (Fatia B) — leitura DIRIGIDA por
+// google_event_id. Só o CRIADOR pode (só ele tem o token da agenda onde o evento
+// vive). A importação em massa descarta as reuniões do sistema (systemIds), então
+// o status delas nunca chega por lá — este é o único caminho. Grava no ESPELHO
+// display-only (meeting_participants.response + meetings.room_response); os demais
+// internos só LEEM. Google é a verdade; o espelho nunca é autoridade.
+// ---------------------------------------------------------------------
+export type RefreshResponsesResult =
+  | { ok: false; error: string }
+  | {
+      ok: true;
+      syncedAt: string;
+      participants: { userId: string; response: MeetingResponse | null }[];
+      room: MeetingResponse | null;
+    };
+
+export async function refreshMeetingResponses(
+  meetingId: string
+): Promise<RefreshResponsesResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: SESSION_MSG };
+
+  const { data: m, error } = await supabase
+    .from("meetings")
+    .select("created_by, google_event_id, google_sync_status, room")
+    .eq("id", meetingId)
+    .single();
+  if (error || !m) return { ok: false, error: "Reunião não encontrada." };
+  if (m.created_by !== user.id)
+    return {
+      ok: false,
+      error:
+        "Só quem criou a reunião pode atualizar o status — o evento está na agenda Google dela.",
+    };
+  if (!m.google_event_id || m.google_sync_status !== "sincronizado")
+    return {
+      ok: false,
+      error: "Esta reunião ainda não está na sua agenda Google.",
+    };
+
+  const token = await getValidAccessToken(supabase);
+  if (token.status === "nao_conectado")
+    return {
+      ok: false,
+      error: "Conecte sua conta Google no seu perfil para ler o status.",
+    };
+  if (token.status === "falhou") return { ok: false, error: token.error };
+
+  let event;
+  try {
+    event = await getCalendarEvent(token.accessToken, m.google_event_id as string);
+  } catch (e) {
+    if (e instanceof EventGone)
+      return {
+        ok: false,
+        error:
+          "O evento não está mais na sua agenda Google — pode ter sido apagado por fora.",
+      };
+    return {
+      ok: false,
+      error:
+        e instanceof GoogleError
+          ? e.message
+          : "Não foi possível ler o status no Google.",
+    };
+  }
+
+  // e-mail (minúsculo) -> status. Já vêm minúsculos de getCalendarEvent.
+  const statusByEmail = new Map<string, MeetingResponse>();
+  for (const a of event.attendees) {
+    statusByEmail.set(a.email, normalizeResponse(a.responseStatus));
+  }
+
+  // Participantes internos desta reunião e o e-mail de cada um (server-side).
+  const { data: partRows } = await supabase
+    .from("meeting_participants")
+    .select("user_id")
+    .eq("meeting_id", meetingId);
+  const participantIds = ((partRows as { user_id: string }[] | null) ?? []).map(
+    (p) => p.user_id
+  );
+  const emailById = await directoryEmailById(supabase);
+
+  // Agrupa os user_ids por status (incluindo null = não está no evento) e grava.
+  const perUser: { userId: string; response: MeetingResponse | null }[] = [];
+  const byResponse = new Map<MeetingResponse | null, string[]>();
+  for (const uid of participantIds) {
+    const email = emailById.get(uid) ?? null;
+    const resp = email ? statusByEmail.get(email) ?? null : null;
+    perUser.push({ userId: uid, response: resp });
+    const list = byResponse.get(resp) ?? [];
+    list.push(uid);
+    byResponse.set(resp, list);
+  }
+  for (const [resp, uids] of Array.from(byResponse.entries())) {
+    if (uids.length === 0) continue;
+    // Sem .select(): update não-retornante (evita a armadilha do RETURNING, 0047).
+    await supabase
+      .from("meeting_participants")
+      .update({ response: resp })
+      .eq("meeting_id", meetingId)
+      .in("user_id", uids);
+  }
+
+  // Sala: status do attendee cujo e-mail é o da agenda da sala reservada.
+  const roomEmail = roomCalendarEmail(m.room as string | null);
+  const roomResp = roomEmail ? statusByEmail.get(roomEmail) ?? null : null;
+
+  const syncedAt = new Date().toISOString();
+  await supabase
+    .from("meetings")
+    .update({ room_response: roomResp, responses_synced_at: syncedAt })
+    .eq("id", meetingId);
+
+  return { ok: true, syncedAt, participants: perUser, room: roomResp };
+}
+
+// ---------------------------------------------------------------------
+// RESPONDER AO CONVITE (Fatia D) — o PRÓPRIO participante aceita/recusa dentro do
+// sistema. O write vai ao Google com o token DELE (muda só o próprio
+// responseStatus na cópia do evento na agenda dele). O criador é o organizador —
+// não tem RSVP. Espelha a própria resposta via set_my_meeting_response (DEFINER,
+// só a própria linha). Google é a verdade; se o espelho falhar, a resposta já
+// valeu lá e o próximo "Atualizar status" reconcilia.
+// ---------------------------------------------------------------------
+export type RespondResult =
+  | { ok: false; error: string }
+  | { ok: true; response: MeetingResponse };
+
+export async function respondToMeeting(
+  meetingId: string,
+  response: MeetingResponse
+): Promise<RespondResult> {
+  // needsAction não é escolha do usuário — só as três respostas ativas.
+  if (response !== "accepted" && response !== "tentative" && response !== "declined")
+    return { ok: false, error: "Resposta inválida." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: SESSION_MSG };
+
+  const { data: m, error } = await supabase
+    .from("meetings")
+    .select("google_event_id, google_sync_status, created_by")
+    .eq("id", meetingId)
+    .single();
+  if (error || !m) return { ok: false, error: "Reunião não encontrada." };
+  if (m.created_by === user.id)
+    return {
+      ok: false,
+      error: "Você é o organizador desta reunião — não há convite para responder.",
+    };
+  if (!m.google_event_id || m.google_sync_status !== "sincronizado")
+    return { ok: false, error: "Esta reunião ainda não está no Google." };
+
+  const token = await getValidAccessToken(supabase);
+  if (token.status === "nao_conectado")
+    return {
+      ok: false,
+      error:
+        "Conecte sua conta Google no seu perfil para responder aqui — ou responda pelo convite no Google Agenda.",
+    };
+  if (token.status === "falhou") return { ok: false, error: token.error };
+
+  try {
+    await setMyResponseStatus(token.accessToken, m.google_event_id as string, response);
+  } catch (e) {
+    if (e instanceof EventGone)
+      return {
+        ok: false,
+        error: "O evento não está mais na sua agenda Google.",
+      };
+    return {
+      ok: false,
+      error:
+        e instanceof GoogleError
+          ? e.message
+          : "Não foi possível registrar sua resposta no Google.",
+    };
+  }
+
+  // Espelha a própria resposta (DEFINER: só a linha do próprio usuário). Se
+  // falhar, a resposta no Google — a verdade — já valeu; loga e segue.
+  const { error: mirrorErr } = await supabase.rpc("set_my_meeting_response", {
+    p_meeting: meetingId,
+    p_response: response,
+  });
+  if (mirrorErr) {
+    logDbError("respondToMeeting.mirror", mirrorErr, {
+      meetingId,
+      userId: user.id,
+    });
+  }
+
+  return { ok: true, response };
+}
+
+// ---------------------------------------------------------------------
 // Leitura por INTERVALO — para o calendário navegar (semana/dia/mês) buscando só
 // a janela visível (+ folga), nunca a base inteira. A RLS já escopa (todo interno
 // vê tudo); o filtro de pessoas é aplicado no cliente sobre esta janela. Traz as
@@ -455,6 +680,9 @@ type SyncDetails = {
   startISO: string;
   endISO: string;
   attendeeIds: string[];
+  // Endereço de agenda da SALA a convidar (Fatia A), ou null. Entra como mais um
+  // participante do evento — o accepted/declined dela é a confirmação da reserva.
+  roomEmail: string | null;
   withMeet: boolean;
 };
 type GoogleOutcome =
@@ -478,7 +706,12 @@ async function pushToGoogle(
     return { sync: "falhou", error: token.error };
   }
 
-  const attendeeEmails = await participantEmails(supabase, details.attendeeIds);
+  const participants = await participantEmails(supabase, details.attendeeIds);
+  // A sala entra como participante (a reserva). Sem duplicar caso, por acaso, já
+  // esteja entre os e-mails dos internos.
+  const attendeeEmails = details.roomEmail
+    ? Array.from(new Set([...participants, details.roomEmail]))
+    : participants;
   const payload = {
     summary: details.title,
     description: buildEventDescription(details.description, details.companyName),
@@ -556,6 +789,17 @@ function uniqueIds(ids: string[]): string[] {
   return Array.from(new Set((ids ?? []).filter(Boolean)));
 }
 
+// Sala só faz sentido em presencial no escritório. Nos outros tipos, força null
+// (o servidor é a fonte da verdade; não confia no que o formulário mandar). Valor
+// fora do domínio também vira null — o CHECK do banco recusaria, mas nem chega lá.
+function normalizeRoom(
+  type: MeetingType,
+  room: MeetingRoom | null
+): MeetingRoom | null {
+  if (type !== "presencial_escritorio") return null;
+  return room === "grande" || room === "pequena" ? room : null;
+}
+
 function companyNameOf(
   company: { name: string } | { name: string }[] | null
 ): string {
@@ -629,6 +873,31 @@ async function setSync(
 // E-mails dos participantes para o convite. A RLS de profiles não deixa o
 // criador ler perfis alheios; meeting_directory() (DEFINER) resolve. Fica no
 // servidor — nunca chega ao navegador.
+// Domínio do responseStatus do Google → nosso enum. Qualquer coisa fora do
+// esperado vira 'needsAction' (não inventa "confirmou").
+function normalizeResponse(raw: string): MeetingResponse {
+  return raw === "accepted" ||
+    raw === "declined" ||
+    raw === "tentative" ||
+    raw === "needsAction"
+    ? raw
+    : "needsAction";
+}
+
+// Mapa user_id -> e-mail (minúsculo) do diretório. Fica no servidor (o e-mail
+// nunca vai ao navegador); casa o attendee do Google com o participante interno.
+async function directoryEmailById(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<Map<string, string>> {
+  const { data } = await supabase.rpc("meeting_directory");
+  const rows = (data as { id: string; email: string | null }[] | null) ?? [];
+  const map = new Map<string, string>();
+  for (const r of rows) {
+    if (r.email && r.email.includes("@")) map.set(r.id, r.email.toLowerCase());
+  }
+  return map;
+}
+
 async function participantEmails(
   supabase: Awaited<ReturnType<typeof createClient>>,
   ids: string[]

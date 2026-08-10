@@ -10,7 +10,9 @@ import {
 } from "react";
 import Modal from "@/components/Modal";
 import MeetingForm from "@/components/meetings/MeetingForm";
-import MeetingCard from "@/components/meetings/MeetingCard";
+import MeetingCard, {
+  type ResponsesPatch,
+} from "@/components/meetings/MeetingCard";
 import ResultBanner from "@/components/meetings/ResultBanner";
 import CalendarToolbar, { type CalendarView } from "./CalendarToolbar";
 import PeopleSidebar from "./PeopleSidebar";
@@ -312,6 +314,37 @@ export default function Calendar({
     setReload((n) => n + 1);
   }, []);
 
+  // Espelha no cache (todas as janelas) E no detalhe aberto os status recém-lidos
+  // do Google (ou a própria resposta enviada). A action JÁ gravou no banco; sem
+  // isto, fechar+reabrir o modal na MESMA sessão traz o valor velho do cache e o
+  // usuário precisa "Atualizar status" de novo. Não fecha o modal (ao contrário
+  // do invalidate) — o quadro de status continua visível com o valor fresco.
+  const applyResponses = useCallback(
+    (meetingId: string, patch: ResponsesPatch) => {
+      const apply = (item: GridItem): GridItem => {
+        if (isImported(item) || item.id !== meetingId) return item;
+        return {
+          ...item,
+          roomResponse: patch.room !== undefined ? patch.room : item.roomResponse,
+          responsesSyncedAt: patch.syncedAt ?? item.responsesSyncedAt,
+          participants: item.participants.map((p) =>
+            patch.byUser.has(p.id)
+              ? { ...p, response: patch.byUser.get(p.id) ?? null }
+              : p
+          ),
+        };
+      };
+      setCache((prev) => {
+        const next = new Map<string, GridItem[]>();
+        for (const [k, rows] of Array.from(prev.entries()))
+          next.set(k, rows.map(apply));
+        return next;
+      });
+      setDetail((d) => (d && !isImported(d) && d.id === meetingId ? apply(d) : d));
+    },
+    []
+  );
+
   // Sincroniza a agenda do Google do PRÓPRIO usuário (só o token dele é
   // alcançável — ver google-import-actions). No sucesso, recarrega o período para
   // os importados aparecerem/atualizarem. `silent` (auto-sync no load) não mostra
@@ -381,6 +414,7 @@ export default function Calendar({
         title: meeting.title,
         description: meeting.description ?? "",
         type: meeting.type,
+        room: meeting.room,
         startISO,
         endISO,
         participantIds: meeting.participants.map((p) => p.id),
@@ -611,6 +645,7 @@ export default function Calendar({
               showCompany
               ctx={ctx}
               onResult={handleResult}
+              onResponses={applyResponses}
             />
           ))}
       </Modal>

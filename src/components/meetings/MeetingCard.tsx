@@ -9,12 +9,17 @@ import {
   adminRemoveMeeting,
   syncMeetingToGoogle,
   setMeetingClientHidden,
+  refreshMeetingResponses,
+  respondToMeeting,
 } from "@/app/meeting-actions";
 import {
   MEETING_TYPE_LABEL,
+  MEETING_ROOM_LABEL,
+  MEETING_RESPONSE_LABEL,
   formatMeetingRange,
   type GoogleSyncStatus,
   type MeetingActionsContext,
+  type MeetingResponse,
   type MeetingRow,
 } from "@/lib/meetings";
 
@@ -25,6 +30,24 @@ const actBtn =
 const actDanger =
   "inline-flex items-center gap-1.5 rounded-lg border border-red-300/60 bg-surface px-2.5 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10";
 
+// Status recém-lidos do Google que sobem para o pai espelhar no seu cache (só o
+// calendário usa — ver Calendar.applyResponses). `byUser` = resposta por
+// participante; `room`/`syncedAt` só vêm no "Atualizar status" (no RSVP mudam só
+// a própria linha). A action JÁ gravou no banco; isto evita que fechar+reabrir o
+// modal (sem recarregar) mostre o valor velho do cache.
+export type ResponsesPatch = {
+  byUser: Map<string, MeetingResponse | null>;
+  room?: MeetingResponse | null;
+  syncedAt?: string;
+};
+
+// As três respostas que o participante pode dar (needsAction não é escolha).
+const RSVP_OPTIONS: { value: MeetingResponse; label: string }[] = [
+  { value: "accepted", label: "Aceitar" },
+  { value: "tentative", label: "Talvez" },
+  { value: "declined", label: "Recusar" },
+];
+
 // Um cartão de reunião com as AÇÕES por permissão. Só o criador edita/exclui e
 // envia ao Google; para os demais o botão fica desabilitado e EXPLICADO; o admin
 // tem "Remover do sistema" (não toca no Google) para reuniões que não são dele.
@@ -33,6 +56,7 @@ export default function MeetingCard({
   showCompany,
   ctx,
   onResult,
+  onResponses,
 }: {
   meeting: MeetingRow;
   showCompany: boolean;
@@ -40,13 +64,116 @@ export default function MeetingCard({
   // Sobe o resultado de uma ação (warning âmbar; senão o texto verde de sucesso)
   // para a lista mostrar o banner ACIMA — o cartão pode sumir no refresh.
   onResult: (warning: string | null, successText: string) => void;
+  // Sobe os status recém-lidos/enviados para o pai espelhar no cache SEM fechar o
+  // modal (só o calendário passa; a lista, que já dá router.refresh, omite).
+  onResponses?: (meetingId: string, patch: ResponsesPatch) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [confirm, setConfirm] = useState<null | "delete" | "adminRemove">(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Espelho VIVO do status dos convites depois de "Atualizar status" (Fatia B/C).
+  // O refresh não sobe via onResult (fecharia o painel do calendário); guardamos
+  // localmente para o quadro refletir na hora. A action já gravou no banco, então
+  // um reload futuro traz os mesmos valores. null = ainda usando o que veio do props.
+  const [live, setLive] = useState<null | {
+    byUser: Map<string, MeetingResponse | null>;
+    room: MeetingResponse | null;
+    syncedAt: string;
+  }>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
+
+  // RSVP do próprio participante (Fatia D). `myResp` = override otimista da
+  // própria resposta; undefined = sem override (usa o que veio do props/live).
+  const [myResp, setMyResp] = useState<MeetingResponse | null | undefined>(
+    undefined
+  );
+  const [responding, setResponding] = useState(false);
+  const [respondError, setRespondError] = useState<string | null>(null);
+
   const isCreator = m.creator.id === ctx.currentUserId;
+  const isParticipant = m.participants.some((p) => p.id === ctx.currentUserId);
+
+  // Status a exibir: a própria resposta recém-enviada (myResp) vence para o
+  // usuário atual; senão o vivo (após "Atualizar status"); senão o do props.
+  const responseFor = (userId: string): MeetingResponse | null => {
+    if (userId === ctx.currentUserId && myResp !== undefined) return myResp;
+    if (live) return live.byUser.get(userId) ?? null;
+    return m.participants.find((p) => p.id === userId)?.response ?? null;
+  };
+  const roomResponse = live ? live.room : m.roomResponse;
+  const responsesSyncedAt = live ? live.syncedAt : m.responsesSyncedAt;
+
+  // O quadro de status só faz sentido quando a reunião está no Google e há a quem
+  // responder (participantes ou sala). Só o criador consegue LER (tem o token).
+  const hasAttendees = m.participants.length > 0 || !!m.room;
+  const showStatusPanel = m.syncStatus === "sincronizado" && hasAttendees;
+  const canRefreshStatus = showStatusPanel && isCreator && ctx.googleConnected;
+
+  // Resumo por status (também serve de legenda das bolinhas). Ignora null (não
+  // lido). Ordem fixa: confirmou, recusou, talvez, sem resposta.
+  const tally: Record<MeetingResponse, number> = {
+    accepted: 0,
+    declined: 0,
+    tentative: 0,
+    needsAction: 0,
+  };
+  for (const p of m.participants) {
+    const r = responseFor(p.id);
+    if (r) tally[r] += 1;
+  }
+  if (m.room && roomResponse) tally[roomResponse] += 1;
+  const summaryEntries = (
+    ["accepted", "declined", "tentative", "needsAction"] as MeetingResponse[]
+  )
+    .filter((r) => tally[r] > 0)
+    .map((r) => [r, tally[r]] as const);
+  const anyRead = summaryEntries.length > 0;
+
+  async function onRefreshStatus() {
+    setRefreshing(true);
+    setStatusError(null);
+    try {
+      const res = await refreshMeetingResponses(m.id);
+      if (!res.ok) {
+        setStatusError(res.error);
+        return;
+      }
+      const byUser = new Map(res.participants.map((p) => [p.userId, p.response]));
+      setLive({ byUser, room: res.room, syncedAt: res.syncedAt });
+      // O refresh leu o Google de novo — a fonte da verdade. Zera o override
+      // otimista para o valor lido valer.
+      setMyResp(undefined);
+      // Espelha no cache do pai para o valor sobreviver ao fechar/reabrir o modal
+      // (o banco já foi gravado pela action; isto só sincroniza o cliente).
+      onResponses?.(m.id, { byUser, room: res.room, syncedAt: res.syncedAt });
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  async function onRespond(value: MeetingResponse) {
+    setResponding(true);
+    setRespondError(null);
+    try {
+      const res = await respondToMeeting(m.id, value);
+      if (!res.ok) {
+        setRespondError(res.error);
+        return;
+      }
+      setMyResp(res.response);
+      // Mesma ideia do refresh: espelha a própria resposta no cache do pai para
+      // não sumir ao reabrir o modal (a action já gravou pelo set_my_meeting_response).
+      onResponses?.(m.id, {
+        byUser: new Map([[ctx.currentUserId, res.response]]),
+      });
+    } finally {
+      setResponding(false);
+    }
+  }
+
   const canSyncLater =
     isCreator &&
     ctx.googleConnected &&
@@ -123,6 +250,7 @@ export default function MeetingCard({
       title: m.title,
       description: m.description ?? "",
       type: m.type,
+      room: m.room,
       startISO: m.startsAt,
       endISO: m.endsAt,
       participantIds: m.participants.map((p) => p.id),
@@ -158,6 +286,7 @@ export default function MeetingCard({
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <TypeBadge type={m.type} />
+          {m.room && <RoomBadge room={m.room} response={roomResponse} />}
           <SyncBadge status={m.syncStatus} error={m.syncError} />
         </div>
       </div>
@@ -180,15 +309,20 @@ export default function MeetingCard({
             <span className="inline-flex items-center gap-1.5">
               <span className="text-xs text-fg-subtle">Participantes:</span>
               <span className="flex flex-wrap items-center gap-1.5">
-                {m.participants.map((p) => (
-                  <span
-                    key={p.id}
-                    className="inline-flex items-center gap-1 rounded-full border border-line bg-surface-2 py-0.5 pl-0.5 pr-2 text-xs text-fg-muted"
-                  >
-                    <Avatar name={p.name} url={p.avatarUrl} size={18} />
-                    {p.name}
-                  </span>
-                ))}
+                {m.participants.map((p) => {
+                  const resp = responseFor(p.id);
+                  return (
+                    <span
+                      key={p.id}
+                      title={resp ? MEETING_RESPONSE_LABEL[resp] : undefined}
+                      className="inline-flex items-center gap-1 rounded-full border border-line bg-surface-2 py-0.5 pl-0.5 pr-2 text-xs text-fg-muted"
+                    >
+                      <Avatar name={p.name} url={p.avatarUrl} size={18} />
+                      {p.name}
+                      <StatusDot response={resp} />
+                    </span>
+                  );
+                })}
               </span>
             </span>
           )}
@@ -222,6 +356,106 @@ export default function MeetingCard({
           </div>
         )}
       </div>
+
+      {/* Quadro de status dos convites (Fatia B/C). Google é a verdade; aqui é o
+          espelho lido por quem criou. As bolinhas nos participantes acima dão o
+          detalhe por pessoa; esta linha resume e traz o "atualizar". */}
+      {showStatusPanel && (
+        <div className="mt-3 rounded-lg border border-line bg-surface-2/40 px-2.5 py-1.5">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
+              {anyRead ? (
+                summaryEntries.map(([r, count]) => (
+                  <span key={r} className="inline-flex items-center gap-1">
+                    <StatusDot response={r} />
+                    {MEETING_RESPONSE_LABEL[r]}:{" "}
+                    <span className="font-medium text-fg">{count}</span>
+                  </span>
+                ))
+              ) : (
+                <span className="text-fg-subtle">
+                  Status dos convites ainda não lido do Google.
+                </span>
+              )}
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              {responsesSyncedAt && (
+                <span className="text-xs text-fg-subtle">
+                  lido {formatSyncedAgo(responsesSyncedAt)}
+                </span>
+              )}
+              {canRefreshStatus ? (
+                <button
+                  type="button"
+                  onClick={onRefreshStatus}
+                  disabled={refreshing}
+                  className="rounded text-xs font-medium text-risd transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {refreshing ? "Lendo…" : "Atualizar status"}
+                </button>
+              ) : isCreator ? (
+                <span className="text-xs text-fg-subtle">
+                  Conecte o Google no seu perfil para ler o status.
+                </span>
+              ) : (
+                <span
+                  className="text-xs text-fg-subtle"
+                  title="Só quem criou tem o acesso à agenda onde o evento vive."
+                >
+                  Só {m.creator.name} atualiza o status.
+                </span>
+              )}
+            </div>
+          </div>
+          {statusError && (
+            <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+              {statusError}
+            </p>
+          )}
+
+          {/* RSVP do próprio participante (Fatia D). O criador é organizador, não
+              responde. Sem Google conectado, cai no convite original. */}
+          {isParticipant &&
+            (ctx.googleConnected ? (
+              <div className="mt-1.5 flex flex-wrap items-center gap-2 border-t border-line pt-1.5">
+                <span className="text-xs text-fg-subtle">Sua resposta:</span>
+                {RSVP_OPTIONS.map((opt) => {
+                  const active = responseFor(ctx.currentUserId) === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => onRespond(opt.value)}
+                      disabled={responding}
+                      aria-pressed={active}
+                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                        active
+                          ? "border-risd/50 bg-brand-tint text-risd"
+                          : "border-line bg-surface text-fg-muted hover:border-risd/40 hover:text-fg"
+                      }`}
+                    >
+                      <StatusDot response={opt.value} />
+                      {opt.label}
+                    </button>
+                  );
+                })}
+                {responding && (
+                  <span className="text-xs text-fg-subtle">enviando…</span>
+                )}
+              </div>
+            ) : (
+              <p className="mt-1.5 border-t border-line pt-1.5 text-xs text-fg-subtle">
+                Conecte sua conta Google no seu perfil para aceitar ou recusar
+                aqui — ou responda pelo convite no Google Agenda.
+              </p>
+            ))}
+          {respondError && (
+            <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+              {respondError}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Visibilidade ao cliente (discreto): a equipe vê que o TÍTULO desta
           reunião é lido pelo cliente no portal, e alterna. */}
@@ -398,6 +632,75 @@ function TypeBadge({ type }: { type: MeetingRow["type"] }) {
       {MEETING_TYPE_LABEL[type]}
     </span>
   );
+}
+
+// Sala reservada (Fatia A). Só aparece em presencial no escritório com sala
+// escolhida — um selo discreto, com ícone de porta/lugar. A bolinha (Fatia B/C)
+// mostra se a sala aceitou o convite (reserva confirmada), recusou (ocupada) etc.
+function RoomBadge({
+  room,
+  response,
+}: {
+  room: NonNullable<MeetingRow["room"]>;
+  response: MeetingResponse | null;
+}) {
+  return (
+    <span
+      title={response ? `Sala — ${MEETING_RESPONSE_LABEL[response]}` : undefined}
+      className="inline-flex items-center gap-1 rounded-full border border-line bg-surface-2 px-2 py-0.5 text-xs font-medium text-fg-muted"
+    >
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M3 21h18" />
+        <path d="M5 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16" />
+        <path d="M16 8h3a2 2 0 0 1 2 2v11" />
+        <path d="M11 12h.01" />
+      </svg>
+      {MEETING_ROOM_LABEL[room]}
+      <StatusDot response={response} />
+    </span>
+  );
+}
+
+// Bolinha colorida do status de resposta. null (não lido / fora do evento) não
+// desenha nada — assim "ainda não lido" difere de "lido e sem resposta" (cinza).
+const STATUS_TONE: Record<MeetingResponse, string> = {
+  accepted: "bg-emerald-500",
+  declined: "bg-red-500",
+  tentative: "bg-amber-500",
+  needsAction: "bg-slate-400 dark:bg-slate-500",
+};
+
+function StatusDot({ response }: { response: MeetingResponse | null }) {
+  if (!response) return null;
+  return (
+    <span
+      className={`inline-block h-2 w-2 shrink-0 rounded-full ${STATUS_TONE[response]}`}
+      aria-hidden="true"
+    />
+  );
+}
+
+// "agora" / "há 3 min" / "há 2 h" / "há 3 d" — frescor do espelho de status.
+function formatSyncedAgo(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(diffMs) || diffMs < 0) return "agora";
+  const min = Math.floor(diffMs / 60000);
+  if (min < 1) return "agora";
+  if (min < 60) return `há ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `há ${h} h`;
+  const d = Math.floor(h / 24);
+  return `há ${d} d`;
 }
 
 // Estado da sincronização com o Google. É informativo — a reunião existe no

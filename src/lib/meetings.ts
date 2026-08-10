@@ -28,7 +28,43 @@ export const MEETING_TYPE_OPTIONS: { value: MeetingType; label: string }[] = [
   { value: "presencial_cliente", label: "Presencial · no cliente" },
 ];
 
-export type MeetingPerson = { id: string; name: string; avatarUrl: string | null };
+// Salas do escritório (Fatia A). Só se aplicam a `presencial_escritorio`. O
+// endereço de agenda de cada sala é config de servidor (src/lib/rooms.ts) — aqui
+// mora só o rótulo, que o navegador precisa exibir.
+export type MeetingRoom = "grande" | "pequena";
+
+export const MEETING_ROOM_LABEL: Record<MeetingRoom, string> = {
+  grande: "Sala Grande",
+  pequena: "Sala Pequena",
+};
+
+export const MEETING_ROOM_OPTIONS: { value: MeetingRoom; label: string }[] = [
+  { value: "grande", label: "Sala Grande" },
+  { value: "pequena", label: "Sala Pequena" },
+];
+
+// Status de resposta ao convite, no vocabulário do Google (Fatia B). null =
+// ainda não lido / participante fora do evento no Google.
+export type MeetingResponse =
+  | "accepted"
+  | "declined"
+  | "tentative"
+  | "needsAction";
+
+export const MEETING_RESPONSE_LABEL: Record<MeetingResponse, string> = {
+  accepted: "Confirmou",
+  declined: "Recusou",
+  tentative: "Talvez",
+  needsAction: "Sem resposta",
+};
+
+export type MeetingPerson = {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  // Status de resposta lido do Google (espelho display-only). null = sem leitura.
+  response?: MeetingResponse | null;
+};
 
 export type MeetingRow = {
   id: string;
@@ -39,6 +75,11 @@ export type MeetingRow = {
   startsAt: string; // ISO (UTC)
   endsAt: string; // ISO (UTC)
   type: MeetingType;
+  // Sala reservada do escritório (só em presencial_escritorio); null = sem sala.
+  room: MeetingRoom | null;
+  // Espelho do responseStatus da SALA e quando o espelho foi lido (Fatia B).
+  roomResponse: MeetingResponse | null;
+  responsesSyncedAt: string | null;
   syncStatus: GoogleSyncStatus;
   syncError: string | null;
   meetLink: string | null;
@@ -187,6 +228,9 @@ type MeetingDbRow = {
   starts_at: string;
   ends_at: string;
   meeting_type: MeetingType;
+  room: MeetingRoom | null;
+  room_response: MeetingResponse | null;
+  responses_synced_at: string | null;
   created_by: string;
   meet_link: string | null;
   google_sync_status: GoogleSyncStatus;
@@ -205,10 +249,16 @@ function companyName(
 
 function person(
   id: string,
-  people: Map<string, { name: string; avatarUrl: string | null }>
+  people: Map<string, { name: string; avatarUrl: string | null }>,
+  response: MeetingResponse | null = null
 ): MeetingPerson {
   const p = people.get(id);
-  return { id, name: p?.name ?? "(sem nome)", avatarUrl: p?.avatarUrl ?? null };
+  return {
+    id,
+    name: p?.name ?? "(sem nome)",
+    avatarUrl: p?.avatarUrl ?? null,
+    response,
+  };
 }
 
 // Reuniões visíveis ao usuário (RLS: todos os internos veem todas). `companyId`
@@ -221,7 +271,7 @@ export async function loadMeetings(
   let query = supabase
     .from("meetings")
     .select(
-      "id, company_id, title, description, starts_at, ends_at, meeting_type, created_by, meet_link, google_sync_status, google_sync_error, client_hidden, company:companies(name)"
+      "id, company_id, title, description, starts_at, ends_at, meeting_type, room, room_response, responses_synced_at, created_by, meet_link, google_sync_status, google_sync_error, client_hidden, company:companies(name)"
     )
     .order("starts_at", { ascending: true });
 
@@ -237,18 +287,26 @@ export async function loadMeetings(
   const rows = data as unknown as MeetingDbRow[];
   if (rows.length === 0) return [];
 
-  // Participantes de todas as reuniões numa consulta só.
+  // Participantes de todas as reuniões numa consulta só (com o status espelhado).
   const ids = rows.map((r) => r.id);
   const { data: partData } = await supabase
     .from("meeting_participants")
-    .select("meeting_id, user_id")
+    .select("meeting_id, user_id, response")
     .in("meeting_id", ids);
-  const parts = (partData as { meeting_id: string; user_id: string }[]) ?? [];
+  const parts =
+    (partData as {
+      meeting_id: string;
+      user_id: string;
+      response: MeetingResponse | null;
+    }[]) ?? [];
 
-  const byMeeting = new Map<string, string[]>();
+  const byMeeting = new Map<
+    string,
+    { userId: string; response: MeetingResponse | null }[]
+  >();
   for (const p of parts) {
     const list = byMeeting.get(p.meeting_id) ?? [];
-    list.push(p.user_id);
+    list.push({ userId: p.user_id, response: p.response });
     byMeeting.set(p.meeting_id, list);
   }
 
@@ -268,12 +326,17 @@ export async function loadMeetings(
     startsAt: r.starts_at,
     endsAt: r.ends_at,
     type: r.meeting_type,
+    room: r.room ?? null,
+    roomResponse: r.room_response ?? null,
+    responsesSyncedAt: r.responses_synced_at ?? null,
     syncStatus: r.google_sync_status,
     syncError: r.google_sync_error,
     meetLink: r.meet_link,
     clientHidden: r.client_hidden,
     creator: person(r.created_by, people),
-    participants: (byMeeting.get(r.id) ?? []).map((uid) => person(uid, people)),
+    participants: (byMeeting.get(r.id) ?? []).map((p) =>
+      person(p.userId, people, p.response)
+    ),
   }));
 }
 

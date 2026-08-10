@@ -1955,6 +1955,102 @@
 
   ---
 
+  ## Módulo de Reuniões (Google Calendar) — Fatias 1 → D (Feito · no ar, aguardando teste no navegador)
+
+  Frente própria, documentada em detalhe em **docs/REUNIOES.md**. **O sistema é a
+  fonte da verdade** da reunião; o Google é destino/cópia — EXCETO as respostas ao
+  convite, onde o Google é a verdade e o banco guarda um espelho só-exibição. Todo o
+  módulo funciona **sem `service_role`**: o token de cada um só é alcançável por ele
+  (funções SECURITY DEFINER derivam `auth.uid()` por dentro), tokens cifrados via
+  Vault. Por isso **só quem cria** edita/exclui/lê status de uma reunião — é quem tem
+  o token da agenda onde o evento vive.
+
+  - **Fatia 1 — criar e listar:** página `/agenda` + aba "Reuniões" na central da
+    empresa. Grava no banco PRIMEIRO, depois tenta o Google; sem conta conectada ou
+    falha do Google, a reunião existe assim mesmo com `google_sync_status`/aviso
+    (nunca se perde). Cliente NÃO é convidado. Aviso de conflito (não bloqueio).
+  - **Fatia 1.1 — editar / excluir / enviar ao Google:** só o criador (demais veem
+    botão desabilitado e EXPLICADO). Admin tem só "Remover do sistema" para reunião
+    ÓRFÃ (não toca no Google). Migrations `0047` (armadilha do `INSERT ... RETURNING`
+    — ver ESPECIFICACAO §3) e `0048` (RLS criador-only + `admin_delete_meeting`).
+  - **Calendário Dia/Semana/Mês:** grade que preenche a viewport, painel de pessoas
+    retrátil, arrastar-para-reagendar (mover+redimensionar, com a mesma verificação
+    de conflito), cache por janela com pré-busca.
+  - **Fatia 2a — portal do cliente (migration `0049`):** aba "Reuniões" no portal,
+    curadoria opt-out (`client_hidden`); o cliente vê título/horário/tipo, nunca
+    participantes; importados não entram.
+  - **Fatia 2b — importação da agenda Google + conflito real (migration `0050`):**
+    `imported_google_events` (só-leitura), evento de terceiro/privado vira "Ocupado"
+    (banco esconde o título), conflito une sistema+Google, sync auto+botão. Ninguém
+    sincroniza agenda alheia.
+  - **Fatia A — reservar sala (migration `0056`):** Sala Grande/Pequena convidadas
+    como participante (agenda da sala); o accepted/declined da SALA é a reserva.
+    Endereços em `src/lib/rooms.ts` (server-only).
+  - **Fatia B — ler responseStatus (migration `0057`):** `events.get` dirigido por
+    `google_event_id` (só o criador), grava o espelho `meeting_participants.response`
+    / `meetings.room_response` / `responses_synced_at`.
+  - **Fatia C — quadro de status no cartão (sem migration):** bolinha por participante
+    + resumo + "Atualizar status" (só criador+Google conectado).
+  - **Fatia D — participante aceita/recusa dentro do CRM (migration `0058`):** write
+    no Google com o token DELE (muda só o próprio attendee), espelho pela RPC
+    `set_my_meeting_response` (só a própria linha, contorna a `mp_write` criador-only).
+
+  **Correção (bug do status que "não persistia"):** o espelho de resposta É gravado
+  no banco corretamente — o sumiço ao reabrir o evento era só de CACHE do calendário
+  (o valor lido/enviado ficava no estado local do cartão, nunca no cache do pai, então
+  fechar+reabrir remontava com props velhos). Corrigido com o callback `onResponses`
+  no `MeetingCard` + `applyResponses` no `Calendar`, que espelha no cache e no detalhe
+  aberto sem fechar o modal; `MeetingList` (central) omite (já dá `router.refresh`).
+  Sem migration — só cliente. Ver REUNIOES.md.
+
+  **Falta:** teste ponta-a-ponta das Fatias A–D com a agenda Google real; multi-agenda
+  (hoje só a primária). Ver [[commit-so-apos-teste]]: commit+push só após validar no
+  navegador.
+
+  ---
+
+  ## Grupos de empresas na tela do admin (estilo Monday) — Feito · no ar
+
+  Em `/admin/empresas`, a lista de empresas passa a ser **agrupada em seções
+  coloridas, retráteis**, no espírito dos grupos do Monday. Grupo é **global** e
+  **admin-only**, e representa ESTADO DO CONTRATO (Ativos, Pausados, Cancelados, B.O,
+  Aguardando Renovação). O sistema NÃO cria grupo padrão nem faz backfill: toda
+  empresa nasce **Sem grupo** (o Mauricio cria os grupos dele pela tela).
+
+  - **Modelo (migration `0059_company_groups`):** tabela `company_groups` (nome 1–40
+    único case-insensitive, cor hex `#RRGGBB` livre, `position`) e `companies.group_id`
+    com `on delete set null` (excluir grupo devolve as empresas para "Sem grupo", não
+    as apaga). **UM grupo por empresa hoje, com PORTA ABERTA para M:N:** a resolução
+    "empresa → grupo" é centralizada em `src/lib/company-groups.ts`
+    (`resolveCompanyGroupId`) — nenhuma tela lê `group_id` direto —, então um dia
+    basta trocar esse helper por uma tabela de junção `company_group_members`.
+  - **Segurança:** RLS `cg_*` toda `is_admin()`; a escrita de `companies.group_id` usa
+    a policy de UPDATE de companies que JÁ existia (não afrouxada) — consultor/
+    colaborador não movem empresa nem por query direta (confirmado no banco). Portal
+    do cliente não vê grupo. RPCs `set_companies_group` (UPDATE em lote, devolve nº de
+    linhas afetadas para a tela avisar/reverter se parcial) e `reorder_company_groups`,
+    ambas SECURITY INVOKER.
+  - **Mover empresas — dois caminhos:** (1) **seleção múltipla** (obrigatório, funciona
+    no celular e por teclado): checkbox por linha + no cabeçalho do grupo, com barra
+    fixa "N selecionadas / Transferir para grupo… / Limpar"; (2) **arrastar-soltar**
+    (atalho): alça de grip dedicada na linha (não a linha inteira; não é `<a>` por causa
+    do `-webkit-user-drag:none` do §32.2), alvo = a seção do grupo, HTML5 nativo SEM
+    biblioteca. Ambos usam a mesma RPC, com movimento OTIMISTA revertido se falhar ou
+    mover menos que o pedido.
+  - **Regra de uso da cor (obrigatória):** a cor do grupo pinta APENAS barra lateral,
+    bolinha e fundo do cabeçalho em baixa opacidade; o texto usa sempre as cores de
+    tema. Assim qualquer hex do seletor livre continua legível no claro e no escuro,
+    sem cálculo de contraste. Presets da paleta Monvatti + tons de estado.
+  - **Composição:** busca/filtros agem sobre TODAS as empresas antes do corte (padrão
+    `/acompanhamento`); grupos sem resultado somem na busca; carga com `.limit()` e
+    aviso de corte. Recolher/expandir persiste por usuário em localStorage.
+  - **Decisões conscientes:** sem ordenação manual dentro do grupo; sem grupo por
+    usuário; sem auditoria de movimentação. Testado no navegador (grupos/empresas de
+    teste, removidos depois); DnD validado por evento sintético (o arrasto de mouse
+    não é automatizável). Commit `98f2943`.
+
+  ---
+
   # ITENS ARQUIVADOS E DECISÕES EM ABERTO
 
   Registro do que foi CONSCIENTEMENTE deixado de lado, para não parecer

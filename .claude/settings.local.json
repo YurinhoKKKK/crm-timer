@@ -172,7 +172,9 @@
       "Bash(node -e \"const p=require\\('./node_modules/@supabase/supabase-js/package.json'\\); console.log\\('main:',p.main,'| module:',p.module\\)\")",
       "Bash(rm -f \"C:/Users/renat/AppData/Local/Temp/claude/C--Users-renat-OneDrive-Desktop-crm-timer/7a55a40e-357a-4649-aaea-5e52c1844895/scratchpad/update-email.mjs\")",
       "Bash(NODE_PATH=\"C:/Users/renat/OneDrive/Desktop/crm-timer/node_modules\" node update-email.cjs)",
-      "Bash(NODE_PATH=\"C:/Users/renat/OneDrive/Desktop/crm-timer/node_modules\" node update-email.cjs \"C:/Users/renat/Downloads/key.txt\")"
+      "Bash(NODE_PATH=\"C:/Users/renat/OneDrive/Desktop/crm-timer/node_modules\" node update-email.cjs \"C:/Users/renat/Downloads/key.txt\")",
+      "WebFetch(domain:issuetracker.google.com)",
+      "Bash(echo \"EXIT: $?\")"
     ]
   }
 }

@@ -10,9 +10,11 @@ import {
 } from "@/app/meeting-actions";
 import {
   MEETING_TYPE_OPTIONS,
+  MEETING_ROOM_OPTIONS,
   describeConflict,
   type ConflictLike,
   type DirectoryUser,
+  type MeetingRoom,
   type MeetingType,
   type ReachableCompany,
 } from "@/lib/meetings";
@@ -69,6 +71,7 @@ export type MeetingInitial = {
   title: string;
   description: string;
   type: MeetingType;
+  room: MeetingRoom | null;
   startISO: string; // UTC
   endISO: string; // UTC
   participantIds: string[];
@@ -123,6 +126,10 @@ export default function MeetingForm({
   const [title, setTitle] = useState(initial?.title ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [type, setType] = useState<MeetingType>(initial?.type ?? "meet");
+  // Sala reservada — só se aplica a presencial no escritório. Guardamos a escolha
+  // mesmo se o tipo mudar (para restaurar ao voltar); o envio ignora fora do
+  // escritório, e o servidor normaliza de novo (fonte da verdade).
+  const [room, setRoom] = useState<MeetingRoom | null>(initial?.room ?? null);
   const [startLocal, setStartLocal] = useState(startInit);
   const [endLocal, setEndLocal] = useState(endInit);
   const [participants, setParticipants] = useState<Set<string>>(
@@ -195,6 +202,7 @@ export default function MeetingForm({
         title,
         description,
         type,
+        room: type === "presencial_escritorio" ? room : null,
         startISO,
         endISO,
         participantIds: Array.from(participants),
@@ -318,6 +326,49 @@ export default function MeetingForm({
           </p>
         )}
       </fieldset>
+
+      {/* Sala do escritório — só faz sentido em presencial no escritório. A sala
+          é convidada como participante no Google: se estiver livre, ela aceita
+          (reserva feita); se já estiver ocupada, recusa — e isso aparece depois
+          no quadro de participantes. */}
+      {type === "presencial_escritorio" && (
+        <fieldset>
+          <legend className={labelClass}>
+            Sala <span className={hintClass}>(opcional)</span>
+          </legend>
+          <div className="flex flex-wrap gap-2">
+            <label className={chipClass(room === null)}>
+              <input
+                type="radio"
+                name="meeting-room"
+                className="accent-risd"
+                checked={room === null}
+                onChange={() => setRoom(null)}
+              />
+              Sem sala
+            </label>
+            {MEETING_ROOM_OPTIONS.map((opt) => {
+              const active = room === opt.value;
+              return (
+                <label key={opt.value} className={chipClass(active)}>
+                  <input
+                    type="radio"
+                    name="meeting-room"
+                    className="accent-risd"
+                    checked={active}
+                    onChange={() => setRoom(opt.value)}
+                  />
+                  {opt.label}
+                </label>
+              );
+            })}
+          </div>
+          <p className="mt-1.5 text-xs text-fg-subtle">
+            A sala é reservada na agenda do escritório ao salvar. Se já estiver
+            ocupada no horário, o Google recusa a reserva.
+          </p>
+        </fieldset>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>

@@ -69,10 +69,149 @@ export type Database = {
           },
         ]
       }
+      client_portal_access: {
+        Row: {
+          active: boolean
+          company_id: string
+          created_at: string
+          created_by: string | null
+          failed_attempts: number
+          locked_until: string | null
+          password_generated: boolean
+          password_hash: string
+          password_set_at: string | null
+          password_set_by: string | null
+          token: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          failed_attempts?: number
+          locked_until?: string | null
+          password_generated?: boolean
+          password_hash: string
+          password_set_at?: string | null
+          password_set_by?: string | null
+          token: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          failed_attempts?: number
+          locked_until?: string | null
+          password_generated?: boolean
+          password_hash?: string
+          password_set_at?: string | null
+          password_set_by?: string | null
+          token?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_portal_access_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_portal_access_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_portal_access_password_set_by_fkey"
+            columns: ["password_set_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_portal_audit: {
+        Row: {
+          action: string
+          actor_id: string | null
+          company_id: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          company_id: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          company_id?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_portal_audit_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_portal_audit_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_portal_sessions: {
+        Row: {
+          company_id: string
+          created_at: string
+          expires_at: string
+          id: string
+          secret_hash: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          secret_hash: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          secret_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_portal_sessions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       companies: {
         Row: {
           created_at: string
           created_by: string | null
+          group_id: string | null
           id: string
           name: string
           updated_at: string
@@ -82,6 +221,7 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by?: string | null
+          group_id?: string | null
           id?: string
           name: string
           updated_at?: string
@@ -91,6 +231,7 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string | null
+          group_id?: string | null
           id?: string
           name?: string
           updated_at?: string
@@ -103,6 +244,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "companies_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "company_groups"
             referencedColumns: ["id"]
           },
         ]
@@ -140,6 +288,41 @@ export type Database = {
           },
         ]
       }
+      company_groups: {
+        Row: {
+          color: string
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          position: number
+        }
+        Insert: {
+          color: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          position: number
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_groups_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       company_labels: {
         Row: {
           company_id: string
@@ -169,6 +352,90 @@ export type Database = {
             columns: ["label_id"]
             isOneToOne: false
             referencedRelation: "labels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      company_message_reads: {
+        Row: {
+          company_id: string
+          last_read_at: string
+          user_id: string
+        }
+        Insert: {
+          company_id: string
+          last_read_at?: string
+          user_id: string
+        }
+        Update: {
+          company_id?: string
+          last_read_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_message_reads_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_message_reads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      company_messages: {
+        Row: {
+          author_id: string | null
+          author_type: string
+          body: string
+          client_ip_hash: string | null
+          client_session_id: string | null
+          client_user_agent: string | null
+          company_id: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          author_id?: string | null
+          author_type: string
+          body: string
+          client_ip_hash?: string | null
+          client_session_id?: string | null
+          client_user_agent?: string | null
+          company_id: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          author_id?: string | null
+          author_type?: string
+          body?: string
+          client_ip_hash?: string | null
+          client_session_id?: string | null
+          client_user_agent?: string | null
+          company_id?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_messages_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_messages_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]
@@ -209,13 +476,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "company_notes_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "company_notes_author_id_fkey"
             columns: ["author_id"]
             isOneToOne: false
@@ -223,8 +483,170 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "company_notes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "company_notes_updated_by_fkey"
             columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      google_accounts: {
+        Row: {
+          access_token_enc: string
+          connected_at: string
+          google_email: string | null
+          refresh_token_enc: string | null
+          scope: string
+          token_expiry: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token_enc: string
+          connected_at?: string
+          google_email?: string | null
+          refresh_token_enc?: string | null
+          scope: string
+          token_expiry: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token_enc?: string
+          connected_at?: string
+          google_email?: string | null
+          refresh_token_enc?: string | null
+          scope?: string
+          token_expiry?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "google_accounts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      google_calendar_audit: {
+        Row: {
+          action: string
+          created_at: string
+          detail: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          detail?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          detail?: string | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "google_calendar_audit_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      google_calendar_import_state: {
+        Row: {
+          last_full_sync_at: string | null
+          last_synced_at: string | null
+          sync_token: string | null
+          updated_at: string
+          user_id: string
+          window_end: string | null
+          window_start: string | null
+        }
+        Insert: {
+          last_full_sync_at?: string | null
+          last_synced_at?: string | null
+          sync_token?: string | null
+          updated_at?: string
+          user_id: string
+          window_end?: string | null
+          window_start?: string | null
+        }
+        Update: {
+          last_full_sync_at?: string | null
+          last_synced_at?: string | null
+          sync_token?: string | null
+          updated_at?: string
+          user_id?: string
+          window_end?: string | null
+          window_start?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "google_calendar_import_state_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      imported_google_events: {
+        Row: {
+          ends_at: string
+          google_calendar_id: string
+          google_event_id: string
+          id: string
+          is_private: boolean
+          starts_at: string
+          title: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ends_at: string
+          google_calendar_id?: string
+          google_event_id: string
+          id?: string
+          is_private?: boolean
+          starts_at: string
+          title?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ends_at?: string
+          google_calendar_id?: string
+          google_event_id?: string
+          id?: string
+          is_private?: boolean
+          starts_at?: string
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "imported_google_events_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -346,52 +768,75 @@ export type Database = {
           },
         ]
       }
-      listing_validations: {
+      listing_validation_reads: {
         Row: {
-          id: string
-          listing_result_id: string
-          company_id: string
-          event_type: string
-          comment: string | null
-          author_type: string
-          author_id: string | null
-          created_at: string
-          client_session_id: string | null
-          client_ip_hash: string | null
-          client_user_agent: string | null
+          last_read_at: string
+          user_id: string
         }
         Insert: {
-          id?: string
-          listing_result_id: string
-          company_id: string
-          event_type: string
-          comment?: string | null
-          author_type: string
-          author_id?: string | null
-          created_at?: string
-          client_session_id?: string | null
-          client_ip_hash?: string | null
-          client_user_agent?: string | null
+          last_read_at?: string
+          user_id: string
         }
         Update: {
-          id?: string
-          listing_result_id?: string
-          company_id?: string
-          event_type?: string
-          comment?: string | null
-          author_type?: string
-          author_id?: string | null
-          created_at?: string
-          client_session_id?: string | null
-          client_ip_hash?: string | null
-          client_user_agent?: string | null
+          last_read_at?: string
+          user_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "listing_validations_listing_result_id_fkey"
-            columns: ["listing_result_id"]
+            foreignKeyName: "listing_validation_reads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      listing_validations: {
+        Row: {
+          author_id: string | null
+          author_type: string
+          client_ip_hash: string | null
+          client_session_id: string | null
+          client_user_agent: string | null
+          comment: string | null
+          company_id: string
+          created_at: string
+          event_type: string
+          id: string
+          listing_result_id: string
+        }
+        Insert: {
+          author_id?: string | null
+          author_type: string
+          client_ip_hash?: string | null
+          client_session_id?: string | null
+          client_user_agent?: string | null
+          comment?: string | null
+          company_id: string
+          created_at?: string
+          event_type: string
+          id?: string
+          listing_result_id: string
+        }
+        Update: {
+          author_id?: string | null
+          author_type?: string
+          client_ip_hash?: string | null
+          client_session_id?: string | null
+          client_user_agent?: string | null
+          comment?: string | null
+          company_id?: string
+          created_at?: string
+          event_type?: string
+          id?: string
+          listing_result_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listing_validations_author_id_fkey"
+            columns: ["author_id"]
             isOneToOne: false
-            referencedRelation: "listing_results"
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -401,22 +846,128 @@ export type Database = {
             referencedRelation: "companies"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "listing_validations_listing_result_id_fkey"
+            columns: ["listing_result_id"]
+            isOneToOne: false
+            referencedRelation: "listing_results"
+            referencedColumns: ["id"]
+          },
         ]
       }
-      listing_validation_reads: {
+      meeting_participants: {
         Row: {
+          meeting_id: string
+          response: string | null
           user_id: string
-          last_read_at: string
         }
         Insert: {
+          meeting_id: string
+          response?: string | null
           user_id: string
-          last_read_at?: string
         }
         Update: {
+          meeting_id?: string
+          response?: string | null
           user_id?: string
-          last_read_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "meeting_participants_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_participants_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meetings: {
+        Row: {
+          client_hidden: boolean
+          company_id: string
+          created_at: string
+          created_by: string
+          description: string | null
+          ends_at: string
+          google_calendar_id: string | null
+          google_event_id: string | null
+          google_sync_error: string | null
+          google_sync_status: string
+          id: string
+          meet_link: string | null
+          meeting_type: string
+          responses_synced_at: string | null
+          room: string | null
+          room_response: string | null
+          starts_at: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          client_hidden?: boolean
+          company_id: string
+          created_at?: string
+          created_by: string
+          description?: string | null
+          ends_at: string
+          google_calendar_id?: string | null
+          google_event_id?: string | null
+          google_sync_error?: string | null
+          google_sync_status?: string
+          id?: string
+          meet_link?: string | null
+          meeting_type?: string
+          responses_synced_at?: string | null
+          room?: string | null
+          room_response?: string | null
+          starts_at: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          client_hidden?: boolean
+          company_id?: string
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          ends_at?: string
+          google_calendar_id?: string | null
+          google_event_id?: string | null
+          google_sync_error?: string | null
+          google_sync_status?: string
+          id?: string
+          meet_link?: string | null
+          meeting_type?: string
+          responses_synced_at?: string | null
+          room?: string | null
+          room_response?: string | null
+          starts_at?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meetings_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meetings_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -498,8 +1049,114 @@ export type Database = {
           },
         ]
       }
+      support_ticket_replies: {
+        Row: {
+          attachments: Json
+          author_id: string
+          body_html: string
+          created_at: string
+          edited_at: string | null
+          id: string
+          ticket_id: string
+        }
+        Insert: {
+          attachments?: Json
+          author_id: string
+          body_html: string
+          created_at?: string
+          edited_at?: string | null
+          id?: string
+          ticket_id: string
+        }
+        Update: {
+          attachments?: Json
+          author_id?: string
+          body_html?: string
+          created_at?: string
+          edited_at?: string | null
+          id?: string
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_ticket_replies_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_ticket_replies_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "support_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_tickets: {
+        Row: {
+          attachments: Json
+          context_html: string
+          created_at: string
+          created_by: string
+          finished_at: string | null
+          id: string
+          issue_type: Database["public"]["Enums"]["ticket_issue_type"]
+          status: Database["public"]["Enums"]["ticket_status"]
+          title: string
+          updated_at: string | null
+          updated_by: string | null
+          urgency: Database["public"]["Enums"]["ticket_urgency"]
+        }
+        Insert: {
+          attachments?: Json
+          context_html: string
+          created_at?: string
+          created_by: string
+          finished_at?: string | null
+          id?: string
+          issue_type: Database["public"]["Enums"]["ticket_issue_type"]
+          status?: Database["public"]["Enums"]["ticket_status"]
+          title: string
+          updated_at?: string | null
+          updated_by?: string | null
+          urgency: Database["public"]["Enums"]["ticket_urgency"]
+        }
+        Update: {
+          attachments?: Json
+          context_html?: string
+          created_at?: string
+          created_by?: string
+          finished_at?: string | null
+          id?: string
+          issue_type?: Database["public"]["Enums"]["ticket_issue_type"]
+          status?: Database["public"]["Enums"]["ticket_status"]
+          title?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          urgency?: Database["public"]["Enums"]["ticket_urgency"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_tickets_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_tickets_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_instances: {
         Row: {
+          client_hidden: boolean
           collaborator_id: string
           company_id: string
           completion_note: string | null
@@ -518,6 +1175,7 @@ export type Database = {
           total_seconds: number
         }
         Insert: {
+          client_hidden?: boolean
           collaborator_id: string
           company_id: string
           completion_note?: string | null
@@ -536,6 +1194,7 @@ export type Database = {
           total_seconds?: number
         }
         Update: {
+          client_hidden?: boolean
           collaborator_id?: string
           company_id?: string
           completion_note?: string | null
@@ -771,9 +1430,135 @@ export type Database = {
         Args: { p_new_seconds: number; p_reason?: string; p_task: string }
         Returns: number
       }
+      admin_delete_meeting: { Args: { p_meeting: string }; Returns: undefined }
       auth_role: {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
+      }
+      client_followup: {
+        Args: { p_desc?: boolean; p_period_days?: number }
+        Returns: {
+          company_id: string
+          company_name: string
+          consultants: Json
+          days_since: number
+          last_contact_at: string
+          last_contact_kind: string
+          next_meeting_at: string
+          period_listings: number
+          period_meetings: number
+          period_notes: number
+          period_readjusts: number
+          period_tasks: number
+        }[]
+      }
+      client_portal_admin_view: { Args: { p_company: string }; Returns: Json }
+      client_portal_can_preview: {
+        Args: { p_company: string }
+        Returns: boolean
+      }
+      client_portal_data: {
+        Args: { p_session: string; p_token: string }
+        Returns: Json
+      }
+      client_portal_gen_password: { Args: never; Returns: string }
+      client_portal_listing_validate: {
+        Args: {
+          p_comment?: string
+          p_event_type: string
+          p_ip?: string
+          p_listing_result: string
+          p_session: string
+          p_token: string
+          p_user_agent?: string
+        }
+        Returns: Json
+      }
+      client_portal_login: {
+        Args: { p_password: string; p_token: string }
+        Returns: {
+          result: string
+          secret: string
+        }[]
+      }
+      client_portal_meetings: {
+        Args: {
+          p_limit?: number
+          p_offset?: number
+          p_session: string
+          p_token: string
+        }
+        Returns: Json
+      }
+      client_portal_meetings_payload: {
+        Args: { p_company: string; p_limit: number; p_offset: number }
+        Returns: Json
+      }
+      client_portal_message_send: {
+        Args: {
+          p_body: string
+          p_ip?: string
+          p_session: string
+          p_token: string
+          p_user_agent?: string
+        }
+        Returns: Json
+      }
+      client_portal_messages: {
+        Args: {
+          p_limit?: number
+          p_offset?: number
+          p_session: string
+          p_token: string
+        }
+        Returns: Json
+      }
+      client_portal_messages_since: {
+        Args: { p_after: string; p_session: string; p_token: string }
+        Returns: Json
+      }
+      client_portal_payload: { Args: { p_company: string }; Returns: Json }
+      client_portal_preview: { Args: { p_company: string }; Returns: Json }
+      client_portal_preview_meetings: {
+        Args: { p_company: string; p_limit?: number; p_offset?: number }
+        Returns: Json
+      }
+      client_portal_preview_messages: {
+        Args: { p_company: string; p_limit?: number; p_offset?: number }
+        Returns: Json
+      }
+      client_portal_preview_progress: {
+        Args: { p_company: string; p_limit?: number; p_offset?: number }
+        Returns: Json
+      }
+      client_portal_progress: {
+        Args: {
+          p_limit?: number
+          p_offset?: number
+          p_session: string
+          p_token: string
+        }
+        Returns: Json
+      }
+      client_portal_progress_payload: {
+        Args: { p_company: string; p_limit: number; p_offset: number }
+        Returns: Json
+      }
+      client_portal_revoke: { Args: { p_company: string }; Returns: undefined }
+      client_portal_rotate: { Args: { p_company: string }; Returns: string }
+      client_portal_session_company: {
+        Args: { p_session: string; p_token: string }
+        Returns: string
+      }
+      client_portal_set: { Args: { p_company: string }; Returns: Json }
+      client_portal_status: { Args: { p_company: string }; Returns: Json }
+      collaborator_task_counts: {
+        Args: { p_start: string }
+        Returns: {
+          collaborator_id: string
+          done: number
+          total: number
+        }[]
       }
       company_collaborator_summary: {
         Args: { p_company_id: string; p_start: string }
@@ -801,9 +1586,29 @@ export type Database = {
           total: number
         }[]
       }
+      company_task_counts: {
+        Args: { p_collaborator?: string; p_start: string }
+        Returns: {
+          company_id: string
+          company_name: string
+          done: number
+          due_soon: number
+          overdue: number
+          pending: number
+          total: number
+        }[]
+      }
       display_names: {
         Args: { p_ids: string[] }
         Returns: {
+          id: string
+          name: string
+        }[]
+      }
+      display_profiles: {
+        Args: { p_ids: string[] }
+        Returns: {
+          avatar_path: string
           id: string
           name: string
         }[]
@@ -817,68 +1622,237 @@ export type Database = {
         Args: { p_template: string }
         Returns: boolean
       }
-      is_admin: { Args: never; Returns: boolean }
-      client_portal_listing_validate: {
+      generate_template_today_edit: {
+        Args: { p_template: string }
+        Returns: string
+      }
+      google_audit: {
+        Args: { p_action: string; p_detail?: string }
+        Returns: undefined
+      }
+      google_delete_account: {
+        Args: { p_revoked: boolean }
+        Returns: undefined
+      }
+      google_enc_key: { Args: never; Returns: string }
+      google_get_account: {
+        Args: never
+        Returns: {
+          access_token: string
+          google_email: string
+          refresh_token: string
+          scope: string
+          token_expiry: string
+        }[]
+      }
+      google_import_apply: {
+        Args: { p_deletes: string[]; p_sync_token: string; p_upserts: Json }
+        Returns: undefined
+      }
+      google_import_replace: {
         Args: {
-          p_token: string
-          p_session: string
-          p_listing_result: string
-          p_event_type: string
-          p_comment?: string
-          p_ip?: string
-          p_user_agent?: string
+          p_events: Json
+          p_sync_token: string
+          p_window_end: string
+          p_window_start: string
         }
+        Returns: undefined
+      }
+      google_update_access: {
+        Args: { p_access: string; p_expiry: string }
+        Returns: undefined
+      }
+      google_upsert_account: {
+        Args: {
+          p_access: string
+          p_email: string
+          p_expiry: string
+          p_refresh: string
+          p_scope: string
+        }
+        Returns: undefined
+      }
+      imported_events_range: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          ends_at: string
+          id: string
+          is_private: boolean
+          owner_id: string
+          starts_at: string
+          title: string
+        }[]
+      }
+      is_admin: { Args: never; Returns: boolean }
+      listing_validation_history: {
+        Args: { p_listing_result: string }
+        Returns: {
+          at: string
+          author: string
+          author_type: string
+          comment: string
+          event_type: string
+          id: string
+        }[]
+      }
+      listing_validation_queue: {
+        Args: never
+        Returns: {
+          at: string
+          brand: string
+          comment: string
+          company_id: string
+          company_name: string
+          event_type: string
+          link: string
+          listing_result_id: string
+          marketplace: Database["public"]["Enums"]["listing_marketplace"]
+          task_id: string
+        }[]
+      }
+      mark_listing_readjusted: {
+        Args: { p_comment?: string; p_listing_result: string }
         Returns: Json
       }
-      my_unread_validations: { Args: never; Returns: number }
-      my_unread_total: { Args: never; Returns: number }
       mark_validations_read: { Args: never; Returns: undefined }
-      listing_validation_queue: {
+      meeting_conflicts: {
+        Args: {
+          p_ends: string
+          p_exclude?: string
+          p_starts: string
+          p_user_ids: string[]
+        }
+        Returns: {
+          company_id: string
+          company_name: string
+          conflicting_user_ids: string[]
+          ends_at: string
+          meeting_id: string
+          starts_at: string
+          title: string
+        }[]
+      }
+      meeting_directory: {
+        Args: never
+        Returns: {
+          avatar_path: string
+          email: string
+          full_name: string
+          id: string
+          role: string
+        }[]
+      }
+      meeting_is_visible: { Args: { p_meeting: string }; Returns: boolean }
+      message_inbox: {
         Args: never
         Returns: {
           company_id: string
           company_name: string
-          listing_result_id: string
-          task_id: string
-          brand: string
-          marketplace: Database["public"]["Enums"]["listing_marketplace"]
-          link: string
-          event_type: string
-          comment: string
-          at: string
-        }[]
-      }
-      listing_validation_history: {
-        Args: { p_listing_result: string }
-        Returns: {
-          id: string
-          event_type: string
-          comment: string
-          author_type: string
-          author: string
-          at: string
+          last_at: string
+          last_author: string
+          last_author_type: string
+          last_body: string
+          unread: number
         }[]
       }
       my_collaborator_companies: { Args: never; Returns: string[] }
       my_consultant_companies: { Args: never; Returns: string[] }
+      my_listings: {
+        Args: never
+        Returns: {
+          brand: string
+          company_id: string
+          company_name: string
+          date: string
+          events: Json
+          link: string
+          listing_result_id: string
+          marketplace: Database["public"]["Enums"]["listing_marketplace"]
+          not_done_reason: string
+          task_id: string
+          task_title: string
+          validation_at: string
+          validation_by: string
+          validation_comment: string
+          validation_event: string
+        }[]
+      }
+      my_unread_messages: { Args: never; Returns: number }
+      my_unread_total: { Args: never; Returns: number }
+      my_unread_validations: { Args: never; Returns: number }
+      reorder_company_groups: { Args: { p_ids: string[] }; Returns: undefined }
+      schedule_conflicts: {
+        Args: {
+          p_ends: string
+          p_exclude?: string
+          p_starts: string
+          p_user_ids: string[]
+        }
+        Returns: {
+          company_name: string
+          conflicting_user_ids: string[]
+          ends_at: string
+          ref_id: string
+          source: string
+          starts_at: string
+          title: string
+        }[]
+      }
+      set_companies_group: {
+        Args: { p_company_ids: string[]; p_group_id: string }
+        Returns: number
+      }
+      set_meeting_client_hidden: {
+        Args: { p_hidden: boolean; p_meeting: string }
+        Returns: undefined
+      }
+      set_my_meeting_response: {
+        Args: { p_meeting: string; p_response: string }
+        Returns: undefined
+      }
+      support_ticket_counts: {
+        Args: never
+        Returns: {
+          finished_count: number
+          open_count: number
+        }[]
+      }
+      support_ticket_reply_counts: {
+        Args: never
+        Returns: {
+          reply_count: number
+          ticket_id: string
+        }[]
+      }
       sync_standard_task: { Args: { p_standard: string }; Returns: number }
       sync_template_instances: { Args: { p_template: string }; Returns: number }
       task_group_stats: {
         Args: {
-          p_company_id?: string
           p_collaborator_id?: string
+          p_company_id?: string
           p_start?: string
         }
         Returns: {
-          template_id: string
-          total: number
-          finalizadas: number
-          canceladas: number
           abertas: number
           atrasadas: number
-          seconds: number
+          canceladas: number
+          finalizadas: number
           first_date: string
           last_date: string
+          seconds: number
+          template_id: string
+          total: number
+        }[]
+      }
+      task_status_counts: {
+        Args: { p_collaborator?: string; p_start: string }
+        Returns: {
+          a_fazer: number
+          cancelada: number
+          finalizada: number
+          iniciada: number
+          overdue: number
+          total: number
         }[]
       }
       time_by_collaborator: {
@@ -923,6 +1897,21 @@ export type Database = {
       task_kind: "unica" | "diaria"
       task_status: "a_fazer" | "iniciada" | "finalizada" | "cancelada"
       template_type: "padrao" | "listagem"
+      ticket_issue_type:
+        | "integracao"
+        | "chamado"
+        | "bo_tray"
+        | "bo_ml"
+        | "bo_amazon"
+        | "bo_shopee"
+        | "bo_notas"
+      ticket_status:
+        | "em_andamento"
+        | "parado"
+        | "aguardando_cliente"
+        | "aguardando_email"
+        | "finalizado"
+      ticket_urgency: "baixa" | "media" | "alta"
       user_role: "admin" | "consultor" | "colaborador" | "pending"
     }
     CompositeTypes: {
@@ -1055,10 +2044,28 @@ export const Constants = {
       task_kind: ["unica", "diaria"],
       task_status: ["a_fazer", "iniciada", "finalizada", "cancelada"],
       template_type: ["padrao", "listagem"],
+      ticket_issue_type: [
+        "integracao",
+        "chamado",
+        "bo_tray",
+        "bo_ml",
+        "bo_amazon",
+        "bo_shopee",
+        "bo_notas",
+      ],
+      ticket_status: [
+        "em_andamento",
+        "parado",
+        "aguardando_cliente",
+        "aguardando_email",
+        "finalizado",
+      ],
+      ticket_urgency: ["baixa", "media", "alta"],
       user_role: ["admin", "consultor", "colaborador", "pending"],
     },
   },
 } as const
+
 
 // ---------------------------------------------------------------------------
 // Aliases de conveniência (derivados do schema gerado acima).

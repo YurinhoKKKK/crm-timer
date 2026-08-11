@@ -203,6 +203,11 @@ export default function NoteEditor({
   initialVisible = false,
   initialAttachments = [],
   saveLabel = "Salvar anotação",
+  // Toggle "visível ao cliente": presente por padrão (anotações). Some quando o
+  // editor é reusado num contexto 100% interno sem noção de cliente — ex.: os
+  // chamados de suporte —, sem mudar o comportamento nas anotações. `visible`
+  // fica travado em false nesse caso e é passado assim para o onSave (ignorado).
+  showClientVisibility = true,
   onSave,
   onCancel,
 }: {
@@ -211,6 +216,7 @@ export default function NoteEditor({
   initialVisible?: boolean;
   initialAttachments?: NoteAttachmentMeta[];
   saveLabel?: string;
+  showClientVisibility?: boolean;
   onSave: (
     html: string,
     visibleToClient: boolean,
@@ -898,18 +904,20 @@ export default function NoteEditor({
 
       {/* Rodapé: visibilidade + ações */}
       <div className="flex flex-wrap items-center gap-3 border-t border-line px-3 py-2.5">
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-fg">
-          <input
-            type="checkbox"
-            checked={visible}
-            onChange={(e) => setVisible(e.target.checked)}
-            className="h-4 w-4 rounded border-line text-risd focus:ring-risd"
-          />
-          Visível ao cliente
-          <span className="text-xs text-fg-subtle">
-            (desmarcado = interna, o padrão)
-          </span>
-        </label>
+        {showClientVisibility && (
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-fg">
+            <input
+              type="checkbox"
+              checked={visible}
+              onChange={(e) => setVisible(e.target.checked)}
+              className="h-4 w-4 rounded border-line text-risd focus:ring-risd"
+            />
+            Visível ao cliente
+            <span className="text-xs text-fg-subtle">
+              (desmarcado = interna, o padrão)
+            </span>
+          </label>
+        )}
 
         <div className="ml-auto flex items-center gap-2">
           <button

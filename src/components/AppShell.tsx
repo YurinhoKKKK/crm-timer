@@ -72,6 +72,12 @@ const ic = {
   pulse: (
     <path d="M3 12h4l2 7 4-14 2 7h6" />
   ),
+  headset: (
+    <>
+      <path d="M3 11h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1v-6a9 9 0 0 1 18 0v6a1 1 0 0 1-1 1h-2a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3" />
+      <path d="M21 16v2a4 4 0 0 1-4 4h-5" />
+    </>
+  ),
 };
 
 function Icon({ children }: { children: ReactNode }) {
@@ -101,6 +107,7 @@ const NAV: Record<Role, NavItem[]> = {
     { href: "/admin/tarefas", label: "Tarefas", icon: <Icon>{ic.tasks}</Icon> },
     { href: "/agenda", label: "Agenda", icon: <Icon>{ic.calendar}</Icon> },
     { href: "/admin/mensagens", label: "Mensagens", icon: <Icon>{ic.chat}</Icon>, unread: true },
+    { href: "/suporte", label: "Suporte", icon: <Icon>{ic.headset}</Icon> },
     { href: "/colaborador", label: "Meu Trabalho", icon: <Icon>{ic.clock}</Icon> },
   ],
   consultor: [
@@ -109,6 +116,7 @@ const NAV: Record<Role, NavItem[]> = {
     { href: "/consultor/tarefas", label: "Tarefas", icon: <Icon>{ic.tasks}</Icon> },
     { href: "/agenda", label: "Agenda", icon: <Icon>{ic.calendar}</Icon> },
     { href: "/consultor/mensagens", label: "Mensagens", icon: <Icon>{ic.chat}</Icon>, unread: true },
+    { href: "/suporte", label: "Suporte", icon: <Icon>{ic.headset}</Icon> },
     { href: "/colaborador", label: "Meu Trabalho", icon: <Icon>{ic.clock}</Icon> },
   ],
   colaborador: [
@@ -117,6 +125,7 @@ const NAV: Record<Role, NavItem[]> = {
     { href: "/colaborador/listagens", label: "Minhas Listagens", icon: <Icon>{ic.bag}</Icon> },
     { href: "/agenda", label: "Agenda", icon: <Icon>{ic.calendar}</Icon> },
     { href: "/colaborador/mensagens", label: "Mensagens", icon: <Icon>{ic.chat}</Icon>, unread: true },
+    { href: "/suporte", label: "Suporte", icon: <Icon>{ic.headset}</Icon> },
   ],
 };
 

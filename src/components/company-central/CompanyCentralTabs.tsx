@@ -2,16 +2,28 @@
 
 import { useState, type ReactNode } from "react";
 
-type Tab = "overview" | "meetings" | "listings" | "notes" | "messages";
+type Tab =
+  | "overview"
+  | "meetings"
+  | "revenue"
+  | "listings"
+  | "notes"
+  | "messages";
 
 // Alterna entre "Visão geral" (a central completa do passo 19), "Reuniões" (a
-// agenda desta empresa, fatia 1 do Google Calendar), "Minhas Listagens" (as
-// entregas de listagem da empresa, passo 23), "Anotações" (rich text, passo 24)
-// e "Mensagens" (conversa com o cliente, passo 31). Os conteúdos são
-// renderizados no servidor e passados como slots; aqui só escolhemos a aba.
+// agenda desta empresa, fatia 1 do Google Calendar), "Faturamento" (faturamento
+// mensal por canal, Fatia 1), "Minhas Listagens" (as entregas de listagem da
+// empresa, passo 23), "Anotações" (rich text, passo 24) e "Mensagens" (conversa
+// com o cliente, passo 31). Os conteúdos são renderizados no servidor e passados
+// como slots; aqui só escolhemos a aba.
+//
+// A aba Faturamento só existe nas páginas de admin/consultor (guardadas por
+// cargo); o colaborador nunca renderiza este componente. `revenue` é opcional
+// para não obrigar callers que não a passem.
 export default function CompanyCentralTabs({
   overview,
   meetings,
+  revenue,
   listings,
   notes,
   messages,
@@ -19,6 +31,7 @@ export default function CompanyCentralTabs({
 }: {
   overview: ReactNode;
   meetings: ReactNode;
+  revenue?: ReactNode;
   listings: ReactNode;
   notes: ReactNode;
   messages: ReactNode;
@@ -37,6 +50,9 @@ export default function CompanyCentralTabs({
   const tabs: { key: Tab; label: string; content: ReactNode }[] = [
     { key: "overview", label: "Visão geral", content: overview },
     { key: "meetings", label: "Reuniões", content: meetings },
+    ...(revenue !== undefined
+      ? [{ key: "revenue" as Tab, label: "Faturamento", content: revenue }]
+      : []),
     { key: "listings", label: "Minhas Listagens", content: listings },
     { key: "notes", label: "Anotações", content: notes },
     { key: "messages", label: "Mensagens", content: messages },

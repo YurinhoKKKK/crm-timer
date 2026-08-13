@@ -10,12 +10,18 @@ import { loadCompanyListings, loadListingValidations } from "@/lib/listing";
 import { loadCompanyNotes } from "@/lib/notes";
 import { loadCompanyMessages } from "@/lib/messages";
 import {
+  loadCompanyRevenue,
+  loadCompanyRevenueInsights,
+  parseRevenueRange,
+} from "@/lib/revenue";
+import {
   loadMeetings,
   loadMeetingDirectory,
   loadGoogleConnected,
 } from "@/lib/meetings";
 import CompanyMessages from "@/components/company-central/CompanyMessages";
 import CompanyMeetings from "@/components/company-central/CompanyMeetings";
+import CompanyRevenue from "@/components/company-central/CompanyRevenue";
 
 const PERIODS: Period[] = ["hoje", "7d", "30d", "tudo"];
 
@@ -33,10 +39,14 @@ export default async function ConsultorEmpresaPage({
   searchParams,
 }: {
   params: { companyId: string };
-  searchParams: { periodo?: string; aba?: string };
+  searchParams: { periodo?: string; aba?: string; fatDe?: string; fatAte?: string };
 }) {
   const { supabase, profile } = await guardRole(["consultor"]);
   const period = normalizePeriod(searchParams?.periodo);
+  const { range: revRange, invalid: revInvalid } = parseRevenueRange(
+    searchParams?.fatDe,
+    searchParams?.fatAte
+  );
 
   // Mesma paralelização da central do admin: as três leituras são
   // independentes e cada uma é escopada pela RLS por conta própria (aqui, às
@@ -50,6 +60,8 @@ export default async function ConsultorEmpresaPage({
     meetings,
     directory,
     googleConnected,
+    revenue,
+    revenueInsights,
   ] = await Promise.all([
     loadCompanyCentral(supabase, profile, params.companyId, period, false),
     loadCompanyListings(supabase, params.companyId),
@@ -59,6 +71,8 @@ export default async function ConsultorEmpresaPage({
     loadMeetings(supabase, { companyId: params.companyId }),
     loadMeetingDirectory(supabase),
     loadGoogleConnected(supabase),
+    loadCompanyRevenue(supabase, params.companyId, revRange),
+    loadCompanyRevenueInsights(supabase, params.companyId, revRange),
   ]);
   if (res.notFound) notFound();
 
@@ -81,6 +95,8 @@ export default async function ConsultorEmpresaPage({
               ? "listings"
               : searchParams?.aba === "reunioes"
               ? "meetings"
+              : searchParams?.aba === "faturamento"
+              ? "revenue"
               : "overview"
           }
           overview={
@@ -100,6 +116,16 @@ export default async function ConsultorEmpresaPage({
               currentUserId={profile.id}
               isAdmin={profile.role === "admin"}
               googleConnected={googleConnected}
+            />
+          }
+          revenue={
+            <CompanyRevenue
+              key={`${revRange.start ?? ""}:${revRange.end ?? ""}`}
+              companyId={params.companyId}
+              initial={revenue}
+              initialInsights={revenueInsights}
+              range={revRange}
+              filterInvalid={revInvalid}
             />
           }
           listings={

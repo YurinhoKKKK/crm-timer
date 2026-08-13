@@ -10,12 +10,18 @@ import { loadCompanyListings, loadListingValidations } from "@/lib/listing";
 import { loadCompanyNotes } from "@/lib/notes";
 import { loadCompanyMessages } from "@/lib/messages";
 import {
+  loadCompanyRevenue,
+  loadCompanyRevenueInsights,
+  parseRevenueRange,
+} from "@/lib/revenue";
+import {
   loadMeetings,
   loadMeetingDirectory,
   loadGoogleConnected,
 } from "@/lib/meetings";
 import CompanyMessages from "@/components/company-central/CompanyMessages";
 import CompanyMeetings from "@/components/company-central/CompanyMeetings";
+import CompanyRevenue from "@/components/company-central/CompanyRevenue";
 
 const PERIODS: Period[] = ["hoje", "7d", "30d", "tudo"];
 
@@ -31,10 +37,14 @@ export default async function EmpresaCentralPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { periodo?: string; aba?: string };
+  searchParams: { periodo?: string; aba?: string; fatDe?: string; fatAte?: string };
 }) {
   const { supabase, profile } = await guardRole(["admin"]);
   const period = normalizePeriod(searchParams?.periodo);
+  const { range: revRange, invalid: revInvalid } = parseRevenueRange(
+    searchParams?.fatDe,
+    searchParams?.fatAte
+  );
 
   // As três leituras são independentes entre si — listagens e anotações não
   // dependem de nada que a central devolve. Antes rodavam em cascata (uma onda
@@ -50,6 +60,8 @@ export default async function EmpresaCentralPage({
     meetings,
     directory,
     googleConnected,
+    revenue,
+    revenueInsights,
   ] = await Promise.all([
     loadCompanyCentral(supabase, profile, params.id, period, true),
     loadCompanyListings(supabase, params.id),
@@ -59,6 +71,8 @@ export default async function EmpresaCentralPage({
     loadMeetings(supabase, { companyId: params.id }),
     loadMeetingDirectory(supabase),
     loadGoogleConnected(supabase),
+    loadCompanyRevenue(supabase, params.id, revRange),
+    loadCompanyRevenueInsights(supabase, params.id, revRange),
   ]);
   if (res.notFound) notFound();
 
@@ -81,6 +95,8 @@ export default async function EmpresaCentralPage({
               ? "listings"
               : searchParams?.aba === "reunioes"
               ? "meetings"
+              : searchParams?.aba === "faturamento"
+              ? "revenue"
               : "overview"
           }
           overview={
@@ -101,6 +117,16 @@ export default async function EmpresaCentralPage({
               currentUserId={profile.id}
               isAdmin={profile.role === "admin"}
               googleConnected={googleConnected}
+            />
+          }
+          revenue={
+            <CompanyRevenue
+              key={`${revRange.start ?? ""}:${revRange.end ?? ""}`}
+              companyId={params.id}
+              initial={revenue}
+              initialInsights={revenueInsights}
+              range={revRange}
+              filterInvalid={revInvalid}
             />
           }
           listings={

@@ -72,6 +72,12 @@ const ic = {
   pulse: (
     <path d="M3 12h4l2 7 4-14 2 7h6" />
   ),
+  gauge: (
+    <>
+      <path d="M12 14a2 2 0 0 0 2-2 2 2 0 0 0-4 0 2 2 0 0 0 2 2z" />
+      <path d="M13.4 10.6 19 5M3.5 18a9 9 0 1 1 17 0" />
+    </>
+  ),
   headset: (
     <>
       <path d="M3 11h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1v-6a9 9 0 0 1 18 0v6a1 1 0 0 1-1 1h-2a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3" />
@@ -104,6 +110,7 @@ const NAV: Record<Role, NavItem[]> = {
     { href: "/admin/usuarios", label: "Usuários", icon: <Icon>{ic.users}</Icon> },
     { href: "/admin/empresas", label: "Empresas", icon: <Icon>{ic.building}</Icon> },
     { href: "/acompanhamento", label: "Acompanhamento", icon: <Icon>{ic.pulse}</Icon> },
+    { href: "/admin/capacidade", label: "Capacidade", icon: <Icon>{ic.gauge}</Icon> },
     { href: "/admin/tarefas", label: "Tarefas", icon: <Icon>{ic.tasks}</Icon> },
     { href: "/agenda", label: "Agenda", icon: <Icon>{ic.calendar}</Icon> },
     { href: "/admin/mensagens", label: "Mensagens", icon: <Icon>{ic.chat}</Icon>, unread: true },

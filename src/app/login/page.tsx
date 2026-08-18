@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -153,6 +154,18 @@ export default function LoginPage() {
               ? "Entrar"
               : "Criar conta"}
           </button>
+
+          {mode === "login" && (
+            <p className="text-center">
+              <Link
+                href="/esqueci-senha"
+                draggable={false}
+                className="text-sm text-fg-muted transition hover:text-fg"
+              >
+                Esqueci minha senha
+              </Link>
+            </p>
+          )}
 
           {mode === "register" && (
             <p className="text-center text-xs text-fg-subtle">

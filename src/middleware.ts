@@ -37,9 +37,16 @@ export async function middleware(request: NextRequest) {
   // Portal do cliente (passo 25): público por design — a proteção é o token
   // imprevisível + senha + sessão própria, tudo validado no banco.
   const isClientPortal = path === "/cliente" || path.startsWith("/cliente/");
+  // Fluxo de redefinição de senha: PÚBLICO por necessidade. Quem redefine não tem
+  // sessão; e o token de /redefinir-senha vem no FRAGMENTO (#...), que só existe no
+  // navegador — se redirecionássemos para /login, o fragmento seria descartado e o
+  // token se perderia. Por isso as duas rotas ficam liberadas (nenhuma outra é
+  // afrouxada).
+  const isPasswordReset =
+    path === "/esqueci-senha" || path === "/redefinir-senha";
 
   // Sem usuário e tentando acessar área protegida -> login
-  if (!user && !isAuthPage && !isClientPortal) {
+  if (!user && !isAuthPage && !isClientPortal && !isPasswordReset) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 

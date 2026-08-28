@@ -4,9 +4,11 @@ import { createClient } from "@/lib/supabase-server";
 import {
   loadCompanyRevenue,
   loadCompanyRevenueInsights,
+  loadCompanyRevenueMonthDetail,
   parseCurrencyBR,
   SALES_CHANNELS,
   type RevenueInsights,
+  type RevenueMonthDetail,
   type RevenueOverview,
   type RevenueRange,
   type SalesChannel,
@@ -71,6 +73,17 @@ export async function fetchRevenueMonth(
   return { channels, note: (noteRow as { note: string | null } | null)?.note ?? null };
 }
 
+// Autoria + histórico de alterações de UM mês, buscado sob demanda quando o
+// detalhe do mês é aberto (nunca no render inicial da tabela). Escopo pela RLS.
+export async function fetchRevenueMonthDetail(
+  companyId: string,
+  monthIso: string
+): Promise<RevenueMonthDetail | null> {
+  const { supabase, user } = await requireUser();
+  if (!user) return null;
+  return loadCompanyRevenueMonthDetail(supabase, companyId, monthIso);
+}
+
 // Insights (variação/acumulado, Fatia 2): mesma ressincronização, mesmo escopo.
 export async function fetchRevenueInsights(
   companyId: string,
@@ -109,7 +122,11 @@ export async function saveRevenueMonth(
   companyId: string,
   monthIso: string, // "YYYY-MM-01"
   rawEntries: { channel: SalesChannel; raw: string }[],
-  note: string
+  note: string,
+  // Motivo da alteração (opcional; só faz sentido ao corrigir um mês existente).
+  // Não bloqueia o salvamento quando vazio — vira null e o trigger de auditoria
+  // registra a mudança sem motivo. Diferente da observação do mês (acima).
+  reason: string = ""
 ): Promise<{ error: string | null }> {
   const { supabase, user } = await requireUser();
   if (!user) return { error: "Sessão expirada. Faça login novamente." };
@@ -129,12 +146,16 @@ export async function saveRevenueMonth(
   if (note.length > 280) {
     return { error: "A observação pode ter no máximo 280 caracteres." };
   }
+  if (reason.length > 280) {
+    return { error: "O motivo pode ter no máximo 280 caracteres." };
+  }
 
   const { error } = await supabase.rpc("company_revenue_upsert", {
     p_company: companyId,
     p_month: monthIso,
     p_entries: entries,
     p_note: note.trim() === "" ? null : note.trim(),
+    p_reason: reason.trim() === "" ? null : reason.trim(),
   });
   if (error) return { error: "Não foi possível salvar o lançamento." };
   return { error: null };

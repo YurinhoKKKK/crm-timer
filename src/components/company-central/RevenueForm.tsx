@@ -56,6 +56,10 @@ export default function RevenueForm({
   );
   const [values, setValues] = useState<Record<string, string>>({});
   const [note, setNote] = useState("");
+  const [reason, setReason] = useState("");
+  // O mês selecionado JÁ tinha lançamento quando carregou? Se sim, salvar é uma
+  // CORREÇÃO — só então pedimos o motivo (opcional). No primeiro lançamento não.
+  const [monthHadRecords, setMonthHadRecords] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -106,6 +110,9 @@ export default function RevenueForm({
       }
       setValues(next);
       setNote(noteText ?? "");
+      // Motivo é por-alteração: nunca herda de outro mês/abertura anterior.
+      setReason("");
+      setMonthHadRecords(Object.keys(channels).length > 0);
     };
 
     const cached = monthByIso.get(selectedIso);
@@ -139,7 +146,13 @@ export default function RevenueForm({
       channel,
       raw: values[channel] ?? "",
     }));
-    const res = await saveRevenueMonth(companyId, selectedIso, rawEntries, note);
+    const res = await saveRevenueMonth(
+      companyId,
+      selectedIso,
+      rawEntries,
+      note,
+      monthHadRecords ? reason : ""
+    );
     setSaving(false);
     if (res.error) {
       setError(res.error);
@@ -252,6 +265,30 @@ export default function RevenueForm({
             {note.length}/280
           </p>
         </div>
+
+        {/* Motivo da alteração — só ao CORRIGIR um mês já lançado (não no
+            primeiro lançamento). Opcional: não bloqueia o salvamento. Diferente
+            da observação do mês; este vai para o histórico de alterações. */}
+        {monthHadRecords && !loading && (
+          <div>
+            <label htmlFor="rev-reason" className={labelClass}>
+              Motivo da alteração{" "}
+              <span className="font-normal text-fg-subtle">(opcional)</span>
+            </label>
+            <input
+              id="rev-reason"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              maxLength={280}
+              autoComplete="off"
+              placeholder="Ex.: correção de valor digitado errado, nota fiscal retificada…"
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg shadow-sm transition placeholder:text-fg-subtle focus:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+            />
+            <p className="mt-1 text-xs text-fg-subtle">
+              Fica registrado no histórico de alterações do mês.
+            </p>
+          </div>
+        )}
 
         {error && (
           <div className="rounded-lg border border-red-300/60 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">

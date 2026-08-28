@@ -7,6 +7,7 @@ import { btnPrimary, btnSecondary } from "@/lib/ui";
 import {
   fetchRevenueOverview,
   fetchRevenueInsights,
+  fetchRevenueMonthDetail,
   setCompanyChannels,
 } from "@/app/revenue-actions";
 import RevenueForm from "@/components/company-central/RevenueForm";
@@ -20,11 +21,28 @@ import {
   yearOf,
   monthNumberOf,
   type RevenueInsights,
+  type RevenueMonthDetail,
   type RevenueOverview,
   type RevenueRange,
   type SalesChannel,
   type Variation,
 } from "@/lib/revenue";
+
+// Estado do detalhe de um mês carregado sob demanda (autoria + histórico).
+type DetailState = RevenueMonthDetail | "loading" | "error";
+
+// Data/hora em Brasília (mesmo padrão do resto do sistema).
+function formatDateTimeBR(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 const RevenueChart = dynamic(
   () => import("@/components/company-central/RevenueChart"),
@@ -66,6 +84,8 @@ export default function CompanyRevenue({
   const [formOpen, setFormOpen] = useState(false);
   const [formMonth, setFormMonth] = useState(initial.currentMonth);
   const [openDetail, setOpenDetail] = useState<string | null>(null);
+  // Autoria + histórico por mês, buscados sob demanda ao abrir o detalhe.
+  const [details, setDetails] = useState<Record<string, DetailState>>({});
 
   const router = useRouter();
   const pathname = usePathname();
@@ -86,6 +106,9 @@ export default function CompanyRevenue({
   }, [activeChannels, overview.channelTotals]);
 
   const refresh = () => {
+    // Uma correção muda a autoria/histórico: invalida o cache de detalhes para
+    // que reabrir o mês refaça a busca.
+    setDetails({});
     startTransition(async () => {
       const [nextOverview, nextInsights] = await Promise.all([
         fetchRevenueOverview(companyId, range),
@@ -94,6 +117,19 @@ export default function CompanyRevenue({
       if (nextOverview) setOverview(nextOverview);
       if (nextInsights) setInsights(nextInsights);
     });
+  };
+
+  // Abre/fecha o detalhe de um mês e busca autoria + histórico na primeira
+  // abertura (nunca no render inicial da tabela).
+  const toggleDetail = (iso: string) => {
+    const willOpen = openDetail !== iso;
+    setOpenDetail(willOpen ? iso : null);
+    if (willOpen && details[iso] === undefined) {
+      setDetails((d) => ({ ...d, [iso]: "loading" }));
+      fetchRevenueMonthDetail(companyId, iso).then((res) =>
+        setDetails((d) => ({ ...d, [iso]: res ?? "error" }))
+      );
+    }
   };
 
   // Persistência do filtro na URL (padrão da página da empresa). Preserva os
@@ -209,9 +245,8 @@ export default function CompanyRevenue({
                 displayChannels={displayChannels}
                 filtered={filtered}
                 openDetail={openDetail}
-                onToggleDetail={(iso) =>
-                  setOpenDetail((cur) => (cur === iso ? null : iso))
-                }
+                details={details}
+                onToggleDetail={toggleDetail}
                 onEdit={openEdit}
               />
             )}
@@ -589,6 +624,7 @@ function RevenueTable({
   displayChannels,
   filtered,
   openDetail,
+  details,
   onToggleDetail,
   onEdit,
 }: {
@@ -597,6 +633,7 @@ function RevenueTable({
   displayChannels: SalesChannel[];
   filtered: boolean;
   openDetail: string | null;
+  details: Record<string, DetailState>;
   onToggleDetail: (iso: string) => void;
   onEdit: (iso: string) => void;
 }) {
@@ -631,6 +668,7 @@ function RevenueTable({
               totalVariation={insights.totalVariations[m.month]}
               channelVariations={insights.channelVariations[m.month] ?? {}}
               detailOpen={openDetail === m.month}
+              detail={details[m.month]}
               colCount={colCount}
               onToggleDetail={onToggleDetail}
               onEdit={onEdit}
@@ -671,6 +709,7 @@ function MonthRows({
   totalVariation,
   channelVariations,
   detailOpen,
+  detail,
   colCount,
   onToggleDetail,
   onEdit,
@@ -685,6 +724,7 @@ function MonthRows({
   totalVariation?: Variation;
   channelVariations: Partial<Record<SalesChannel, Variation>>;
   detailOpen: boolean;
+  detail: DetailState | undefined;
   colCount: number;
   onToggleDetail: (iso: string) => void;
   onEdit: (iso: string) => void;
@@ -692,7 +732,10 @@ function MonthRows({
   const detailChannels = displayChannels.filter(
     (c) => channels[c] !== undefined
   );
-  const canDetail = hasRecord && !isCurrent && detailChannels.length > 0;
+  const hasVariation = hasRecord && !isCurrent && detailChannels.length > 0;
+  // Todo mês COM registro é expansível (para ver autoria e histórico), mesmo
+  // sem variação (mês corrente) e sem observação.
+  const canDetail = hasRecord;
 
   return (
     <>
@@ -735,18 +778,15 @@ function MonthRows({
                   {formatBRL(total)}
                 </span>
                 {note && (
-                  <button
-                    type="button"
-                    onClick={() => onToggleDetail(iso)}
-                    aria-expanded={detailOpen}
-                    aria-label="Detalhes do mês"
-                    title="Observação e variação por canal"
-                    className="rounded p-0.5 text-fg-subtle transition hover:text-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
+                  <span
+                    aria-hidden="true"
+                    title="Tem observação"
+                    className="text-fg-subtle"
                   >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                     </svg>
-                  </button>
+                  </span>
                 )}
               </div>
             </td>
@@ -757,7 +797,7 @@ function MonthRows({
                   onClick={() => onToggleDetail(iso)}
                   aria-expanded={detailOpen}
                   className="inline-flex items-center gap-1 rounded transition hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
-                  title="Ver variação por canal"
+                  title="Ver autoria, histórico e variação do mês"
                 >
                   <VariationText variation={totalVariation} />
                   <svg
@@ -796,30 +836,124 @@ function MonthRows({
 
       {detailOpen && hasRecord && (
         <tr className="border-b border-line bg-surface-2/30">
-          <td colSpan={colCount} className="px-4 py-3">
-            {canDetail && (
-              <div className="mb-2">
-                <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-fg-subtle">
-                  Variação por canal
-                </p>
-                <div className="flex flex-wrap gap-x-5 gap-y-1.5">
-                  {detailChannels.map((c) => (
-                    <span key={c} className="inline-flex items-center gap-1.5 text-sm">
-                      <span className="text-fg-muted">{CHANNEL_LABEL[c]}:</span>
-                      <VariationText variation={channelVariations[c]} />
-                    </span>
-                  ))}
+          <td colSpan={colCount} className="px-4 py-4">
+            <div className="space-y-4">
+              {/* Autoria (Parte 1) — quem lançou e quem alterou por último. */}
+              <MonthAuthorship detail={detail} />
+
+              {hasVariation && (
+                <div>
+                  <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-fg-subtle">
+                    Variação por canal
+                  </p>
+                  <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+                    {detailChannels.map((c) => (
+                      <span key={c} className="inline-flex items-center gap-1.5 text-sm">
+                        <span className="text-fg-muted">{CHANNEL_LABEL[c]}:</span>
+                        <VariationText variation={channelVariations[c]} />
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
-            {note && (
-              <p className="text-sm text-fg-muted">
-                <span className="font-medium text-fg">Observação:</span> {note}
-              </p>
-            )}
+              )}
+
+              {note && (
+                <p className="text-sm text-fg-muted">
+                  <span className="font-medium text-fg">Observação:</span> {note}
+                </p>
+              )}
+
+              {/* Histórico de alterações (Parte 4). */}
+              <MonthHistory detail={detail} />
+            </div>
           </td>
         </tr>
       )}
     </>
+  );
+}
+
+// Autoria do mês: quem lançou/quando e quem alterou por último/quando (BRT).
+// Lançamento antigo sem autor → "autor não registrado", nunca em branco.
+function MonthAuthorship({ detail }: { detail: DetailState | undefined }) {
+  if (detail === undefined || detail === "loading") {
+    return <p className="text-xs text-fg-subtle">Carregando autoria…</p>;
+  }
+  if (detail === "error") {
+    return (
+      <p className="text-xs text-red-600 dark:text-red-400">
+        Não foi possível carregar a autoria.
+      </p>
+    );
+  }
+  const created = detail.createdByName ?? "autor não registrado";
+  return (
+    <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-fg-muted">
+      <span>
+        <span className="font-medium text-fg">Lançado por</span> {created}
+        {detail.createdAtISO ? ` em ${formatDateTimeBR(detail.createdAtISO)}` : ""}
+      </span>
+      {detail.updatedAtISO && (
+        <span>
+          <span className="font-medium text-fg">Última alteração por</span>{" "}
+          {detail.updatedByName ?? "autor não registrado"} em{" "}
+          {formatDateTimeBR(detail.updatedAtISO)}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// Um valor de auditoria formatado; null vira o marcador do caso.
+function auditAmount(value: number | null, whenNull: string): string {
+  return value === null ? whenNull : formatBRL(value);
+}
+
+// Histórico de alterações do mês (append-only): uma linha por alteração, mais
+// recente primeiro. Mês sem alteração nenhuma NÃO mostra bloco (evita vazio).
+function MonthHistory({ detail }: { detail: DetailState | undefined }) {
+  if (
+    detail === undefined ||
+    detail === "loading" ||
+    detail === "error" ||
+    detail.audit.length === 0
+  ) {
+    return null;
+  }
+  return (
+    <div>
+      <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-fg-subtle">
+        Histórico de alterações
+      </p>
+      <ul className="space-y-2">
+        {detail.audit.map((a) => (
+          <li
+            key={a.id}
+            className="rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+          >
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span className="tabular-nums text-fg-muted">
+                {formatDateTimeBR(a.changedAtISO)}
+              </span>
+              <span className="text-fg-subtle">·</span>
+              <span className="font-medium text-fg">
+                {a.changedByName ?? "autor não registrado"}
+              </span>
+              <span className="text-fg-subtle">·</span>
+              <span className="text-fg-muted">{CHANNEL_LABEL[a.channel]}</span>
+            </div>
+            <div className="mt-0.5 tabular-nums text-fg">
+              de {auditAmount(a.oldAmount, "—")} para{" "}
+              {auditAmount(a.newAmount, "removido")}
+            </div>
+            {a.reason && (
+              <p className="mt-0.5 text-fg-muted">
+                <span className="font-medium text-fg">Motivo:</span> {a.reason}
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

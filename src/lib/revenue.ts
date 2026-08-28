@@ -1,4 +1,5 @@
 import type { createClient } from "@/lib/supabase-server";
+import { resolvePeople } from "@/lib/creator";
 
 // Faturamento mensal por canal de venda (Fatia 1) — lado do servidor + helpers
 // puros compartilhados com o cliente.
@@ -123,6 +124,92 @@ export async function loadCompanyRevenueInsights(
     },
     totalVariations: raw.totalVariations ?? {},
     channelVariations: raw.channelVariations ?? {},
+  };
+}
+
+// --- Autoria + histórico de alterações de um mês ---------------------------
+
+// Uma linha do histórico de alterações (append-only, alimentado por trigger no
+// banco). `changedByName` null = "autor não registrado" (lançamento antigo/
+// gravação direta no banco, sem usuário). oldAmount null = primeiro lançamento;
+// newAmount null = valor removido.
+export type RevenueAuditEntry = {
+  id: string;
+  channel: SalesChannel;
+  oldAmount: number | null;
+  newAmount: number | null;
+  reason: string | null;
+  changedByName: string | null;
+  changedAtISO: string;
+};
+
+// Detalhe de autoria de um mês: quem lançou (linha criada mais cedo) e quem
+// alterou por último (linha atualizada mais recentemente; null se nunca
+// editada), mais o histórico completo. Nomes já resolvidos no servidor.
+export type RevenueMonthDetail = {
+  createdByName: string | null;
+  createdAtISO: string | null;
+  updatedByName: string | null;
+  updatedAtISO: string | null;
+  audit: RevenueAuditEntry[];
+};
+
+// Carrega autoria + histórico de UM mês (RPC company_revenue_month_detail,
+// SECURITY INVOKER — mesmo escopo do faturamento). Resolve os nomes de autor
+// pela display_profiles (a RLS de profiles não deixa ler perfis alheios direto).
+export async function loadCompanyRevenueMonthDetail(
+  supabase: SupabaseServer,
+  companyId: string,
+  monthIso: string
+): Promise<RevenueMonthDetail> {
+  const { data } = await supabase.rpc("company_revenue_month_detail", {
+    p_company: companyId,
+    p_month: monthIso,
+  });
+
+  type RawAudit = {
+    id: string;
+    channel: SalesChannel;
+    oldAmount: number | string | null;
+    newAmount: number | string | null;
+    reason: string | null;
+    changedBy: string | null;
+    changedAt: string;
+  };
+  type Raw = {
+    createdBy: string | null;
+    createdAt: string | null;
+    updatedBy: string | null;
+    updatedAt: string | null;
+    audit: RawAudit[];
+  };
+  const raw = (data ?? {}) as Partial<Raw>;
+  const auditRaw = raw.audit ?? [];
+
+  const people = await resolvePeople(supabase, [
+    raw.createdBy,
+    raw.updatedBy,
+    ...auditRaw.map((a) => a.changedBy),
+  ]);
+  const nameOf = (id: string | null | undefined) =>
+    id ? people.get(id)?.name ?? null : null;
+  const num = (v: number | string | null | undefined) =>
+    v === null || v === undefined ? null : Number(v);
+
+  return {
+    createdByName: nameOf(raw.createdBy),
+    createdAtISO: raw.createdAt ?? null,
+    updatedByName: nameOf(raw.updatedBy),
+    updatedAtISO: raw.updatedAt ?? null,
+    audit: auditRaw.map((a) => ({
+      id: a.id,
+      channel: a.channel,
+      oldAmount: num(a.oldAmount),
+      newAmount: num(a.newAmount),
+      reason: a.reason ?? null,
+      changedByName: nameOf(a.changedBy),
+      changedAtISO: a.changedAt,
+    })),
   };
 }
 

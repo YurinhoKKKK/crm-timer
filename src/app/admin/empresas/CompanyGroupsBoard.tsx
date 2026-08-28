@@ -14,6 +14,7 @@ import {
 import LabelChips, { labelChipStyle } from "@/components/LabelChips";
 import Avatar from "@/components/Avatar";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import NotesButton from "@/components/notes-panel/NotesButton";
 import type { Label } from "@/lib/labels";
 import {
   colorTints,
@@ -38,6 +39,7 @@ export type CompanyItem = {
   consultants: { id: string; name: string; avatarUrl?: string | null }[];
   labels: Label[];
   groupId: string | null;
+  noteCount: number;
 };
 
 const COLLAPSE_KEY = "crm:empresas:grupos-recolhidos";
@@ -53,6 +55,7 @@ export default function CompanyGroupsBoard({
   groups,
   total,
   truncated,
+  viewerId,
   inUseLabels,
   consultores,
 }: {
@@ -60,6 +63,7 @@ export default function CompanyGroupsBoard({
   groups: CompanyGroup[];
   total: number; // total no banco (para detectar corte de desempenho)
   truncated: boolean;
+  viewerId: string; // usuário logado (autor das anotações escritas pelo balão)
   inUseLabels: Label[];
   consultores: SelectOption[];
 }) {
@@ -379,6 +383,7 @@ export default function CompanyGroupsBoard({
               sectionKey={section.key}
               group={section.group}
               items={section.items}
+              viewerId={viewerId}
               collapsed={!filtersActive && collapsed.has(section.key)}
               onToggleCollapse={() => toggleCollapse(section.key)}
               selected={selected}
@@ -483,6 +488,7 @@ function GroupSection({
   sectionKey,
   group,
   items,
+  viewerId,
   collapsed,
   onToggleCollapse,
   selected,
@@ -505,6 +511,7 @@ function GroupSection({
   sectionKey: string;
   group: CompanyGroup | null;
   items: CompanyItem[];
+  viewerId: string;
   collapsed: boolean;
   onToggleCollapse: () => void;
   selected: Set<string>;
@@ -661,6 +668,7 @@ function GroupSection({
                 <CompanyRow
                   key={company.id}
                   company={company}
+                  viewerId={viewerId}
                   selected={selected.has(company.id)}
                   onToggle={() => onToggleOne(company.id)}
                   onDragStart={onRowDragStart}
@@ -677,12 +685,14 @@ function GroupSection({
 
 function CompanyRow({
   company,
+  viewerId,
   selected,
   onToggle,
   onDragStart,
   onDragEnd,
 }: {
   company: CompanyItem;
+  viewerId: string;
   selected: boolean;
   onToggle: () => void;
   onDragStart: (id: string) => void;
@@ -690,7 +700,7 @@ function CompanyRow({
 }) {
   return (
     <li
-      className={`flex items-stretch gap-1 rounded-xl border bg-surface transition ${
+      className={`group/row flex items-stretch gap-1 rounded-xl border bg-surface transition ${
         selected ? "border-risd ring-1 ring-risd" : "border-line"
       }`}
     >
@@ -733,16 +743,11 @@ function CompanyRow({
         href={`/admin/empresas/${company.id}`}
         className="group block min-w-0 flex-1 rounded-xl p-3 transition hover:bg-surface-2/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
       >
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="font-medium text-fg group-hover:text-risd">
-              {company.name}
-            </span>
-            <LabelChips labels={company.labels} />
-          </div>
-          <span className="shrink-0 text-fg-subtle transition group-hover:translate-x-0.5 group-hover:text-risd">
-            →
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="font-medium text-fg group-hover:text-risd">
+            {company.name}
           </span>
+          <LabelChips labels={company.labels} />
         </div>
         {company.whatsappGroupName || company.whatsappContactId ? (
           <span className="mt-1 block text-sm text-fg-muted">
@@ -767,6 +772,27 @@ function CompanyRow({
           </div>
         )}
       </Link>
+      {/* Coluna de ações à direita: balão de anotações e seta de entrar na
+          empresa, LADO A LADO no mesmo eixo, balão primeiro. O balão fica fora
+          do <Link> (não se aninha button em link); a seta é um <Link> à parte
+          para o par ficar alinhado em todas as linhas. */}
+      <div className="flex shrink-0 items-center gap-1 pr-2">
+        <NotesButton
+          companyId={company.id}
+          companyName={company.name}
+          userId={viewerId}
+          isAdmin
+          notesHref={`/admin/empresas/${company.id}?aba=notes`}
+          initialCount={company.noteCount}
+        />
+        <Link
+          href={`/admin/empresas/${company.id}`}
+          aria-label={`Abrir ${company.name}`}
+          className="flex h-8 w-6 items-center justify-center rounded text-fg-subtle transition group-hover/row:translate-x-0.5 group-hover/row:text-risd hover:text-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
+        >
+          →
+        </Link>
+      </div>
     </li>
   );
 }

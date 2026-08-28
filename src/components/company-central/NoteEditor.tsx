@@ -208,6 +208,11 @@ export default function NoteEditor({
   // chamados de suporte —, sem mudar o comportamento nas anotações. `visible`
   // fica travado em false nesse caso e é passado assim para o onSave (ignorado).
   showClientVisibility = true,
+  // Offset do topo da barra de ferramentas (sticky). Na página, compensa o
+  // header fixo do AppShell (60px). Dentro de um painel lateral, cujo contêiner
+  // de rolagem começa logo abaixo do próprio cabeçalho, deve ser "0px" — senão
+  // sobra um vão morto acima da barra e o cursor nasce atrás dela.
+  toolbarOffset = "60px",
   onSave,
   onCancel,
 }: {
@@ -217,6 +222,7 @@ export default function NoteEditor({
   initialAttachments?: NoteAttachmentMeta[];
   saveLabel?: string;
   showClientVisibility?: boolean;
+  toolbarOffset?: string;
   onSave: (
     html: string,
     visibleToClient: boolean,
@@ -461,7 +467,8 @@ export default function NoteEditor({
       <div
         role="toolbar"
         aria-label="Formatação"
-        className="sticky top-[60px] z-10 flex flex-wrap items-center gap-0.5 rounded-t-xl border-b border-line bg-surface px-2 py-1.5"
+        style={{ top: toolbarOffset }}
+        className="sticky z-10 flex flex-wrap items-center gap-0.5 rounded-t-xl border-b border-line bg-surface px-2 py-1.5"
       >
         <TBtn
           onClick={() => editor?.chain().focus().undo().run()}

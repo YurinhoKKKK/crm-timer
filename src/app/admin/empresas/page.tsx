@@ -8,6 +8,7 @@ import LabelManager from "./LabelManager";
 import { withSelf } from "@/lib/people";
 import { loadLabelCatalog, loadAllLabelsByCompany, loadInUseLabels } from "@/lib/labels";
 import { loadCompanyGroups, resolveCompanyGroupId } from "@/lib/company-groups";
+import { loadCompanyNoteCounts } from "@/lib/notes";
 import { avatarUrl } from "@/lib/avatar";
 
 type ConsultantOption = {
@@ -53,6 +54,7 @@ export default async function EmpresasPage() {
     { data: standardData },
     labelCatalog,
     { data: linksData },
+    noteCounts,
   ] = await Promise.all([
     supabase
       .from("companies")
@@ -89,6 +91,9 @@ export default async function EmpresasPage() {
       .select(
         "company_id, consultant:profiles!company_consultants_consultant_id_fkey(id, full_name, email, avatar_path)"
       ),
+    // Contagem de anotações por empresa numa ida agregada (RPC), nunca uma por
+    // empresa nem contando array no cliente.
+    loadCompanyNoteCounts(supabase),
   ]);
 
   const rows = (companiesRes.data as CompanyRow[]) ?? [];
@@ -129,6 +134,7 @@ export default async function EmpresasPage() {
     labels: allLabelsByCompany.get(c.id) ?? [],
     // ÚNICO ponto de leitura de group_id: o helper centraliza para a porta de M:N.
     groupId: resolveCompanyGroupId(c),
+    noteCount: noteCounts.get(c.id) ?? 0,
   }));
 
   return (
@@ -163,6 +169,7 @@ export default async function EmpresasPage() {
         groups={groups}
         total={total}
         truncated={truncated}
+        viewerId={profile.id}
         inUseLabels={inUseLabels}
         consultores={consultores.map((c) => ({
           value: c.id,

@@ -4,6 +4,7 @@ import CompanySummaryGrid, {
   type CompanyCardItem,
 } from "@/components/CompanySummaryGrid";
 import { loadAllLabelsByCompany } from "@/lib/labels";
+import { loadCompanyNoteCounts } from "@/lib/notes";
 import { perfRoute } from "@/lib/perf";
 
 type CompanyCountRow = {
@@ -29,16 +30,20 @@ export default async function ColaboradorPage() {
   // escopada ao próprio usuário, já devolve uma linha por empresa onde ele tem
   // tarefa — o mesmo conjunto de antes. As etiquetas vêm de todas as empresas
   // que a RLS (cl_select) permite (mesmo conjunto).
-  const [{ data: countData, error }, labelsByCompany] = await Promise.all([
-    perf.timed(
-      "rpc company_task_counts (do usuário)",
-      supabase.rpc("company_task_counts", {
-        p_start: null,
-        p_collaborator: profile.id,
-      })
-    ),
-    perf.timed("company_labels (paralela)", loadAllLabelsByCompany(supabase)),
-  ]);
+  const [{ data: countData, error }, labelsByCompany, noteCounts] =
+    await Promise.all([
+      perf.timed(
+        "rpc company_task_counts (do usuário)",
+        supabase.rpc("company_task_counts", {
+          p_start: null,
+          p_collaborator: profile.id,
+        })
+      ),
+      perf.timed("company_labels (paralela)", loadAllLabelsByCompany(supabase)),
+      // Contagem de anotações por empresa (balão de atalho). Escopo = RLS
+      // cn_select (as empresas onde o colaborador tem tarefa).
+      perf.timed("rpc company_note_counts", loadCompanyNoteCounts(supabase)),
+    ]);
   perf.done();
 
   const companies = ((countData as CompanyCountRow[]) ?? [])
@@ -73,6 +78,9 @@ export default async function ColaboradorPage() {
         </div>
       ) : (
         <CompanySummaryGrid
+          viewerId={profile.id}
+          viewerIsAdmin={profile.role === "admin"}
+          notesHrefSuffix="#anotacoes"
           items={companies.map(
             (c): CompanyCardItem => ({
               id: c.id,
@@ -84,6 +92,7 @@ export default async function ColaboradorPage() {
               overdue: c.overdue,
               dueSoon: c.dueSoon,
               labels: labelsByCompany.get(c.id) ?? [],
+              noteCount: noteCounts.get(c.id) ?? 0,
             })
           )}
         />

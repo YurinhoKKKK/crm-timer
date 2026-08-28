@@ -7,6 +7,7 @@ import LabelChips from "@/components/LabelChips";
 import type { Label } from "@/lib/labels";
 import { farolOf } from "@/lib/followup";
 import { FarolBadge } from "@/components/followup/FarolBadge";
+import NotesButton from "@/components/notes-panel/NotesButton";
 
 export type CompanyCardItem = {
   id: string;
@@ -23,6 +24,9 @@ export type CompanyCardItem = {
   // acompanhamento (painel do consultor); `days` null = nunca contatado. Quando
   // ausente, o card não mostra badge nem o filtro de atenção aparece.
   contact?: { days: number | null };
+  // Contagem de anotações (balão de atalho). Presente só no painel do consultor;
+  // ausente no colaborador (que não tem o balão). Quando ausente, sem balão.
+  noteCount?: number;
 };
 
 // Grade de cards "Minhas empresas" dos painéis do consultor e do colaborador,
@@ -31,8 +35,21 @@ export type CompanyCardItem = {
 // visual que cada painel já tinha; a filtragem é em memória, instantânea.
 export default function CompanySummaryGrid({
   items,
+  // Usuário logado — autor das anotações escritas pelo balão. Presente onde o
+  // balão aparece (painel do consultor e do colaborador); ausente só quando
+  // não deve haver balão.
+  viewerId,
+  // Papel do usuário logado — controla só a interface (o botão Editar em nota
+  // alheia); a permissão real é a RLS cn_*. Admin em "Meu Trabalho" edita todas.
+  viewerIsAdmin = false,
+  // Sufixo do link para a aba/seção completa de Anotações da empresa. Consultor
+  // usa a aba (?aba=notes); colaborador usa a âncora da seção (#anotacoes).
+  notesHrefSuffix = "?aba=notes",
 }: {
   items: CompanyCardItem[];
+  viewerId?: string;
+  viewerIsAdmin?: boolean;
+  notesHrefSuffix?: string;
 }) {
   const [query, setQuery] = useState("");
   // Filtro rápido "só quem precisa de atenção" (amarelo + vermelho + sem
@@ -102,15 +119,14 @@ export default function CompanySummaryGrid({
           {filtered.map((c) => {
             const percent =
               c.total > 0 ? Math.round((c.done / c.total) * 100) : 0;
+            const showNotes = viewerId && c.noteCount !== undefined;
             return (
-              // li em flex + Link flex-1 h-full: os cards da MESMA fileira ganham
-              // a altura da fileira (o mais alto manda), esticando os menores em
-              // vez de cortar os maiores.
-              <li key={c.id} className="flex">
-                <Link
-                  href={c.href}
-                  className="group flex flex-1 flex-col rounded-xl border border-line bg-surface p-5 shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
-                >
+              // li relative + card como <div>: o link vira um overlay (absolute
+              // inset-0) para o card inteiro seguir clicável E o balão de
+              // anotações poder ser um <button> por cima (não se aninha button
+              // em <a>). Os cards da MESMA fileira ganham a altura da fileira.
+              <li key={c.id} className="relative flex">
+                <div className="group relative flex flex-1 flex-col rounded-xl border border-line bg-surface p-5 shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-within:ring-2 focus-within:ring-risd focus-within:ring-offset-2 focus-within:ring-offset-canvas">
                   {/* items-start: com título de 2–3 linhas a seta fica alinhada à
                       primeira linha, não centralizada verticalmente. */}
                   <div className="flex items-start justify-between gap-2">
@@ -171,14 +187,44 @@ export default function CompanySummaryGrid({
                     )}
                   </div>
 
-                  {/* Semáforo de contato — um sinal a mais, discreto, numa linha
-                      própria sob as tarefas. Não protagoniza o card. */}
-                  {c.contact && (
-                    <div className="mt-3 border-t border-line/60 pt-3">
-                      <FarolBadge days={c.contact.days} />
+                  {/* Link-overlay: cobre o card inteiro (clicar em qualquer ponto
+                      abre a empresa). Vem depois do conteúdo no DOM, então pinta
+                      por cima e captura o clique. */}
+                  <Link
+                    href={c.href}
+                    aria-label={`Abrir ${c.name}`}
+                    className="absolute inset-0 rounded-xl focus:outline-none"
+                  >
+                    <span className="sr-only">{c.name}</span>
+                  </Link>
+
+                  {/* Rodapé: semáforo de contato à esquerda + balão de anotações à
+                      direita, no mesmo eixo. Vem DEPOIS do link no DOM para o
+                      balão ficar por cima e receber o próprio clique; o rodapé é
+                      pointer-events-none e só o balão reativa o clique, então o
+                      resto continua abrindo a empresa. */}
+                  {(c.contact || showNotes) && (
+                    <div className="pointer-events-none relative mt-3 flex items-center justify-between gap-2 border-t border-line/60 pt-3">
+                      {c.contact ? (
+                        <FarolBadge days={c.contact.days} />
+                      ) : (
+                        <span />
+                      )}
+                      {showNotes && (
+                        <div className="pointer-events-auto">
+                          <NotesButton
+                            companyId={c.id}
+                            companyName={c.name}
+                            userId={viewerId!}
+                            isAdmin={viewerIsAdmin}
+                            notesHref={`${c.href}${notesHrefSuffix}`}
+                            initialCount={c.noteCount!}
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
-                </Link>
+                </div>
               </li>
             );
           })}

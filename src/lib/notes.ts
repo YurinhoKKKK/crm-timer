@@ -117,6 +117,23 @@ function parseAttachments(raw: unknown, publicUrl: (path: string) => string): No
   return out;
 }
 
+// Contagem de anotações por empresa (para o balão de atalho nas listas). UMA
+// ida ao banco para TODAS as empresas da tela, agregada na RPC
+// `company_note_counts` (SECURITY INVOKER — mesmo escopo da aba de Anotações
+// pela RLS cn_select). Nunca contamos linhas no cliente (PostgREST trunca em
+// 1000 sem aviso). Empresas sem anotação não voltam na RPC e ficam com 0.
+export async function loadCompanyNoteCounts(
+  supabase: Client
+): Promise<Map<string, number>> {
+  const { data } = await supabase.rpc("company_note_counts");
+  const out = new Map<string, number>();
+  for (const r of (data as { company_id: string; note_count: number }[] | null) ??
+    []) {
+    out.set(r.company_id, Number(r.note_count));
+  }
+  return out;
+}
+
 // Anotações de UMA empresa, mais recentes primeiro. A RLS (cn_select) já escopa
 // admin (todas), consultor (empresas dele) e colaborador (empresas onde tem
 // tarefa). Nomes de autor/editor vêm da display_names (a RLS de profiles não

@@ -97,6 +97,8 @@ export default async function ConsultorEmpresaPage({
               ? "meetings"
               : searchParams?.aba === "faturamento"
               ? "revenue"
+              : searchParams?.aba === "notes"
+              ? "notes"
               : "overview"
           }
           overview={

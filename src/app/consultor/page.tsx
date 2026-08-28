@@ -5,6 +5,7 @@ import CompanySummaryGrid, {
   type CompanyCardItem,
 } from "@/components/CompanySummaryGrid";
 import { withSelf } from "@/lib/people";
+import { loadCompanyNoteCounts } from "@/lib/notes";
 import { perfRoute } from "@/lib/perf";
 
 type Option = { id: string; name: string };
@@ -41,6 +42,7 @@ export default async function ConsultorPage() {
     { data: collaboratorsData },
     { data: countData, error },
     { data: followupData },
+    noteCounts,
   ] = await Promise.all([
     // RLS (companies_select) limita às empresas atribuídas a este consultor.
     perf.timed(
@@ -68,6 +70,8 @@ export default async function ConsultorPage() {
       "rpc client_followup (badge de contato)",
       supabase.rpc("client_followup", { p_period_days: 30, p_desc: true })
     ),
+    // Contagem de anotações por empresa (balão de atalho), agregada no banco.
+    perf.timed("rpc company_note_counts", loadCompanyNoteCounts(supabase)),
   ]);
   perf.done();
 
@@ -144,6 +148,7 @@ export default async function ConsultorPage() {
             </div>
           ) : (
             <CompanySummaryGrid
+              viewerId={profile.id}
               items={companyList.map(
                 (c): CompanyCardItem => ({
                   id: c.id,
@@ -154,6 +159,7 @@ export default async function ConsultorPage() {
                   pending: c.pending,
                   overdue: c.overdue,
                   contact: { days: contactDays.get(c.id) ?? null },
+                  noteCount: noteCounts.get(c.id) ?? 0,
                 })
               )}
             />

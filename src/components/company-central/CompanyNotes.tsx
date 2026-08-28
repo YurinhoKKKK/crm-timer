@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { FileSpreadsheet, FileText } from "lucide-react";
@@ -10,6 +10,7 @@ import { formatBytes } from "@/lib/format";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import Lightbox from "@/components/Lightbox";
 import Avatar from "@/components/Avatar";
+import NoteBody from "./NoteBody";
 import {
   FilterBar,
   SearchBox,
@@ -54,77 +55,6 @@ function AttachmentIcon({ name }: { name: string }) {
     return <FileSpreadsheet size={15} className="shrink-0 text-fg-muted" />;
   }
   return <FileText size={15} className="shrink-0 text-fg-muted" />;
-}
-
-// Altura máxima do texto retraído (~9 linhas). Só retrai se passar com folga.
-const COLLAPSE_PX = 208;
-
-// Corpo da anotação: retrai textos longos por padrão ("Ver mais"/"Ver menos",
-// com fade no corte) e abre o lightbox ao clicar numa imagem. O ResizeObserver
-// re-mede quando as imagens carregam (a altura muda depois do primeiro render).
-function NoteBody({
-  html,
-  onImageClick,
-}: {
-  html: string;
-  onImageClick: (images: string[], index: number) => void;
-}) {
-  const innerRef = useRef<HTMLDivElement>(null);
-  const [expanded, setExpanded] = useState(false);
-  const [overflows, setOverflows] = useState(false);
-
-  useEffect(() => {
-    const el = innerRef.current;
-    if (!el) return;
-    const check = () => setOverflows(el.offsetHeight > COLLAPSE_PX + 48);
-    check();
-    const ro = new ResizeObserver(check);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [html]);
-
-  const collapsed = overflows && !expanded;
-
-  return (
-    <div>
-      <div
-        className={collapsed ? "relative overflow-hidden" : undefined}
-        style={collapsed ? { maxHeight: COLLAPSE_PX } : undefined}
-      >
-        <div
-          ref={innerRef}
-          className="rich-text note-view"
-          onClick={(e) => {
-            const t = e.target;
-            if (t instanceof HTMLImageElement && t.src) {
-              // Todas as imagens DESTA anotação, para navegar entre elas.
-              const imgs = Array.from(
-                e.currentTarget.querySelectorAll("img")
-              ).map((i) => i.src);
-              onImageClick(imgs, Math.max(0, imgs.indexOf(t.src)));
-            }
-          }}
-          // Sanitizado no servidor (loadCompanyNotes → DOMPurify).
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
-        {collapsed && (
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-surface to-transparent"
-          />
-        )}
-      </div>
-      {overflows && (
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="mt-1.5 text-sm font-medium text-risd transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
-        >
-          {expanded ? "Ver menos" : "Ver mais"}
-        </button>
-      )}
-    </div>
-  );
 }
 
 type SortKey = "recentes" | "antigas";

@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase-browser";
 import Avatar from "@/components/Avatar";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import Lightbox from "@/components/Lightbox";
+import NoteBody from "@/components/company-central/NoteBody";
 import { getPanelNotes } from "./notes-panel-actions";
 
 // O editor (TipTap) só entra no bundle quando o painel de fato abre e este
@@ -341,23 +342,17 @@ export default function NotesPanel({
                         )}
                       </div>
 
-                      <div
+                      {/* Recolhe anotações longas por ALTURA, com degradê e "Ler
+                          mais"/"Ler menos"; clicar numa imagem abre o lightbox.
+                          Mesmo componente da aba (só muda o rótulo do botão). */}
+                      <NoteBody
+                        html={n.contentHtml}
                         className="rich-text note-view text-sm"
-                        onClick={(e) => {
-                          // Clicar numa imagem abre o lightbox (mesma UX da aba).
-                          const t = e.target;
-                          if (t instanceof HTMLImageElement && t.src) {
-                            const imgs = Array.from(
-                              e.currentTarget.querySelectorAll("img")
-                            ).map((i) => i.src);
-                            setLightbox({
-                              images: imgs,
-                              index: Math.max(0, imgs.indexOf(t.src)),
-                            });
-                          }
-                        }}
-                        // Sanitizado no servidor (loadCompanyNotes → DOMPurify).
-                        dangerouslySetInnerHTML={{ __html: n.contentHtml }}
+                        moreLabel="Ler mais"
+                        lessLabel="Ler menos"
+                        onImageClick={(images, index) =>
+                          setLightbox({ images, index })
+                        }
                       />
 
                       {n.attachments.length > 0 && (

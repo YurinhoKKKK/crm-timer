@@ -2,7 +2,6 @@ import Logo from "@/components/Logo";
 import type {
   PortalListing,
   PortalMeetings,
-  PortalMessages,
   PortalProgress,
   PortalUpdate,
   PortalSource,
@@ -25,7 +24,6 @@ export default function PortalView({
   listings,
   progress,
   updates,
-  messages,
   meetings,
   source,
   actions,
@@ -35,7 +33,6 @@ export default function PortalView({
   listings: PortalListing[];
   progress: PortalProgress;
   updates: PortalUpdate[];
-  messages: PortalMessages;
   meetings: PortalMeetings;
   // De onde o "ver mais" do Andamento puxa a próxima página.
   source: PortalSource;
@@ -79,7 +76,6 @@ export default function PortalView({
           listings={listings}
           progress={progress}
           updates={updates}
-          messages={messages}
           meetings={meetings}
         />
 

@@ -67,25 +67,6 @@ export type PortalProgress = {
 // Página do feed (paginação no servidor — o portal nunca carrega tudo).
 export const PORTAL_PROGRESS_PAGE = 20;
 
-// --- Mensagens no portal (passo 31) ---------------------------------------
-// TEXTO PURO: `body` nunca é HTML, é escapado na exibição e não passa por
-// DOMPurify — a rota do portal segue sem jsdom (passo 29). `author` é o
-// primeiro nome de quem respondeu, do lado da equipe; null para o cliente.
-export type PortalMessage = {
-  id: string;
-  body: string;
-  author_type: "cliente" | "interno";
-  author: string | null;
-  at: string;
-};
-
-export type PortalMessages = {
-  total: number;
-  items: PortalMessage[];
-};
-
-export const PORTAL_MESSAGES_PAGE = 30;
-
 // --- Reuniões no portal (portal do cliente · aba Reuniões) -----------------
 // Formato devolvido por client_portal_meetings — SÓ o conteúdo curado. Sem
 // participantes, descrição, criador, status de sincronização ou qualquer campo

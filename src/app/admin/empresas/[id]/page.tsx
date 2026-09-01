@@ -8,7 +8,6 @@ import CompanyNotes from "@/components/company-central/CompanyNotes";
 import { loadCompanyCentral, type Period } from "@/lib/company-central";
 import { loadCompanyListings, loadListingValidations } from "@/lib/listing";
 import { loadCompanyNotes } from "@/lib/notes";
-import { loadCompanyMessages } from "@/lib/messages";
 import {
   loadCompanyRevenue,
   loadCompanyRevenueInsights,
@@ -19,7 +18,6 @@ import {
   loadMeetingDirectory,
   loadGoogleConnected,
 } from "@/lib/meetings";
-import CompanyMessages from "@/components/company-central/CompanyMessages";
 import CompanyMeetings from "@/components/company-central/CompanyMeetings";
 import CompanyRevenue from "@/components/company-central/CompanyRevenue";
 
@@ -56,7 +54,6 @@ export default async function EmpresaCentralPage({
     listings,
     listingValidations,
     notes,
-    messages,
     meetings,
     directory,
     googleConnected,
@@ -67,7 +64,6 @@ export default async function EmpresaCentralPage({
     loadCompanyListings(supabase, params.id),
     loadListingValidations(supabase, params.id),
     loadCompanyNotes(supabase, params.id),
-    loadCompanyMessages(supabase, params.id),
     loadMeetings(supabase, { companyId: params.id }),
     loadMeetingDirectory(supabase),
     loadGoogleConnected(supabase),
@@ -89,9 +85,7 @@ export default async function EmpresaCentralPage({
       ) : (
         <CompanyCentralTabs
           initialTab={
-            searchParams?.aba === "mensagens"
-              ? "messages"
-              : searchParams?.aba === "listings"
+            searchParams?.aba === "listings"
               ? "listings"
               : searchParams?.aba === "reunioes"
               ? "meetings"
@@ -140,13 +134,6 @@ export default async function EmpresaCentralPage({
               userId={profile.id}
               isAdmin
               notes={notes}
-            />
-          }
-          messages={
-            <CompanyMessages
-              companyId={params.id}
-              companyName={res.data.company.name}
-              initial={messages}
             />
           }
         />

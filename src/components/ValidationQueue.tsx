@@ -64,9 +64,14 @@ function formatWhen(iso: string): string {
 export default function ValidationQueue({
   role,
   initial,
+  standalone = false,
 }: {
   role: "admin" | "consultor" | "colaborador";
   initial: ValidationQueueRow[];
+  // Na tela própria "Validações" a fila é o conteúdo único da página: quando
+  // vazia, mostra um estado vazio amigável em vez de sumir (null). Dentro da
+  // antiga caixa de entrada segue null — lá era só uma seção entre outras.
+  standalone?: boolean;
 }) {
   const [rows, setRows] = useState<ValidationQueueRow[]>(initial);
   // Nasce expandida quando já há trabalho a revisar.
@@ -133,7 +138,18 @@ export default function ValidationQueue({
     return out;
   }, [rows, company, type, asc]);
 
-  if (rows.length === 0) return null;
+  if (rows.length === 0) {
+    if (!standalone) return null;
+    return (
+      <section className="rounded-2xl border border-dashed border-line bg-surface/60 px-6 py-14 text-center">
+        <p className="text-sm font-medium text-fg">Nenhuma listagem a revisar</p>
+        <p className="mt-1 text-sm text-fg-muted">
+          Quando um cliente pedir ajuste ou quiser listar um item, ele aparece
+          aqui.
+        </p>
+      </section>
+    );
+  }
 
   const showFilters = rows.length > 1;
 

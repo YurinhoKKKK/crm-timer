@@ -9,12 +9,18 @@ import ThemeToggle from "./ThemeToggle";
 import Avatar from "./Avatar";
 import Logo from "./Logo";
 import ActiveTimerIndicator from "./ActiveTimerIndicator";
-import UnreadMessagesBadge from "./UnreadMessagesBadge";
+import UnreadValidationsBadge from "./UnreadValidationsBadge";
 
 type Role = "admin" | "consultor" | "colaborador";
 
-// `unread` liga o badge de mensagens não lidas (passo 32) no item.
-type NavItem = { href: string; label: string; icon: ReactNode; unread?: boolean };
+// `validations` liga o badge de validações de listagem não vistas (tela
+// "Validações") no item.
+type NavItem = {
+  href: string;
+  label: string;
+  icon: ReactNode;
+  validations?: boolean;
+};
 
 /* -------------------------------------------------------------------------- */
 /* Ícones (stroke, herdam currentColor)                                       */
@@ -69,6 +75,12 @@ const ic = {
   chat: (
     <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
   ),
+  badgeCheck: (
+    <>
+      <path d="M12 2.5l2.4 1.75 2.95-.02 .9 2.8 2.4 1.72-.92 2.8.92 2.8-2.4 1.72-.9 2.8-2.95-.02L12 21.5l-2.4-1.75-2.95.02-.9-2.8-2.4-1.72.92-2.8-.92-2.8 2.4-1.72.9-2.8 2.95.02L12 2.5z" />
+      <path d="M9 12l2 2 4-4" />
+    </>
+  ),
   pulse: (
     <path d="M3 12h4l2 7 4-14 2 7h6" />
   ),
@@ -113,7 +125,7 @@ const NAV: Record<Role, NavItem[]> = {
     { href: "/admin/capacidade", label: "Capacidade", icon: <Icon>{ic.gauge}</Icon> },
     { href: "/admin/tarefas", label: "Tarefas", icon: <Icon>{ic.tasks}</Icon> },
     { href: "/agenda", label: "Agenda", icon: <Icon>{ic.calendar}</Icon> },
-    { href: "/admin/mensagens", label: "Mensagens", icon: <Icon>{ic.chat}</Icon>, unread: true },
+    { href: "/admin/validacoes", label: "Validações", icon: <Icon>{ic.badgeCheck}</Icon>, validations: true },
     { href: "/suporte", label: "Suporte", icon: <Icon>{ic.headset}</Icon> },
     { href: "/colaborador", label: "Meu Trabalho", icon: <Icon>{ic.clock}</Icon> },
   ],
@@ -122,7 +134,7 @@ const NAV: Record<Role, NavItem[]> = {
     { href: "/acompanhamento", label: "Acompanhamento", icon: <Icon>{ic.pulse}</Icon> },
     { href: "/consultor/tarefas", label: "Tarefas", icon: <Icon>{ic.tasks}</Icon> },
     { href: "/agenda", label: "Agenda", icon: <Icon>{ic.calendar}</Icon> },
-    { href: "/consultor/mensagens", label: "Mensagens", icon: <Icon>{ic.chat}</Icon>, unread: true },
+    { href: "/consultor/validacoes", label: "Validações", icon: <Icon>{ic.badgeCheck}</Icon>, validations: true },
     { href: "/suporte", label: "Suporte", icon: <Icon>{ic.headset}</Icon> },
     { href: "/colaborador", label: "Meu Trabalho", icon: <Icon>{ic.clock}</Icon> },
   ],
@@ -131,7 +143,7 @@ const NAV: Record<Role, NavItem[]> = {
     { href: "/colaborador/tarefas", label: "Minhas tarefas", icon: <Icon>{ic.tasks}</Icon> },
     { href: "/colaborador/listagens", label: "Minhas Listagens", icon: <Icon>{ic.bag}</Icon> },
     { href: "/agenda", label: "Agenda", icon: <Icon>{ic.calendar}</Icon> },
-    { href: "/colaborador/mensagens", label: "Mensagens", icon: <Icon>{ic.chat}</Icon>, unread: true },
+    { href: "/colaborador/validacoes", label: "Validações", icon: <Icon>{ic.badgeCheck}</Icon>, validations: true },
     { href: "/suporte", label: "Suporte", icon: <Icon>{ic.headset}</Icon> },
   ],
 };
@@ -186,7 +198,7 @@ function NavLinks({
         >
           {item.icon}
           {item.label}
-          {item.unread && <UnreadMessagesBadge />}
+          {item.validations && <UnreadValidationsBadge />}
         </Link>
       ))}
     </nav>

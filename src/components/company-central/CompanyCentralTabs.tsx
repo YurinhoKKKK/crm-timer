@@ -7,15 +7,13 @@ type Tab =
   | "meetings"
   | "revenue"
   | "listings"
-  | "notes"
-  | "messages";
+  | "notes";
 
 // Alterna entre "Visão geral" (a central completa do passo 19), "Reuniões" (a
 // agenda desta empresa, fatia 1 do Google Calendar), "Faturamento" (faturamento
 // mensal por canal, Fatia 1), "Minhas Listagens" (as entregas de listagem da
-// empresa, passo 23), "Anotações" (rich text, passo 24) e "Mensagens" (conversa
-// com o cliente, passo 31). Os conteúdos são renderizados no servidor e passados
-// como slots; aqui só escolhemos a aba.
+// empresa, passo 23) e "Anotações" (rich text, passo 24). Os conteúdos são
+// renderizados no servidor e passados como slots; aqui só escolhemos a aba.
 //
 // A aba Faturamento só existe nas páginas de admin/consultor (guardadas por
 // cargo); o colaborador nunca renderiza este componente. `revenue` é opcional
@@ -26,7 +24,6 @@ export default function CompanyCentralTabs({
   revenue,
   listings,
   notes,
-  messages,
   initialTab = "overview",
 }: {
   overview: ReactNode;
@@ -34,8 +31,7 @@ export default function CompanyCentralTabs({
   revenue?: ReactNode;
   listings: ReactNode;
   notes: ReactNode;
-  messages: ReactNode;
-  // Deep-link (ex.: a caixa de entrada abre direto na aba Mensagens).
+  // Deep-link (ex.: abrir direto numa aba específica).
   initialTab?: Tab;
 }) {
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -55,7 +51,6 @@ export default function CompanyCentralTabs({
       : []),
     { key: "listings", label: "Minhas Listagens", content: listings },
     { key: "notes", label: "Anotações", content: notes },
-    { key: "messages", label: "Mensagens", content: messages },
   ];
 
   return (

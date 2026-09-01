@@ -6,11 +6,9 @@ import PortalView from "@/app/cliente/[token]/PortalView";
 import { getNoteSanitizer } from "@/lib/notes";
 import {
   PORTAL_PROGRESS_PAGE,
-  PORTAL_MESSAGES_PAGE,
   PORTAL_MEETINGS_PAGE,
   type PortalData,
   type PortalMeetings,
-  type PortalMessages,
   type PortalProgress,
 } from "@/lib/client-portal";
 
@@ -40,16 +38,11 @@ export default async function ClientPortalPreview({
 }) {
   const supabase = await createClient();
 
-  const [dataRes, progressRes, messagesRes, meetingsRes] = await Promise.all([
+  const [dataRes, progressRes, meetingsRes] = await Promise.all([
     supabase.rpc("client_portal_preview", { p_company: companyId }),
     supabase.rpc("client_portal_preview_progress", {
       p_company: companyId,
       p_limit: PORTAL_PROGRESS_PAGE,
-      p_offset: 0,
-    }),
-    supabase.rpc("client_portal_preview_messages", {
-      p_company: companyId,
-      p_limit: PORTAL_MESSAGES_PAGE,
       p_offset: 0,
     }),
     supabase.rpc("client_portal_preview_meetings", {
@@ -64,10 +57,6 @@ export default async function ClientPortalPreview({
   const data = (dataRes.data as PortalData | null) ?? null;
   if (dataRes.error || !data?.company_name) notFound();
   const progress = (progressRes.data as PortalProgress | null) ?? {
-    total: 0,
-    items: [],
-  };
-  const messages = (messagesRes.data as PortalMessages | null) ?? {
     total: 0,
     items: [],
   };
@@ -92,7 +81,6 @@ export default async function ClientPortalPreview({
       listings={data.listings}
       progress={progress}
       updates={updates}
-      messages={messages}
       meetings={meetings}
       source={{ mode: "preview", companyId }}
       banner={

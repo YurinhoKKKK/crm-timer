@@ -8,7 +8,6 @@ import CompanyNotes from "@/components/company-central/CompanyNotes";
 import { loadCompanyCentral, type Period } from "@/lib/company-central";
 import { loadCompanyListings, loadListingValidations } from "@/lib/listing";
 import { loadCompanyNotes } from "@/lib/notes";
-import { loadCompanyMessages } from "@/lib/messages";
 import {
   loadCompanyRevenue,
   loadCompanyRevenueInsights,
@@ -19,7 +18,6 @@ import {
   loadMeetingDirectory,
   loadGoogleConnected,
 } from "@/lib/meetings";
-import CompanyMessages from "@/components/company-central/CompanyMessages";
 import CompanyMeetings from "@/components/company-central/CompanyMeetings";
 import CompanyRevenue from "@/components/company-central/CompanyRevenue";
 
@@ -56,7 +54,6 @@ export default async function ConsultorEmpresaPage({
     listings,
     listingValidations,
     notes,
-    messages,
     meetings,
     directory,
     googleConnected,
@@ -67,7 +64,6 @@ export default async function ConsultorEmpresaPage({
     loadCompanyListings(supabase, params.companyId),
     loadListingValidations(supabase, params.companyId),
     loadCompanyNotes(supabase, params.companyId),
-    loadCompanyMessages(supabase, params.companyId),
     loadMeetings(supabase, { companyId: params.companyId }),
     loadMeetingDirectory(supabase),
     loadGoogleConnected(supabase),
@@ -89,9 +85,7 @@ export default async function ConsultorEmpresaPage({
       ) : (
         <CompanyCentralTabs
           initialTab={
-            searchParams?.aba === "mensagens"
-              ? "messages"
-              : searchParams?.aba === "listings"
+            searchParams?.aba === "listings"
               ? "listings"
               : searchParams?.aba === "reunioes"
               ? "meetings"
@@ -139,13 +133,6 @@ export default async function ConsultorEmpresaPage({
               userId={profile.id}
               isAdmin={false}
               notes={notes}
-            />
-          }
-          messages={
-            <CompanyMessages
-              companyId={params.companyId}
-              companyName={res.data.company.name}
-              initial={messages}
             />
           }
         />

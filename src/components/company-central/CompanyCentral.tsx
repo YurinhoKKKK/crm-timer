@@ -83,6 +83,7 @@ export default function CompanyCentral({
   data,
   period,
   editHref,
+  infoHref,
   tasksHref,
   previewHref,
 }: {
@@ -90,6 +91,8 @@ export default function CompanyCentral({
   period: Period;
   // Link para a tela de edição de dados/vínculos (admin). Ausente no consultor.
   editHref?: string;
+  // "Informações do cliente" (tela própria) — presente para admin e consultor.
+  infoHref: string;
   // Base da tela dedicada de tarefas da empresa (drill-down do funil) — muda
   // por painel: /admin/empresas/[id]/tarefas ou /consultor/[companyId]/tarefas.
   tasksHref: string;
@@ -158,11 +161,16 @@ export default function CompanyCentral({
               systemLabel="Cadastrada"
             />
           </div>
-          {editHref && (
-            <Link href={editHref} className={`${btnSecondary} shrink-0`}>
-              Editar empresa
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Link href={infoHref} className={btnSecondary}>
+              Informações do cliente
             </Link>
-          )}
+            {editHref && (
+              <Link href={editHref} className={btnSecondary}>
+                Editar empresa
+              </Link>
+            )}
+          </div>
         </div>
       </section>
 

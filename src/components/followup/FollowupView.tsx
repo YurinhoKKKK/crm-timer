@@ -40,7 +40,7 @@ function fmtDate(iso: string): string {
 function periodSummary(p: FollowupRow["period"]): string {
   const parts: string[] = [];
   if (p.meetings) parts.push(`${p.meetings} ${p.meetings === 1 ? "reunião" : "reuniões"}`);
-  if (p.notes) parts.push(`${p.notes} ${p.notes === 1 ? "anotação" : "anotações"}`);
+  if (p.notes) parts.push(`${p.notes} ${p.notes === 1 ? "atualização" : "atualizações"}`);
   if (p.listings) parts.push(`${p.listings} ${p.listings === 1 ? "listagem" : "listagens"}`);
   if (p.readjusts) parts.push(`${p.readjusts} ${p.readjusts === 1 ? "reajuste" : "reajustes"}`);
   if (p.tasks) parts.push(`${p.tasks} ${p.tasks === 1 ? "tarefa" : "tarefas"}`);

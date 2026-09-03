@@ -234,7 +234,7 @@ export default function ClientAccessManager({
       <p className="mt-2 text-xs text-fg-subtle">
         Entregue o link e a senha ao cliente por canais separados. O sistema
         não envia e-mail: a entrega é manual. O cliente vê SOMENTE as
-        listagens, o andamento curado e as anotações marcadas “visível ao
+        listagens, o andamento curado e as atualizações marcadas “visível ao
         cliente”.
       </p>
 

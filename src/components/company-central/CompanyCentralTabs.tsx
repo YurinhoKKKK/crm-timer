@@ -50,7 +50,7 @@ export default function CompanyCentralTabs({
       ? [{ key: "revenue" as Tab, label: "Faturamento", content: revenue }]
       : []),
     { key: "listings", label: "Minhas Listagens", content: listings },
-    { key: "notes", label: "Anotações", content: notes },
+    { key: "notes", label: "Atualizações", content: notes },
   ];
 
   return (

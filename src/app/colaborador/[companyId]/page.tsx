@@ -161,7 +161,7 @@ export default async function ColaboradorEmpresaPage({
       {/* Anotações da empresa (passo 24): o colaborador lê todas e cria as
           suas; edita/exclui só as próprias (RLS cn_*). */}
       <section id="anotacoes" className="mt-8 scroll-mt-20">
-        <h2 className="mb-4 text-base font-semibold text-fg">Anotações</h2>
+        <h2 className="mb-4 text-base font-semibold text-fg">Atualizações</h2>
         <CompanyNotes
           companyId={company.id}
           userId={profile.id}

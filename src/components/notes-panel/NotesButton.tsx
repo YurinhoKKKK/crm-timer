@@ -49,10 +49,10 @@ export default function NotesButton({
         }}
         aria-label={
           has
-            ? `Anotações de ${companyName} (${count})`
-            : `Escrever a primeira anotação de ${companyName}`
+            ? `Atualizações de ${companyName} (${count})`
+            : `Escrever a primeira atualização de ${companyName}`
         }
-        title={has ? `${count} anotaç${count === 1 ? "ão" : "ões"}` : "Sem anotações"}
+        title={has ? `${count} atualizaç${count === 1 ? "ão" : "ões"}` : "Sem atualizações"}
         className={`inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd ${
           has
             ? "text-risd hover:bg-brand-tint"

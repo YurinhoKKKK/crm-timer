@@ -193,7 +193,7 @@ export default function NotesPanel({
       <aside
         role="dialog"
         aria-modal="true"
-        aria-label={`Anotações de ${companyName}`}
+        aria-label={`Atualizações de ${companyName}`}
         // Largura ~48% em telas grandes (referência: painel de atualizações do
         // Monday), com teto para não esticar em ultrawide; tela cheia no estreito.
         className="relative flex h-full w-full flex-col overflow-hidden bg-surface shadow-pop sm:w-[48%] sm:max-w-[860px]"
@@ -201,7 +201,7 @@ export default function NotesPanel({
         <header className="flex items-start justify-between gap-3 border-b border-line p-5">
           <div className="min-w-0">
             <p className="text-xs uppercase tracking-wide text-fg-subtle">
-              Anotações
+              Atualizações
             </p>
             <h2 className="truncate text-lg font-semibold text-fg">
               {companyName}
@@ -212,7 +212,7 @@ export default function NotesPanel({
               disabled={navPending}
               className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-risd transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:opacity-60"
             >
-              {navPending ? "Abrindo…" : "Abrir aba completa de Anotações →"}
+              {navPending ? "Abrindo…" : "Abrir aba completa de Atualizações →"}
             </button>
           </div>
           <button
@@ -246,7 +246,7 @@ export default function NotesPanel({
               className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-line bg-surface-2/40 px-4 py-3 text-sm font-medium text-fg-muted transition hover:border-risd/50 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
             >
               <PencilLine size={16} />
-              Escrever anotação
+              Escrever atualização
             </button>
           )}
 
@@ -255,7 +255,7 @@ export default function NotesPanel({
           ) : error ? (
             <div className="py-8 text-center">
               <p className="text-sm text-red-600 dark:text-red-400">
-                Não foi possível carregar as anotações.
+                Não foi possível carregar as atualizações.
               </p>
               <p className="mt-1 text-xs text-fg-subtle">{error}</p>
               <button
@@ -271,7 +271,7 @@ export default function NotesPanel({
             </div>
           ) : notes.length === 0 ? (
             <div className="rounded-xl border border-dashed border-line bg-surface-2/30 p-6 text-center text-sm text-fg-subtle">
-              Nenhuma anotação ainda. Escreva a primeira — resumos de reunião,
+              Nenhuma atualização ainda. Escreva a primeira — resumos de reunião,
               planos de ação e observações sobre o cliente.
             </div>
           ) : (
@@ -393,11 +393,11 @@ export default function NotesPanel({
       <ConfirmDialog
         open={confirmVisible}
         tone="primary"
-        title="Tornar esta anotação visível ao cliente?"
+        title="Tornar esta atualização visível ao cliente?"
         description={
           <>
             Ela aparecerá no <strong>portal do cliente</strong> de{" "}
-            <strong>{companyName}</strong>. Anotações internas são o padrão —
+            <strong>{companyName}</strong>. Atualizações internas são o padrão —
             confirme apenas se o cliente deve mesmo ler este conteúdo.
           </>
         }

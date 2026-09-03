@@ -70,7 +70,7 @@ export function farolOf(days: number | null): Farol {
 
 export const KIND_LABEL: Record<FollowupKind, string> = {
   reuniao: "Reunião realizada",
-  anotacao: "Anotação ao cliente",
+  anotacao: "Atualização ao cliente",
   listagem: "Listagem entregue",
   reajuste: "Reajuste concluído",
   tarefa: "Tarefa concluída",

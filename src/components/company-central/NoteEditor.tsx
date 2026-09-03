@@ -202,7 +202,12 @@ export default function NoteEditor({
   initialHTML = "",
   initialVisible = false,
   initialAttachments = [],
-  saveLabel = "Salvar anotação",
+  saveLabel = "Salvar atualização",
+  // Texto do placeholder do editor. Quando não informado, deriva do contexto:
+  // no de Atualizações (com noção de cliente) fala "atualização"; nos reusos
+  // internos sem cliente (chamados de suporte) fica neutro, para não introduzir
+  // a palavra "atualização" onde ela não faz sentido.
+  placeholder,
   // Toggle "visível ao cliente": presente por padrão (anotações). Some quando o
   // editor é reusado num contexto 100% interno sem noção de cliente — ex.: os
   // chamados de suporte —, sem mudar o comportamento nas anotações. `visible`
@@ -221,6 +226,7 @@ export default function NoteEditor({
   initialVisible?: boolean;
   initialAttachments?: NoteAttachmentMeta[];
   saveLabel?: string;
+  placeholder?: string;
   showClientVisibility?: boolean;
   toolbarOffset?: string;
   onSave: (
@@ -364,7 +370,11 @@ export default function NoteEditor({
       TaskList,
       TaskItem.configure({ nested: true }),
       TableKit.configure({ table: { resizable: false } }),
-      Placeholder.configure({ placeholder: "Escreva a anotação…" }),
+      Placeholder.configure({
+        placeholder:
+          placeholder ??
+          (showClientVisibility ? "Escreva a atualização…" : "Escreva aqui…"),
+      }),
     ],
     content: initialHTML,
     editorProps: {

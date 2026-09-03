@@ -214,10 +214,10 @@ export default function CompanyNotes({
       <div className="mb-4 flex items-center justify-between gap-3">
         <p className="text-sm text-fg-muted">
           {notes.length === 0
-            ? "Nenhuma anotação ainda."
+            ? "Nenhuma atualização ainda."
             : filtered.length === notes.length
-              ? `${notes.length} anotaç${notes.length === 1 ? "ão" : "ões"}`
-              : `${filtered.length} de ${notes.length} anotações`}
+              ? `${notes.length} atualizaç${notes.length === 1 ? "ão" : "ões"}`
+              : `${filtered.length} de ${notes.length} atualizações`}
         </p>
         {!creating && (
           <button
@@ -228,7 +228,7 @@ export default function CompanyNotes({
             }}
             className={btnPrimary}
           >
-            Nova anotação
+            Nova atualização
           </button>
         )}
       </div>
@@ -248,7 +248,7 @@ export default function CompanyNotes({
           <SearchBox
             value={query}
             onChange={setQuery}
-            placeholder="Buscar nas anotações…"
+            placeholder="Buscar nas atualizações…"
           />
           <SelectFilter
             value={author}
@@ -304,7 +304,7 @@ export default function CompanyNotes({
           empresa.
         </EmptyState>
       ) : filtered.length === 0 ? (
-        <EmptyState>Nenhuma anotação corresponde aos filtros.</EmptyState>
+        <EmptyState>Nenhuma atualização corresponde aos filtros.</EmptyState>
       ) : (
         <ul className="space-y-3">
           {visible.map((n) => (
@@ -437,11 +437,11 @@ export default function CompanyNotes({
         open={deleting !== null}
         onClose={() => setDeleting(null)}
         onConfirm={() => (deleting ? deleteNote(deleting) : undefined)}
-        title="Excluir anotação"
+        title="Excluir atualização"
         description={
           deleting ? (
             <>
-              A anotação de <strong>{deleting.authorName}</strong> de{" "}
+              A atualização de <strong>{deleting.authorName}</strong> de{" "}
               {formatDateTime(deleting.createdAtISO)} será removida
               permanentemente
               {deleting.attachments.length > 0

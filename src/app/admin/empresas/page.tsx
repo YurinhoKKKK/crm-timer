@@ -4,7 +4,6 @@ import AppShell from "@/components/AppShell";
 import type { TaskKind } from "@/lib/types";
 import NewCompanyForm from "./NewCompanyForm";
 import CompanyGroupsBoard, { type CompanyItem } from "./CompanyGroupsBoard";
-import LabelManager from "./LabelManager";
 import { withSelf } from "@/lib/people";
 import { loadLabelCatalog, loadAllLabelsByCompany, loadInUseLabels } from "@/lib/labels";
 import { loadCompanyGroups, resolveCompanyGroupId } from "@/lib/company-groups";
@@ -164,8 +163,6 @@ export default async function EmpresasPage() {
         labels={labelCatalog}
       />
 
-      <LabelManager labels={labelCatalog} />
-
       {consultores.length === 0 && (
         <p className="mb-6 text-sm text-fg-subtle">
           Ainda não há consultores cadastrados. Defina o cargo de alguém como
@@ -184,6 +181,7 @@ export default async function EmpresasPage() {
         truncated={truncated}
         viewerId={profile.id}
         inUseLabels={inUseLabels}
+        labelCatalog={labelCatalog}
         consultores={consultores.map((c) => ({
           value: c.id,
           label: c.full_name || c.email,

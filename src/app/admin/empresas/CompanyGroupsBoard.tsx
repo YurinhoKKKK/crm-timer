@@ -24,6 +24,7 @@ import {
   type CompanyGroup,
 } from "@/lib/company-groups";
 import GroupDialog from "./GroupDialog";
+import LabelManager from "./LabelManager";
 import {
   createGroup,
   updateGroup,
@@ -62,6 +63,7 @@ export default function CompanyGroupsBoard({
   truncated,
   viewerId,
   inUseLabels,
+  labelCatalog,
   consultores,
 }: {
   companies: CompanyItem[];
@@ -69,7 +71,8 @@ export default function CompanyGroupsBoard({
   total: number; // total no banco (para detectar corte de desempenho)
   truncated: boolean;
   viewerId: string; // usuário logado (autor das anotações escritas pelo balão)
-  inUseLabels: Label[];
+  inUseLabels: Label[]; // etiquetas EM USO — alimentam os chips de filtro (sempre visíveis)
+  labelCatalog: Label[]; // catálogo COMPLETO — gerenciado atrás do "Configurar página"
   consultores: SelectOption[];
 }) {
   const router = useRouter();
@@ -88,6 +91,10 @@ export default function CompanyGroupsBoard({
 
   // Seleção múltipla.
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // Painel "Configurar página" (etiquetas + criar grupo). Fechado por padrão: o
+  // gerenciamento sai da visão do dia a dia e a lista começa perto do topo.
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Recolhidos (persistido por usuário em localStorage). Vazio até o efeito ler.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -271,19 +278,6 @@ export default function CompanyGroupsBoard({
 
   return (
     <>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={() => setDialog({ mode: "create" })}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-risd px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-chrysler focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          Novo grupo
-        </button>
-      </div>
-
       <FilterBar>
         <SearchBox value={search} onChange={setSearch} placeholder="Buscar por nome…" />
         {consultores.length > 0 && (
@@ -349,18 +343,60 @@ export default function CompanyGroupsBoard({
         </p>
       )}
 
-      <p className="mb-3 text-sm text-fg-muted">
-        {filtersActive ? (
-          <>
-            {filteredCount} {filteredCount === 1 ? "resultado" : "resultados"} de{" "}
-            {items.length}
-          </>
-        ) : (
-          <>
-            {items.length} {items.length === 1 ? "empresa" : "empresas"}
-          </>
-        )}
-      </p>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-sm text-fg-muted">
+          {filtersActive ? (
+            <>
+              {filteredCount} {filteredCount === 1 ? "resultado" : "resultados"} de{" "}
+              {items.length}
+            </>
+          ) : (
+            <>
+              {items.length} {items.length === 1 ? "empresa" : "empresas"}
+            </>
+          )}
+        </p>
+        <button
+          type="button"
+          onClick={() => setSettingsOpen((v) => !v)}
+          aria-expanded={settingsOpen}
+          aria-controls="empresas-config"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-fg-muted transition hover:border-risd/50 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+          {settingsOpen ? "Fechar" : "Configurar página"}
+        </button>
+      </div>
+
+      {settingsOpen && (
+        <div id="empresas-config" className="mb-4 space-y-3">
+          <LabelManager labels={labelCatalog} />
+          <div className="rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-fg">Grupos</h2>
+                <p className="text-xs text-fg-muted">
+                  Organize as empresas em seções coloridas. Renomear, recolorir e
+                  reordenar ficam no menu de cada grupo na lista.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDialog({ mode: "create" })}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-risd px-3 py-1.5 text-sm font-medium text-white shadow-sm transition hover:bg-chrysler focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                Novo grupo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {notice && (
         <div className="mb-3 flex items-start justify-between gap-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">

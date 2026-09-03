@@ -111,16 +111,6 @@ export type CentralCollaboratorRow = {
   percent: number;
 };
 
-export type CentralActivityItem = {
-  id: string;
-  message: string;
-  seconds: number;
-  sentWhatsapp: boolean;
-  createdAt: string;
-  collaboratorName: string;
-  collaboratorAvatarUrl: string | null;
-};
-
 export type StandardOption = { id: string; title: string; kind: TaskKind };
 export type PersonOption = { id: string; full_name: string; email: string };
 
@@ -134,7 +124,6 @@ export type CentralData = {
   groupStats: GroupStats[];
   attention: CentralAttentionItem[];
   collaboratorRows: CentralCollaboratorRow[];
-  activity: CentralActivityItem[];
   // Para as ações/edição in-loco (Nova tarefa e Tarefas padrão desta empresa).
   standards: StandardOption[];
   currentStandardTasks: { standardId: string; collaboratorId: string }[];
@@ -166,7 +155,6 @@ export async function loadCompanyCentral(
     { data: openData, error: openError },
     { data: closedData, error: closedError },
     { data: statsData },
-    { data: activityData },
     { data: standardData },
     { data: assignedData },
     { data: collaboratorsData },
@@ -245,21 +233,6 @@ export async function loadCompanyCentral(
         p_company_id: companyId,
         p_start: start ?? undefined,
       })
-    ),
-    perf.timed(
-      "activity_log (30)",
-      (() => {
-        let q = supabase
-          .from("activity_log")
-          .select(
-            "id, message, seconds_spent, sent_whatsapp, created_at, collaborator:profiles!activity_log_collaborator_id_fkey(full_name, email, avatar_path)"
-          )
-          .eq("company_id", companyId)
-          .order("created_at", { ascending: false })
-          .limit(30);
-        if (start) q = q.gte("created_at", `${start}T00:00:00`);
-        return q;
-      })()
     ),
     perf.timed(
       "standard_tasks (catálogo)",
@@ -457,33 +430,6 @@ export async function loadCompanyCentral(
     percent: r.total > 0 ? Math.round((r.done / r.total) * 100) : 0,
   }));
 
-  // --- Histórico de atividades ---
-  const activity: CentralActivityItem[] = (
-    (activityData as {
-      id: string;
-      message: string;
-      seconds_spent: number;
-      sent_whatsapp: boolean;
-      created_at: string;
-      collaborator: Joined<{
-        full_name: string | null;
-        email: string;
-        avatar_path: string | null;
-      }>;
-    }[]) ?? []
-  ).map((a) => {
-    const collab = first(a.collaborator);
-    return {
-      id: a.id,
-      message: a.message,
-      seconds: a.seconds_spent,
-      sentWhatsapp: a.sent_whatsapp,
-      createdAt: a.created_at,
-      collaboratorName: collab?.full_name || collab?.email || "—",
-      collaboratorAvatarUrl: avatarUrl(collab?.avatar_path),
-    };
-  });
-
   // --- Ações: tarefas padrão + responsáveis (com autoatribuição, Passo 14) ---
   const standards = (standardData as StandardOption[]) ?? [];
   const currentStandardTasks = (
@@ -549,7 +495,6 @@ export async function loadCompanyCentral(
       groupStats: (statsData as GroupStats[]) ?? [],
       attention,
       collaboratorRows,
-      activity,
       standards,
       currentStandardTasks,
       collaborators,

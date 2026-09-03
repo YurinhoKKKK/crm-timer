@@ -5,6 +5,7 @@ import NewTaskForm from "@/app/admin/tarefas/NewTaskForm";
 import CompanyStandardTasks from "@/components/CompanyStandardTasks";
 import CompanyTaskList from "./CompanyTaskList";
 import ClientAccessManager from "./ClientAccessManager";
+import CompanyActivityFeed from "./CompanyActivityFeed";
 import CreatorMeta from "@/components/CreatorMeta";
 import ContractBar from "@/components/ContractBar";
 import LabelChips from "@/components/LabelChips";
@@ -20,16 +21,6 @@ const PERIOD_LABEL: Record<Period, string> = {
   "30d": "nos últimos 30 dias",
   tudo: "em todo o período",
 };
-
-function formatDateTime(value: string): string {
-  return new Date(value).toLocaleString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 // Card numérico dos indicadores (block 2). Com `href`, vira link: leva à
 // lista de tarefas (âncora #tarefas) já filtrada pelo status do card.
@@ -387,49 +378,9 @@ export default function CompanyCentral({
         )}
       </section>
 
-      {/* 7. Histórico de atividades */}
-      <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
-        <h3 className="mb-4 text-sm font-semibold text-fg">
-          Histórico de atividades
-        </h3>
-        {data.activity.length === 0 ? (
-          <p className="py-4 text-center text-sm text-fg-subtle">
-            Nenhuma atividade registrada no período.
-          </p>
-        ) : (
-          <ol className="space-y-4">
-            {data.activity.map((a) => (
-              <li key={a.id} className="relative border-l-2 border-line pl-4">
-                <span className="absolute -left-[5px] top-1.5 h-2 w-2 rounded-full bg-risd" />
-                <div className="flex flex-wrap items-center gap-2 text-xs text-fg-subtle">
-                  <span className="inline-flex items-center gap-1.5 font-medium text-fg">
-                    <Avatar
-                      name={a.collaboratorName}
-                      url={a.collaboratorAvatarUrl}
-                      size={18}
-                    />
-                    {a.collaboratorName}
-                  </span>
-                  <span>·</span>
-                  <span>{formatDateTime(a.createdAt)}</span>
-                  <span>·</span>
-                  <span className="font-mono tabular-nums">
-                    {formatDuration(a.seconds)}
-                  </span>
-                  {a.sentWhatsapp && (
-                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
-                      WhatsApp
-                    </span>
-                  )}
-                </div>
-                <p className="mt-1 whitespace-pre-wrap text-sm text-fg-muted">
-                  {a.message}
-                </p>
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
+      {/* 7. Histórico de atividades — carrega SOB DEMANDA (fora do load inicial
+          da página), pagina e filtra no banco. Ver CompanyActivityFeed. */}
+      <CompanyActivityFeed companyId={company.id} />
 
       {/* 8. Acesso do cliente (passos 25 e 30): link + senha do portal externo.
           A GESTÃO é EXCLUSIVA DO ADMIN — a seção inteira (link, senha, gerar,

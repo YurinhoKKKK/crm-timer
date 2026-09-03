@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Combobox from "@/components/Combobox";
+import { DateTimeField } from "@/components/DateField";
 import ParticipantPicker from "./ParticipantPicker";
 import {
   createMeeting,
@@ -372,29 +373,23 @@ export default function MeetingForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <label htmlFor="meeting-start" className={labelClass}>
+          <label className={labelClass}>
             Início <span className={hintClass}>(horário de Brasília)</span>
           </label>
-          <input
-            id="meeting-start"
-            type="datetime-local"
-            required
+          <DateTimeField
             value={startLocal}
-            onChange={(e) => setStartLocal(e.target.value)}
-            className={inputClass}
+            onChange={setStartLocal}
+            ariaLabel="Início da reunião"
           />
         </div>
         <div>
-          <label htmlFor="meeting-end" className={labelClass}>
+          <label className={labelClass}>
             Fim <span className={hintClass}>(horário de Brasília)</span>
           </label>
-          <input
-            id="meeting-end"
-            type="datetime-local"
-            required
+          <DateTimeField
             value={endLocal}
-            onChange={(e) => setEndLocal(e.target.value)}
-            className={inputClass}
+            onChange={setEndLocal}
+            ariaLabel="Fim da reunião"
           />
         </div>
       </div>

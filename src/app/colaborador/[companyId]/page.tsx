@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
@@ -6,6 +7,7 @@ import LabelChips from "@/components/LabelChips";
 import CompanyNotes from "@/components/company-central/CompanyNotes";
 import { loadCompanyLabels } from "@/lib/labels";
 import { loadCompanyNotes } from "@/lib/notes";
+import { btnSecondary } from "@/lib/ui";
 import TaskList, { type TaskItem } from "./TaskList";
 
 type CompanyRow = { id: string; name: string };
@@ -110,7 +112,19 @@ export default async function ColaboradorEmpresaPage({
       back={{ href: "/colaborador", label: "Minhas empresas" }}
     >
       <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
-        {labels.length > 0 && <LabelChips labels={labels} className="mb-4" />}
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          {labels.length > 0 ? (
+            <LabelChips labels={labels} />
+          ) : (
+            <span />
+          )}
+          <Link
+            href={`/colaborador/${company.id}/informacoes`}
+            className={btnSecondary}
+          >
+            Informações do cliente
+          </Link>
+        </div>
         <div className="mb-2 flex items-center justify-between text-sm text-fg-muted">
           <span className="font-medium text-fg">Progresso geral</span>
           <span className="font-mono tabular-nums">

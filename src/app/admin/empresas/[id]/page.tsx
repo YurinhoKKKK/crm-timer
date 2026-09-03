@@ -100,6 +100,7 @@ export default async function EmpresaCentralPage({
               data={res.data}
               period={period}
               editHref={`/admin/empresas/${params.id}/editar`}
+              infoHref={`/admin/empresas/${params.id}/informacoes`}
               tasksHref={`/admin/empresas/${params.id}/tarefas`}
               previewHref={`/admin/empresas/${params.id}/ver-como-cliente`}
             />

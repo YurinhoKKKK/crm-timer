@@ -99,6 +99,7 @@ export default async function ConsultorEmpresaPage({
             <CompanyCentral
               data={res.data}
               period={period}
+              infoHref={`/consultor/${params.companyId}/informacoes`}
               tasksHref={`/consultor/${params.companyId}/tarefas`}
               previewHref={`/consultor/${params.companyId}/ver-como-cliente`}
             />

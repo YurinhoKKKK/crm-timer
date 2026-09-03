@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateTaskInstance } from "../../actions";
 import Combobox from "@/components/Combobox";
+import { DateTimeField } from "@/components/DateField";
 import { inputClass, labelClass, hintClass, btnPrimary } from "@/lib/ui";
 
 type PersonOption = { id: string; full_name: string; email: string };
@@ -123,15 +124,13 @@ export default function TaskInstanceEditor({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <label htmlFor="ti-due" className={labelClass}>
+          <label className={labelClass}>
             Prazo <span className={hintClass}>(opcional)</span>
           </label>
-          <input
-            id="ti-due"
-            type="datetime-local"
+          <DateTimeField
             value={dueAtLocal}
-            onChange={(e) => setDueAtLocal(e.target.value)}
-            className={inputClass}
+            onChange={setDueAtLocal}
+            ariaLabel="Prazo da tarefa"
           />
         </div>
         <div>

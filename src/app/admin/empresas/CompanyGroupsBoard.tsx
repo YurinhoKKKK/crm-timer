@@ -13,6 +13,7 @@ import {
 } from "@/components/ListControls";
 import LabelChips, { labelChipStyle } from "@/components/LabelChips";
 import Avatar from "@/components/Avatar";
+import ContractBar from "@/components/ContractBar";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import NotesButton from "@/components/notes-panel/NotesButton";
 import type { Label } from "@/lib/labels";
@@ -40,6 +41,10 @@ export type CompanyItem = {
   labels: Label[];
   groupId: string | null;
   noteCount: number;
+  // Período do contrato (company_details) — DATA PURA. Alimenta a barra compacta;
+  // null quando não há as duas datas (a barra não aparece).
+  startedOn: string | null;
+  endsOn: string | null;
 };
 
 const COLLAPSE_KEY = "crm:empresas:grupos-recolhidos";
@@ -771,6 +776,15 @@ function CompanyRow({
             ))}
           </div>
         )}
+        {/* Barra do contrato — compacta; só aparece com as duas datas, então não
+            reserva espaço nem quebra o layout das linhas sem datas. */}
+        <div className="mt-2 empty:hidden">
+          <ContractBar
+            startedOn={company.startedOn}
+            endsOn={company.endsOn}
+            compact
+          />
+        </div>
       </Link>
       {/* Coluna de ações à direita: balão de anotações e seta de entrar na
           empresa, LADO A LADO no mesmo eixo, balão primeiro. O balão fica fora

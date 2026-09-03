@@ -432,20 +432,32 @@ export default function CompanyCentral({
       </section>
 
       {/* 8. Acesso do cliente (passos 25 e 30): link + senha do portal externo.
-          A gestão é só do admin; o consultor vê o estado e a pré-visualização. */}
-      <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
-        <h3 className="mb-1 font-semibold text-fg">Acesso do cliente</h3>
-        <p className="mb-4 text-sm text-fg-muted">
-          Um link exclusivo, protegido por senha, para o cliente acompanhar as
-          entregas (listagens) e as atualizações do projeto — sem ver nada da
-          operação interna.
-        </p>
-        <ClientAccessManager
-          companyId={company.id}
-          view={data.clientAccess}
-          previewHref={previewHref}
-        />
-      </section>
+          A GESTÃO é EXCLUSIVA DO ADMIN — a seção inteira (link, senha, gerar,
+          girar, revogar e o histórico) só é renderizada para admin. O servidor
+          já recusa gerar/ler credencial a outros cargos; aqui a UI acompanha.
+          Consultor recebe SOMENTE o "Ver como cliente" — sem seção em volta,
+          sem link, sem senha, sem histórico. */}
+      {data.clientAccess.role === "admin" ? (
+        <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
+          <h3 className="mb-1 font-semibold text-fg">Acesso do cliente</h3>
+          <p className="mb-4 text-sm text-fg-muted">
+            Um link exclusivo, protegido por senha, para o cliente acompanhar as
+            entregas (listagens) e as atualizações do projeto — sem ver nada da
+            operação interna.
+          </p>
+          <ClientAccessManager
+            companyId={company.id}
+            view={data.clientAccess}
+            previewHref={previewHref}
+          />
+        </section>
+      ) : (
+        <div className="mb-6">
+          <Link href={previewHref} className={btnSecondary}>
+            Ver como cliente
+          </Link>
+        </div>
+      )}
 
       {/* 9. Tarefas padrão desta empresa */}
       {data.standards.length > 0 && (

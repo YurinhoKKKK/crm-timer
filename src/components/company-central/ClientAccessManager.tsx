@@ -99,22 +99,14 @@ export default function ClientAccessManager({
     </Link>
   );
 
-  // --- Consultor: estado, sem credencial -----------------------------------
+  // --- Consultor: SOMENTE a pré-visualização, sem credencial ----------------
+  // A gestão do acesso é exclusiva do admin (barrada também no servidor). Hoje o
+  // CompanyCentral nem renderiza esta tela para consultor — mostra só o botão
+  // "Ver como cliente" por fora. Este ramo é uma salvaguarda: se o componente
+  // for reusado com uma view de consultor, ainda assim NÃO expõe estado, link,
+  // senha nem histórico — apenas o botão.
   if (view.role === "consultor") {
-    const { exists, active } = view.status;
-    return (
-      <div>
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusPill active={active} exists={exists} />
-        </div>
-        <p className="mt-3 text-sm text-fg-muted">
-          O link e a senha do cliente são gerados e entregues pelo
-          administrador. Você pode conferir exatamente o que o cliente enxerga
-          pela pré-visualização.
-        </p>
-        <div className="mt-4">{previewButton}</div>
-      </div>
-    );
+    return <div>{previewButton}</div>;
   }
 
   // --- Admin ---------------------------------------------------------------

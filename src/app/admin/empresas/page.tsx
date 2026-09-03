@@ -32,6 +32,12 @@ type CompanyRow = {
   whatsapp_contact_id: string | null;
   whatsapp_group_name: string | null;
   group_id: string | null;
+  // Embed 1:1 com company_details (datas do contrato) — mesma consulta da lista,
+  // nunca uma ida por empresa. PostgREST devolve objeto (ou array) ou null.
+  company_details:
+    | { started_on: string | null; ends_on: string | null }
+    | { started_on: string | null; ends_on: string | null }[]
+    | null;
 };
 
 // Teto de carregamento explícito: a tela é AGRUPADA e filtra/busca client-side
@@ -59,7 +65,7 @@ export default async function EmpresasPage() {
     supabase
       .from("companies")
       .select(
-        "id, name, whatsapp_contact_id, whatsapp_group_name, group_id",
+        "id, name, whatsapp_contact_id, whatsapp_group_name, group_id, company_details(started_on, ends_on)",
         { count: "exact" }
       )
       .order("name", { ascending: true })
@@ -121,7 +127,11 @@ export default async function EmpresasPage() {
     consultantsByCompany.set(link.company_id, list);
   }
 
-  const companyItems: CompanyItem[] = rows.map((c) => ({
+  const companyItems: CompanyItem[] = rows.map((c) => {
+    const det = Array.isArray(c.company_details)
+      ? c.company_details[0] ?? null
+      : c.company_details;
+    return {
     id: c.id,
     name: c.name,
     whatsappGroupName: c.whatsapp_group_name,
@@ -135,7 +145,10 @@ export default async function EmpresasPage() {
     // ÚNICO ponto de leitura de group_id: o helper centraliza para a porta de M:N.
     groupId: resolveCompanyGroupId(c),
     noteCount: noteCounts.get(c.id) ?? 0,
-  }));
+    startedOn: det?.started_on ?? null,
+    endsOn: det?.ends_on ?? null,
+    };
+  });
 
   return (
     <AppShell

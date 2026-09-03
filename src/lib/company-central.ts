@@ -55,6 +55,10 @@ export type CentralCompany = {
   creatorName: string | null; // quem cadastrou (null = anterior ao registro)
   creatorAvatarUrl: string | null;
   labels: Label[]; // etiquetas da empresa (herdadas por todas as tarefas)
+  // Período do contrato (company_details) — DATA PURA. Alimenta a barra do
+  // cabeçalho; null quando não preenchido (a barra some).
+  startedOn: string | null;
+  endsOn: string | null;
 };
 
 export type CentralPerson = { name: string; avatarUrl: string | null };
@@ -175,7 +179,7 @@ export async function loadCompanyCentral(
       supabase
         .from("companies")
         .select(
-          "id, name, whatsapp_group_name, whatsapp_contact_id, created_at, created_by"
+          "id, name, whatsapp_group_name, whatsapp_contact_id, created_at, created_by, company_details(started_on, ends_on)"
         )
         .eq("id", companyId)
         .maybeSingle()
@@ -301,8 +305,18 @@ export async function loadCompanyCentral(
     whatsapp_contact_id: string | null;
     created_at: string;
     created_by: string | null;
+    // Embed 1:1 — o PostgREST devolve objeto (ou array em alguns casos); null se
+    // a empresa não tem linha em company_details.
+    company_details:
+      | { started_on: string | null; ends_on: string | null }
+      | { started_on: string | null; ends_on: string | null }[]
+      | null;
   } | null;
   if (!company) return { notFound: true };
+
+  const details = Array.isArray(company.company_details)
+    ? company.company_details[0] ?? null
+    : company.company_details;
 
   if (overviewError) return { notFound: false, error: overviewError.message };
   const tasksError = openError ?? closedError;
@@ -525,6 +539,8 @@ export async function loadCompanyCentral(
           ? people.get(company.created_by)?.avatarUrl ?? null
           : null,
         labels: companyLabels,
+        startedOn: details?.started_on ?? null,
+        endsOn: details?.ends_on ?? null,
       },
       consultants,
       overview,

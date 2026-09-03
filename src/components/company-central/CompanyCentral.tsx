@@ -6,6 +6,7 @@ import CompanyStandardTasks from "@/components/CompanyStandardTasks";
 import CompanyTaskList from "./CompanyTaskList";
 import ClientAccessManager from "./ClientAccessManager";
 import CreatorMeta from "@/components/CreatorMeta";
+import ContractBar from "@/components/ContractBar";
 import LabelChips from "@/components/LabelChips";
 import TaskDetailLink from "@/components/TaskDetailLink";
 import { STATUS_META } from "@/lib/status";
@@ -160,6 +161,8 @@ export default function CompanyCentral({
               hasOrigin={!!company.creatorName}
               systemLabel="Cadastrada"
             />
+            {/* Barra do período do contrato — só aparece com as duas datas. */}
+            <ContractBar startedOn={company.startedOn} endsOn={company.endsOn} />
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
             <Link href={infoHref} className={btnSecondary}>

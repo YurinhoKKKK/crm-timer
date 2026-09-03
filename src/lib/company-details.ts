@@ -199,6 +199,38 @@ export type PeriodInfo =
       remaining: number;
     };
 
+// Barra visual do período do contrato (espírito da coluna Timeline do Monday).
+// SÓ existe quando as DUAS datas estão preenchidas — sem elas, não se desenha
+// barra (o chamador não renderiza nada). Percent é o tempo DECORRIDO, sempre
+// entre 0 e 100. `nearEnd` (≤ 30 dias restantes) é o sinal mais acionável:
+// renovação à vista.
+export type ContractBar =
+  | { state: "not_started"; startsInDays: number }
+  | { state: "in_progress"; percent: number; remaining: number; nearEnd: boolean }
+  | { state: "ended"; endedDaysAgo: number };
+
+export function computeContractBar(
+  startedOn: string | null,
+  endsOn: string | null,
+  today: string
+): ContractBar | null {
+  if (!startedOn || !endsOn) return null;
+
+  const toStart = pureDateDiffDays(today, startedOn); // > 0 = começa no futuro
+  if (toStart > 0) return { state: "not_started", startsInDays: toStart };
+
+  const toEnd = pureDateDiffDays(today, endsOn); // >= 0 restante · < 0 encerrado
+  if (toEnd < 0) return { state: "ended", endedDaysAgo: -toEnd };
+
+  // Em andamento (hoje entre início e fim, inclusive). Guarda contra started ==
+  // ends (total 0): nesse caso está encerrando hoje (100%).
+  const total = pureDateDiffDays(startedOn, endsOn);
+  const elapsed = pureDateDiffDays(startedOn, today);
+  const percent =
+    total <= 0 ? 100 : Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)));
+  return { state: "in_progress", percent, remaining: toEnd, nearEnd: toEnd <= 30 };
+}
+
 export function computePeriodInfo(
   startedOn: string | null,
   endsOn: string | null,

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { btnPrimary, btnSecondary, inputClass, labelClass } from "@/lib/ui";
+import { DateRangeField } from "@/components/DateField";
 import { CHANNEL_LABEL, SALES_CHANNELS, type SalesChannel } from "@/lib/revenue";
 import {
   saveCompanyDetails,
@@ -401,27 +402,15 @@ function EditView({
 
         <div className="sm:col-span-2">
           <label className={labelClass}>Período do contrato</label>
-          <div className="flex flex-wrap items-end gap-x-3 gap-y-3">
-            <div>
-              <span className="mb-1 block text-xs text-fg-subtle">Início</span>
-              <input
-                type="date"
-                value={startedOn}
-                onChange={(e) => setStartedOn(e.target.value)}
-                className={inputClass}
-                aria-label="Data de início do contrato"
-              />
-            </div>
-            <div>
-              <span className="mb-1 block text-xs text-fg-subtle">Término</span>
-              <input
-                type="date"
-                value={endsOn}
-                onChange={(e) => setEndsOn(e.target.value)}
-                className={inputClass}
-                aria-label="Data de término do contrato"
-              />
-            </div>
+          <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+            <DateRangeField
+              startValue={startedOn}
+              endValue={endsOn}
+              onChange={(s, e) => {
+                setStartedOn(s);
+                setEndsOn(e);
+              }}
+            />
             {(startedOn || endsOn) && (
               <button
                 type="button"

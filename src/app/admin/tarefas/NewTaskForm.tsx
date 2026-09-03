@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createTaskTemplate } from "../actions";
 import Combobox from "@/components/Combobox";
+import { DateField } from "@/components/DateField";
 import ListingFields, {
   emptyListingForm,
   type ListingFormValue,
@@ -100,6 +101,12 @@ export default function NewTaskForm({
     e.preventDefault();
     if (submitting) return; // trava reentrância (clique repetido)
     setError(null);
+    // Substituímos o <input type="date" required> pelo seletor do projeto, que
+    // não faz validação nativa — então garantimos a data obrigatória aqui.
+    if ((mode === "unica" || mode === "listagem") && !startDate.trim()) {
+      setError("Informe a data da tarefa.");
+      return;
+    }
     setSubmitting(true);
     try {
       const isListing = mode === "listagem";
@@ -263,16 +270,11 @@ export default function NewTaskForm({
       {mode === "unica" || mode === "listagem" ? (
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label htmlFor="task-start" className={labelClass}>
-              Data
-            </label>
-            <input
-              id="task-start"
-              type="date"
-              required
+            <label className={labelClass}>Data</label>
+            <DateField
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className={inputClass}
+              onChange={setStartDate}
+              ariaLabel="Data da tarefa"
             />
           </div>
           <div>
@@ -323,15 +325,13 @@ export default function NewTaskForm({
               />
             </div>
             <div>
-              <label htmlFor="task-end" className={labelClass}>
+              <label className={labelClass}>
                 Encerra em <span className={hintClass}>(opcional)</span>
               </label>
-              <input
-                id="task-end"
-                type="date"
+              <DateField
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className={inputClass}
+                onChange={setEndDate}
+                ariaLabel="Data em que a tarefa diária encerra"
               />
             </div>
           </div>

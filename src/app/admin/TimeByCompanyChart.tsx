@@ -266,7 +266,9 @@ export default function TimeByCompanyChart({
 
   const grid = dark ? "#2A313A" : "#E4E2DF";
   const axis = dark ? "#9AA2AC" : "#5B636C";
-  const cursor = dark ? "rgba(255,255,255,0.05)" : "#F0F0EE";
+  // Realce da COLUNA sob o cursor (faixa de topo a base, largura da empresa).
+  // Tinta da marca, translúcida, para deixar claro o que será aberto ao clicar.
+  const cursor = dark ? "rgba(120,140,255,0.14)" : "rgba(49,69,255,0.08)";
   const othersFill = dark ? "#4B535C" : "#B8BEC5";
 
   // Ordena por tempo (desc) e, com muitas empresas, agrupa a cauda numa barra
@@ -372,12 +374,40 @@ export default function TimeByCompanyChart({
       <div
         ref={wrapRef}
         style={{ height: 220 + axisHeight }}
-        className="w-full [&_*:focus]:outline-none [&_svg]:outline-none"
+        className={`w-full [&_*:focus]:outline-none [&_svg]:outline-none ${
+          clickable || overflow ? "[&_.recharts-wrapper]:cursor-pointer" : ""
+        }`}
       >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}
             margin={{ top: 8, right: 8, left: 0, bottom: 4 }}
+            // Alvo de clique = COLUNA INTEIRA (do topo à base), não só a barra.
+            // O recharts resolve a categoria sob o cursor em qualquer altura;
+            // assim empresas com barra de poucos pixels ficam tão clicáveis quanto
+            // as grandes. No recharts v3 o estado do onClick traz activeTooltipIndex
+            // (número OU string) e activeLabel — NÃO activePayload. Resolvemos pelo
+            // índice, com fallback pelo nome. handleSelect já trata "Outras" e o
+            // caso não clicável, então é seguro sempre ouvir.
+            onClick={(state) => {
+              const s = state as {
+                activeTooltipIndex?: number | string | null;
+                activeIndex?: number | string | null;
+                activeLabel?: string | number | null;
+              };
+              const raw = s.activeTooltipIndex ?? s.activeIndex;
+              let entry: (typeof chartData)[number] | undefined;
+              if (raw != null && raw !== "") {
+                const idx = Number(raw);
+                if (Number.isInteger(idx) && idx >= 0 && idx < chartData.length) {
+                  entry = chartData[idx];
+                }
+              }
+              if (!entry && s.activeLabel != null) {
+                entry = chartData.find((d) => d.name === s.activeLabel);
+              }
+              if (entry) handleSelect(entry);
+            }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke={grid} vertical={false} />
             <XAxis
@@ -423,17 +453,13 @@ export default function TimeByCompanyChart({
               dataKey="value"
               radius={[6, 6, 0, 0]}
               maxBarSize={56}
+              // Barra com valor minúsculo ganha alguns pixels de altura para não
+              // sumir. O clique é da coluna inteira (BarChart onClick), então a
+              // altura da barra deixou de importar para acertar o alvo.
+              minPointSize={3}
               // Evita a barra "ativa" que o recharts sobrepõe ao clicar/focar.
               activeBar={false}
               cursor={clickable || overflow ? "pointer" : undefined}
-              onClick={(entry) => {
-                const payload = (
-                  entry as unknown as {
-                    payload?: (typeof chartData)[number];
-                  }
-                ).payload;
-                if (payload) handleSelect(payload);
-              }}
             >
               {chartData.map((entry) => (
                 <Cell
@@ -449,7 +475,7 @@ export default function TimeByCompanyChart({
       <div className="mt-2 flex flex-col items-center gap-1">
         {clickable && (
           <p className="text-center text-xs text-fg-subtle">
-            Clique numa barra para ver as tarefas que compõem o tempo.
+            Clique numa coluna para ver as tarefas que compõem o tempo.
           </p>
         )}
         {overflow && (

@@ -118,12 +118,20 @@ export default async function ColaboradorEmpresaPage({
           ) : (
             <span />
           )}
-          <Link
-            href={`/colaborador/${company.id}/informacoes`}
-            className={btnSecondary}
-          >
-            Informações do cliente
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href={`/colaborador/${company.id}/informacoes`}
+              className={btnSecondary}
+            >
+              Informações do cliente
+            </Link>
+            <Link
+              href={`/colaborador/${company.id}/faturamento`}
+              className={btnSecondary}
+            >
+              Faturamento
+            </Link>
+          </div>
         </div>
         <div className="mb-2 flex items-center justify-between text-sm text-fg-muted">
           <span className="font-medium text-fg">Progresso geral</span>

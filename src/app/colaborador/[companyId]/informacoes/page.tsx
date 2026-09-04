@@ -5,10 +5,11 @@ import CompanyDetailsView from "@/components/company-central/CompanyDetailsView"
 import { loadCompanyDetails } from "@/lib/company-details";
 
 // Informações do cliente — página própria da empresa. Colaborador apenas
-// VISUALIZA (canEdit=false; a RLS barra a escrita). O cruzamento com o
-// faturamento NÃO aparece para ele: loadCompanyDetails(..., false) nem lê os
-// canais ativos (o colaborador nunca vê faturamento). A empresa só é alcançável
-// se ele tiver tarefa nela (vínculo derivado da RLS).
+// VISUALIZA (canEdit=false; a RLS barra a escrita). O cruzamento "canais
+// contratados vs ativos" fica de fora AQUI (loadCompanyDetails(..., false) nem
+// lê os canais ativos) — é da tela de Informações, à parte da tela própria de
+// Faturamento (esta sim o colaborador acessa, ver .../faturamento). A empresa
+// só é alcançável se ele tiver tarefa nela (vínculo derivado da RLS).
 export default async function ColaboradorCompanyInfoPage({
   params,
 }: {

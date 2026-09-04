@@ -14,10 +14,12 @@ import {
   type SalesChannel,
 } from "@/lib/revenue";
 
-// Faturamento por canal (Fatia 1), lado INTERNO. Só admin e consultor da
-// empresa chegam aqui — as páginas que expõem estas ações são guardadas por
-// guardRole(["admin"]) / guardRole(["consultor"]), e a RLS das tabelas é a
-// fronteira real (o colaborador não passa nem por query direta).
+// Faturamento por canal (Fatia 1), lado INTERNO. Alcançam estas ações: admin
+// (todas as empresas), consultor (a carteira dele) e — desde a decisão de
+// 0071 — colaborador (as empresas em que ele atua, pelo vínculo derivado das
+// tarefas). As páginas que expõem estas ações são guardadas por guardRole, e a
+// RLS das tabelas é a fronteira real: quem não alcança a empresa não passa nem
+// por query direta nem pela RPC. O portal do cliente nunca chega aqui.
 
 const CHANNEL_VALUES = new Set<string>(SALES_CHANNELS.map((c) => c.value));
 

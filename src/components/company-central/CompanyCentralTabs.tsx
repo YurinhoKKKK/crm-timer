@@ -15,9 +15,10 @@ type Tab =
 // empresa, passo 23) e "Anotações" (rich text, passo 24). Os conteúdos são
 // renderizados no servidor e passados como slots; aqui só escolhemos a aba.
 //
-// A aba Faturamento só existe nas páginas de admin/consultor (guardadas por
-// cargo); o colaborador nunca renderiza este componente. `revenue` é opcional
-// para não obrigar callers que não a passem.
+// Este componente de abas é usado pelas centrais de admin/consultor. O
+// colaborador tem uma tela de empresa própria (não renderiza este componente);
+// o faturamento dele vive em /colaborador/[companyId]/faturamento. `revenue` é
+// opcional para não obrigar callers que não a passem.
 export default function CompanyCentralTabs({
   overview,
   meetings,

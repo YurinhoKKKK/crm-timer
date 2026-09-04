@@ -4,8 +4,9 @@ import { resolvePeople } from "@/lib/creator";
 // Faturamento mensal por canal de venda (Fatia 1) — lado do servidor + helpers
 // puros compartilhados com o cliente.
 //
-// FATURAMENTO BRUTO (antes de taxas e comissões). Dado comercial sensível: só
-// admin e consultor da empresa alcançam (RLS). O cliente NUNCA vê.
+// FATURAMENTO BRUTO (antes de taxas e comissões). Dado comercial sensível:
+// alcançam admin, consultor da empresa e (desde 0071) colaborador nas empresas
+// em que atua — tudo escopado pela RLS. O cliente NUNCA vê.
 //
 // reference_month é tratado como DATA PURA no formato "YYYY-MM-DD" (dia 1). NUNCA
 // passamos essa string por `new Date(...)` no cliente — o fuso deslocaria o mês

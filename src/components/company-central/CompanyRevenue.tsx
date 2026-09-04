@@ -61,8 +61,9 @@ const MONTH_NAMES = [
 
 // Aba "Faturamento" da central da empresa. Fatia 1 = canais + tabela + lançamento;
 // Fatia 2 = cartões + gráfico + variação; e agora o filtro por período (mês de
-// início/fim, persistido na URL). Só admin e consultor da empresa chegam aqui
-// (rotas guardadas + RLS); o cliente NUNCA vê. Todo cálculo vem do banco.
+// início/fim, persistido na URL). Alcançam admin, consultor da empresa e
+// (desde 0071) colaborador nas empresas em que atua — rotas guardadas + RLS; o
+// cliente NUNCA vê. Todo cálculo vem do banco.
 export default function CompanyRevenue({
   companyId,
   initial,

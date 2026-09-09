@@ -185,8 +185,12 @@ export async function createCompany(
   return { error: null, id: company.id };
 }
 
-// Substitui o conjunto de consultores de uma empresa pelo informado:
-// remove os vínculos atuais e insere os novos.
+// Ajusta o conjunto de consultores de uma empresa para o informado gravando
+// só a DIFERENÇA: remove apenas quem saiu e insere apenas quem entrou. Antes
+// apagava tudo e reinseria tudo — o que, além de churn de RLS/FK, faria o
+// gatilho de histórico (company_events) registrar remover+adicionar para TODOS
+// a cada salvamento, mesmo sem mudança. Diferença = cada linha escrita é uma
+// mudança real.
 export async function setCompanyConsultants(
   companyId: string,
   consultantIds: string[]
@@ -200,26 +204,43 @@ export async function setCompanyConsultants(
     return { error: "Sessão expirada. Faça login novamente." };
   }
 
-  const { error: deleteError } = await supabase
-    .from("company_consultants")
-    .delete()
-    .eq("company_id", companyId);
+  const desired = new Set(consultantIds);
 
-  if (deleteError) {
-    return { error: deleteError.message };
+  const { data: current, error: readError } = await supabase
+    .from("company_consultants")
+    .select("consultant_id")
+    .eq("company_id", companyId);
+  if (readError) {
+    return { error: readError.message };
   }
 
-  const ids = Array.from(new Set(consultantIds));
-  if (ids.length > 0) {
+  const currentIds = new Set(
+    (current ?? []).map((r) => (r as { consultant_id: string }).consultant_id)
+  );
+
+  const toRemove = Array.from(currentIds).filter((id) => !desired.has(id));
+  const toAdd = Array.from(desired).filter((id) => !currentIds.has(id));
+
+  if (toRemove.length > 0) {
+    const { error: deleteError } = await supabase
+      .from("company_consultants")
+      .delete()
+      .eq("company_id", companyId)
+      .in("consultant_id", toRemove);
+    if (deleteError) {
+      return { error: deleteError.message };
+    }
+  }
+
+  if (toAdd.length > 0) {
     const { error: insertError } = await supabase
       .from("company_consultants")
       .insert(
-        ids.map((consultantId) => ({
+        toAdd.map((consultantId) => ({
           company_id: companyId,
           consultant_id: consultantId,
         }))
       );
-
     if (insertError) {
       return { error: insertError.message };
     }

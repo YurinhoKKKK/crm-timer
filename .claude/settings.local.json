@@ -174,7 +174,30 @@
       "Bash(NODE_PATH=\"C:/Users/renat/OneDrive/Desktop/crm-timer/node_modules\" node update-email.cjs)",
       "Bash(NODE_PATH=\"C:/Users/renat/OneDrive/Desktop/crm-timer/node_modules\" node update-email.cjs \"C:/Users/renat/Downloads/key.txt\")",
       "WebFetch(domain:issuetracker.google.com)",
-      "Bash(echo \"EXIT: $?\")"
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(node *)",
+      "Bash(curl -s -o /dev/null -w \"status=%{http_code} redirect=%{redirect_url}\\\\n\" http://localhost:3001/suporte)",
+      "Bash(curl -s -o /dev/null -w \"status=%{http_code}\\\\n\" http://localhost:3001/login)",
+      "Bash(curl -s -o /dev/null -w \"3001 status=%{http_code}\\\\n\" http://localhost:3001/login)",
+      "Bash(netstat -ano)",
+      "Bash(curl -s -o /dev/null -w \"3000 status=%{http_code}\\\\n\" http://localhost:3000/login)",
+      "Bash(taskkill //PID 9844 //T //F)",
+      "Bash(rm -v src/components/MessageInbox.tsx src/components/UnreadMessagesBadge.tsx src/components/company-central/CompanyMessages.tsx src/app/message-actions.ts src/lib/messages.ts src/lib/use-conversation.ts src/app/cliente/[token]/PortalMessages.tsx src/app/cliente/[token]/events/route.ts)",
+      "Bash(rmdir \"src/app/cliente/[token]/events\")",
+      "Bash(TZ=\"Etc/GMT+12\" node \"C:\\\\Users\\\\renat\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-renat-OneDrive-Desktop-crm-timer\\\\89ed1733-a06a-4d74-ade1-f23a38dc27ee\\\\scratchpad\\\\date-logic-test.mjs\")",
+      "Bash(TZ=\"Pacific/Kiritimati\" node \"C:\\\\Users\\\\renat\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-renat-OneDrive-Desktop-crm-timer\\\\89ed1733-a06a-4d74-ade1-f23a38dc27ee\\\\scratchpad\\\\date-logic-test.mjs\")",
+      "Bash(gh auth *)",
+      "PowerShell(Write-Output \"=== gh no PATH? ===\"; \\(Get-Command gh -ErrorAction SilentlyContinue\\).Source; Write-Output \"=== gh instalado em locais comuns? ===\"; @\\(\"$env:ProgramFiles\\\\GitHub CLI\\\\gh.exe\",\"$env:LOCALAPPDATA\\\\GitHubCLI\\\\gh.exe\",\"$env:ProgramFiles\\(x86\\)\\\\GitHub CLI\\\\gh.exe\"\\) | ForEach-Object { if \\(Test-Path $_\\) { Write-Output \"ACHADO: $_\" } }; Write-Output \"=== tokens em env? ===\"; if \\($env:GH_TOKEN\\) { Write-Output \"GH_TOKEN presente\" } else { Write-Output \"sem GH_TOKEN\" }; if \\($env:GITHUB_TOKEN\\) { Write-Output \"GITHUB_TOKEN presente\" } else { Write-Output \"sem GITHUB_TOKEN\" }; Write-Output \"=== winget disponivel? ===\"; \\(Get-Command winget -ErrorAction SilentlyContinue\\).Source)",
+      "PowerShell($gh = \"$env:ProgramFiles\\\\GitHub CLI\\\\gh.exe\"; if \\(Test-Path $gh\\) { Write-Output \"gh em: $gh\"; & $gh --version; Write-Output \"=== auth status ===\"; & $gh auth status 2>&1 } else { Write-Output \"nao achei gh em Program Files\" })",
+      "Bash(git pull *)",
+      "Bash(git branch *)",
+      "Bash(git merge *)",
+      "Bash(powershell.exe -NoProfile -Command 'Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty OwningProcess | ForEach-Object { Get-Process -Id $_ | Select-Object Id, ProcessName, StartTime }')",
+      "Bash(powershell.exe -NoProfile -Command 'Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { try { Stop-Process -Id $_ -Force -ErrorAction Stop } catch {} }')",
+      "Bash(python -c \"import sys,json,re; d=json.load\\(sys.stdin\\); [print\\(l['level'],'|',l.get\\('title'\\),'|',l.get\\('detail',''\\)[:160]\\) for l in d.get\\('lints',d if isinstance\\(d,list\\) else []\\) if re.search\\(r'company_events|activity_type_label|sales_channel_label|display_name|_event_trg|company_activity',json.dumps\\(l\\),re.I\\)]\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001/login)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001/admin/empresas)",
+      "Bash(curl -s -o /dev/null -w \"3000 raiz: %{http_code}\\\\n\" http://localhost:3000/)"
     ]
   }
 }

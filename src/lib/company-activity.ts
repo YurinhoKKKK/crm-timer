@@ -1,25 +1,17 @@
-// Histórico de atividades da empresa (Fatia 1 — apresentação). Tipos e helpers
-// compartilhados entre a server action (leitura via RPC) e o componente cliente.
-// A linha do tempo é UNIFICADA: hoje só o tipo "atividade", mas o shape já
-// comporta os tipos da Fatia 2 sem reescrever a tela.
+// Histórico de atividades da empresa (Fatia 1 — apresentação; Fatia 2 — fontes).
+// Tipos e helpers compartilhados entre a server action (leitura via RPC) e o
+// componente cliente. A linha do tempo é UNIFICADA e agora reúne várias fontes
+// (activity_log + company_events + client_portal_audit) no banco.
 
 export const ACTIVITY_PAGE_SIZE = 20;
 
-// Catálogo de TIPOS de evento. Fatia 2 acrescenta linhas aqui e o filtro/rótulo
-// passam a conhecê-las sem tocar no componente. Rótulo desconhecido cai no id.
-export const ACTIVITY_TYPE_LABEL: Record<string, string> = {
-  atividade: "Atividade",
-};
-
-export function activityTypeLabel(type: string): string {
-  return ACTIVITY_TYPE_LABEL[type] ?? type;
+// O CATÁLOGO de tipos deixou de morar aqui: o filtro e os rótulos vêm do banco
+// (RPC company_activity_types + campo `typeLabel` por item). Isto evita uma lista
+// fixa que envelhece a cada tipo novo. Só resta um fallback defensivo para o caso
+// (não esperado) de um item chegar sem rótulo.
+export function activityTypeLabel(type: string, label?: string | null): string {
+  return label && label.trim() ? label : type;
 }
-
-// Opções do filtro por tipo (na ordem do catálogo). Monta-se a partir do mapa,
-// então tipos novos aparecem automaticamente.
-export const ACTIVITY_TYPE_OPTIONS = Object.entries(ACTIVITY_TYPE_LABEL).map(
-  ([value, label]) => ({ value, label })
-);
 
 export type ActivityMeta = {
   seconds?: number;
@@ -30,6 +22,7 @@ export type ActivityMeta = {
 export type ActivityItem = {
   id: string;
   type: string;
+  typeLabel: string; // rótulo pronto do banco (activity_type_label)
   at: string; // ISO (UTC do banco); a exibição converte para BRT
   authorId: string | null;
   authorName: string | null;
@@ -40,6 +33,10 @@ export type ActivityItem = {
 };
 
 export type ActivityAuthor = { id: string; name: string; avatar: string | null };
+
+// Opção do filtro por TIPO — {value,label} vindos do banco (tipos realmente
+// presentes na empresa).
+export type ActivityType = { value: string; label: string };
 
 // Filtros da tela. Tudo opcional; vazio = sem recorte (o histórico inteiro).
 export type ActivityFilters = {

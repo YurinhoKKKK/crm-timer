@@ -101,9 +101,12 @@ export async function deleteLabel(
 
 // --- Atribuição por empresa -------------------------------------------------
 
-// Substitui o conjunto de etiquetas de uma empresa pelo informado. Retroativo
-// e automático: como as tarefas herdam por company_id, marcar/desmarcar aqui
-// muda o que aparece em todas as tarefas da empresa imediatamente.
+// Ajusta o conjunto de etiquetas de uma empresa gravando só a DIFERENÇA (remove
+// quem saiu, insere quem entrou). Retroativo e automático: como as tarefas
+// herdam por company_id, marcar/desmarcar aqui muda o que aparece em todas as
+// tarefas da empresa imediatamente. Antes apagava tudo e reinseria tudo — o que
+// faria o gatilho de histórico registrar mudança em TODAS as etiquetas a cada
+// salvamento; com a diferença, cada linha escrita é uma mudança real.
 export async function setCompanyLabels(
   companyId: string,
   labelIds: string[]
@@ -111,17 +114,34 @@ export async function setCompanyLabels(
   const { supabase, user } = await requireUser();
   if (!user) return { error: "Sessão expirada. Faça login novamente." };
 
-  const { error: delError } = await supabase
-    .from("company_labels")
-    .delete()
-    .eq("company_id", companyId);
-  if (delError) return { error: delError.message };
+  const desired = new Set(labelIds);
 
-  const ids = Array.from(new Set(labelIds));
-  if (ids.length > 0) {
+  const { data: current, error: readError } = await supabase
+    .from("company_labels")
+    .select("label_id")
+    .eq("company_id", companyId);
+  if (readError) return { error: readError.message };
+
+  const currentIds = new Set(
+    (current ?? []).map((r) => (r as { label_id: string }).label_id)
+  );
+
+  const toRemove = Array.from(currentIds).filter((id) => !desired.has(id));
+  const toAdd = Array.from(desired).filter((id) => !currentIds.has(id));
+
+  if (toRemove.length > 0) {
+    const { error: delError } = await supabase
+      .from("company_labels")
+      .delete()
+      .eq("company_id", companyId)
+      .in("label_id", toRemove);
+    if (delError) return { error: delError.message };
+  }
+
+  if (toAdd.length > 0) {
     const { error: insError } = await supabase
       .from("company_labels")
-      .insert(ids.map((label_id) => ({ company_id: companyId, label_id })));
+      .insert(toAdd.map((label_id) => ({ company_id: companyId, label_id })));
     if (insError) return { error: insError.message };
   }
 

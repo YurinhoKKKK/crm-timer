@@ -7,7 +7,6 @@ import { ComboFilter } from "@/components/Combobox";
 import { DateRangeField } from "@/components/DateField";
 import { formatDuration } from "@/lib/format";
 import {
-  ACTIVITY_TYPE_OPTIONS,
   activityTypeLabel,
   EMPTY_ACTIVITY_FILTERS,
   formatActivityAt,
@@ -16,10 +15,12 @@ import {
   type ActivityAuthor,
   type ActivityFilters,
   type ActivityItem,
+  type ActivityType,
 } from "@/lib/company-activity";
 import {
   loadCompanyActivity,
   loadCompanyActivityAuthors,
+  loadCompanyActivityTypes,
 } from "@/app/company-activity-actions";
 
 // Histórico de atividades (Fatia 1 — apresentação). Carrega SOB DEMANDA: fica
@@ -40,6 +41,7 @@ export default function CompanyActivityFeed({
   const [items, setItems] = useState<ActivityItem[]>([]);
   const [total, setTotal] = useState(0);
   const [authors, setAuthors] = useState<ActivityAuthor[]>([]);
+  const [types, setTypes] = useState<ActivityType[]>([]);
   const [filters, setFilters] = useState<ActivityFilters>(EMPTY_ACTIVITY_FILTERS);
   const [loadingMore, setLoadingMore] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -47,6 +49,7 @@ export default function CompanyActivityFeed({
   const sectionRef = useRef<HTMLDivElement>(null);
   const startedRef = useRef(false); // já disparou a 1ª carga?
   const authorsRef = useRef(false); // já buscou a lista de autores?
+  const typesRef = useRef(false); // já buscou a lista de tipos?
   const reqRef = useRef(0); // token anti-corrida: só a resposta mais nova vale
 
   const filtersKey = useMemo(() => JSON.stringify(filters), [filters]);
@@ -60,11 +63,21 @@ export default function CompanyActivityFeed({
     if (!res.error) setAuthors(res.authors);
   }, [companyId]);
 
+  // Idem para os TIPOS de evento presentes (alimenta o filtro por tipo, vindos
+  // do banco — sem lista fixa no código).
+  const loadTypes = useCallback(async () => {
+    if (typesRef.current) return;
+    typesRef.current = true;
+    const res = await loadCompanyActivityTypes(companyId);
+    if (!res.error) setTypes(res.types);
+  }, [companyId]);
+
   // (Re)carrega a PRIMEIRA página com os filtros atuais (substitui a lista).
   const loadFirst = useCallback(async () => {
     const token = ++reqRef.current;
     setStatus("loading");
     void loadAuthors();
+    void loadTypes();
     const res = await loadCompanyActivity(companyId, 0, filters);
     if (token !== reqRef.current) return; // chegou uma resposta mais nova
     if (res.error) {
@@ -76,7 +89,7 @@ export default function CompanyActivityFeed({
     setTotal(res.total);
     setItems(res.items);
     setStatus("ready");
-  }, [companyId, filters, loadAuthors]);
+  }, [companyId, filters, loadAuthors, loadTypes]);
 
   // Próxima página (anexa). Offset = quantos já temos.
   async function loadMore() {
@@ -146,6 +159,12 @@ export default function CompanyActivityFeed({
     () => authors.map((a) => ({ value: a.id, label: a.name })),
     [authors]
   );
+  // Opções do filtro por tipo vêm do banco; se o tipo selecionado ainda não
+  // estiver na lista carregada, garante que o chip continue exibível.
+  const typeOptions = useMemo(
+    () => types.map((t) => ({ value: t.value, label: t.label })),
+    [types]
+  );
 
   const active = hasActiveFilters(filters);
   const canLoadMore = status === "ready" && items.length < total;
@@ -179,7 +198,8 @@ export default function CompanyActivityFeed({
           onChange={(v) => setFilters((f) => ({ ...f, type: v }))}
           allLabel="Todos os tipos"
           ariaLabel="Filtrar por tipo de evento"
-          options={ACTIVITY_TYPE_OPTIONS}
+          searchPlaceholder="Buscar tipo…"
+          options={typeOptions}
         />
         <ComboFilter
           value={filters.authorId}
@@ -207,7 +227,10 @@ export default function CompanyActivityFeed({
           )}
           {filters.type && (
             <FilterPill
-              label={activityTypeLabel(filters.type)}
+              label={
+                types.find((t) => t.value === filters.type)?.label ??
+                activityTypeLabel(filters.type)
+              }
               onClear={() => setFilters((f) => ({ ...f, type: "" }))}
             />
           )}
@@ -285,7 +308,7 @@ export default function CompanyActivityFeed({
                     <span>{formatActivityAt(a.at)}</span>
                     <span>·</span>
                     <span className="rounded-full bg-surface-2 px-2 py-0.5 font-medium text-fg-muted">
-                      {activityTypeLabel(a.type)}
+                      {activityTypeLabel(a.type, a.typeLabel)}
                     </span>
                     {seconds > 0 && (
                       <>

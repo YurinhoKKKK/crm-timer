@@ -6,6 +6,7 @@ import {
   type ActivityAuthor,
   type ActivityFilters,
   type ActivityItem,
+  type ActivityType,
 } from "@/lib/company-activity";
 
 // Leitura do histórico de atividades (Fatia 1). A agregação/ordenação/filtragem/
@@ -82,4 +83,25 @@ export async function loadCompanyActivityAuthors(
   if (error) return { error: "Não foi possível carregar os autores.", authors: [] };
 
   return { error: null, authors: (data as ActivityAuthor[] | null) ?? [] };
+}
+
+// Tipos de evento presentes nesta empresa (para o filtro por TIPO). Vêm do banco
+// (sem lista fixa no código); acompanham a evolução dos eventos automaticamente.
+export async function loadCompanyActivityTypes(
+  companyId: string
+): Promise<{ error: string | null; types: ActivityType[] }> {
+  if (!companyId) return { error: "Empresa inválida.", types: [] };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Sessão expirada.", types: [] };
+
+  const { data, error } = await supabase.rpc("company_activity_types", {
+    p_company: companyId,
+  });
+  if (error) return { error: "Não foi possível carregar os tipos.", types: [] };
+
+  return { error: null, types: (data as ActivityType[] | null) ?? [] };
 }

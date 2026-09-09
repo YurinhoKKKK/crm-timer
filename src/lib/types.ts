@@ -1561,7 +1561,7 @@ export type Database = {
         }[]
       }
       company_collaborator_summary: {
-        Args: { p_company_id: string; p_start: string }
+        Args: { p_company_id: string; p_start: string; p_end?: string }
         Returns: {
           avatar_path: string
           collaborator_id: string
@@ -1573,7 +1573,12 @@ export type Database = {
         }[]
       }
       company_overview: {
-        Args: { p_company_id: string; p_month_start: string; p_start: string }
+        Args: {
+          p_company_id: string
+          p_month_start: string
+          p_start: string
+          p_end?: string
+        }
         Returns: {
           a_fazer: number
           cancelada: number
@@ -1831,6 +1836,7 @@ export type Database = {
           p_collaborator_id?: string
           p_company_id?: string
           p_start?: string
+          p_end?: string
         }
         Returns: {
           abertas: number

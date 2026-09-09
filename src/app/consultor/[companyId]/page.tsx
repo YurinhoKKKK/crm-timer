@@ -5,7 +5,8 @@ import CompanyCentral from "@/components/company-central/CompanyCentral";
 import CompanyCentralTabs from "@/components/company-central/CompanyCentralTabs";
 import CompanyListings from "@/components/company-central/CompanyListings";
 import CompanyNotes from "@/components/company-central/CompanyNotes";
-import { loadCompanyCentral, type Period } from "@/lib/company-central";
+import { loadCompanyCentral } from "@/lib/company-central";
+import { resolvePeriod } from "@/lib/period";
 import { loadCompanyListings, loadListingValidations } from "@/lib/listing";
 import { loadCompanyNotes } from "@/lib/notes";
 import {
@@ -21,13 +22,6 @@ import {
 import CompanyMeetings from "@/components/company-central/CompanyMeetings";
 import CompanyRevenue from "@/components/company-central/CompanyRevenue";
 
-const PERIODS: Period[] = ["hoje", "7d", "30d", "tudo"];
-
-function normalizePeriod(value: string | string[] | undefined): Period {
-  const v = Array.isArray(value) ? value[0] : value;
-  return PERIODS.includes(v as Period) ? (v as Period) : "30d";
-}
-
 // Central da empresa (Passo 19) — visão completa + ações, para o consultor.
 // A RLS (companies_select) só devolve a empresa se for atribuída a ele; caso
 // contrário loadCompanyCentral retorna notFound. Sem edição de dados da empresa
@@ -37,10 +31,18 @@ export default async function ConsultorEmpresaPage({
   searchParams,
 }: {
   params: { companyId: string };
-  searchParams: { periodo?: string; aba?: string; fatDe?: string; fatAte?: string };
+  searchParams: {
+    periodo?: string;
+    mes?: string;
+    de?: string;
+    ate?: string;
+    aba?: string;
+    fatDe?: string;
+    fatAte?: string;
+  };
 }) {
   const { supabase, profile } = await guardRole(["consultor"]);
-  const period = normalizePeriod(searchParams?.periodo);
+  const period = resolvePeriod(searchParams);
   const { range: revRange, invalid: revInvalid } = parseRevenueRange(
     searchParams?.fatDe,
     searchParams?.fatAte
@@ -60,7 +62,13 @@ export default async function ConsultorEmpresaPage({
     revenue,
     revenueInsights,
   ] = await Promise.all([
-    loadCompanyCentral(supabase, profile, params.companyId, period, false),
+    loadCompanyCentral(
+      supabase,
+      profile,
+      params.companyId,
+      { start: period.start, end: period.end },
+      false
+    ),
     loadCompanyListings(supabase, params.companyId),
     loadListingValidations(supabase, params.companyId),
     loadCompanyNotes(supabase, params.companyId),

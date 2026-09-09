@@ -6,32 +6,25 @@ import {
   normalizeStatusFilter,
   statusListTitle,
 } from "@/lib/instance-status";
-import { periodStart, type PeriodKey } from "@/lib/period";
+import { resolvePeriod, periodQuery } from "@/lib/period";
 import InstanceStatusList from "@/app/admin/instancias/InstanceStatusList";
-
-type Period = PeriodKey;
-
-const PERIODS: Period[] = ["hoje", "7d", "30d", "tudo"];
-
-function normalizePeriod(value: string | string[] | undefined): Period {
-  const v = Array.isArray(value) ? value[0] : value;
-  return PERIODS.includes(v as Period) ? (v as Period) : "30d";
-}
 
 // Drill-down do funil da central da empresa (admin): lista dedicada com as
 // tarefas DA EMPRESA no status/período clicado — mesmo padrão do dashboard
-// (/admin/instancias). Cada tarefa abre o painel de detalhe unificado.
+// (/admin/instancias). Cada tarefa abre o painel de detalhe unificado. O período
+// (inclusive mês/intervalo) vem resolvido da URL, para o recorte bater com a
+// central de onde o clique veio.
 export default async function EmpresaTarefasPage({
   params,
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { status?: string; periodo?: string };
+  searchParams: { status?: string; periodo?: string; mes?: string; de?: string; ate?: string };
 }) {
   const { supabase, profile } = await guardRole(["admin"]);
 
   const filter = normalizeStatusFilter(searchParams?.status);
-  const period = normalizePeriod(searchParams?.periodo);
+  const period = resolvePeriod(searchParams);
 
   const [{ data: companyData }, list] = await Promise.all([
     supabase
@@ -41,7 +34,8 @@ export default async function EmpresaTarefasPage({
       .maybeSingle(),
     loadStatusInstances(supabase, {
       filter,
-      start: periodStart(period),
+      start: period.start,
+      end: period.end,
       companyId: params.id,
     }),
   ]);
@@ -59,7 +53,7 @@ export default async function EmpresaTarefasPage({
         items.length === 1 ? "" : "s"
       }`}
       back={{
-        href: `/admin/empresas/${company.id}?periodo=${period}`,
+        href: `/admin/empresas/${company.id}?${periodQuery(period)}`,
         label: company.name,
       }}
     >

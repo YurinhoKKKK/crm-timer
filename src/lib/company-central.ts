@@ -12,7 +12,7 @@ import type {
   ClientAccessView,
 } from "@/lib/client-portal";
 import { perfRoute } from "@/lib/perf";
-import { periodStart, monthStart } from "@/lib/period";
+import { monthStart } from "@/lib/period";
 import {
   resolvePeople,
   describeInstanceCreator,
@@ -138,12 +138,15 @@ export async function loadCompanyCentral(
   supabase: SupabaseServer,
   self: { id: string; full_name: string },
   companyId: string,
-  period: Period,
+  // Intervalo JÁ RESOLVIDO em BRT (data pura): start null = todo o período; end
+  // null = aberto até hoje (atalhos). O mês/intervalo trazem os dois limites.
+  range: { start: string | null; end: string | null },
   // Decide QUAL consulta de acesso do cliente roda (não é filtro de exibição:
   // a do consultor não tem como devolver token nem hash).
   isAdmin: boolean
 ): Promise<{ notFound: boolean; error?: string; data?: CentralData }> {
-  const start = periodStart(period);
+  const start = range.start;
+  const end = range.end;
   const month = monthStart();
 
   const perf = perfRoute("central da empresa (loadCompanyCentral)");
@@ -187,6 +190,7 @@ export async function loadCompanyCentral(
         p_company_id: companyId,
         p_start: start,
         p_month_start: month,
+        p_end: end ?? undefined,
       })
     ),
     perf.timed(
@@ -194,6 +198,7 @@ export async function loadCompanyCentral(
       supabase.rpc("company_collaborator_summary", {
         p_company_id: companyId,
         p_start: start,
+        p_end: end ?? undefined,
       })
     ),
     // Tarefas em duas leituras: abertas (todas, até o teto) e fechadas
@@ -210,6 +215,7 @@ export async function loadCompanyCentral(
           .order("due_at", { ascending: true, nullsFirst: false })
           .limit(TASK_CAP + 1);
         if (start) q = q.gte("task_date", start);
+        if (end) q = q.lte("task_date", end);
         return q;
       })()
     ),
@@ -224,6 +230,7 @@ export async function loadCompanyCentral(
           .order("task_date", { ascending: false })
           .limit(TASK_CAP + 1);
         if (start) q = q.gte("task_date", start);
+        if (end) q = q.lte("task_date", end);
         return q;
       })()
     ),
@@ -232,6 +239,7 @@ export async function loadCompanyCentral(
       supabase.rpc("task_group_stats", {
         p_company_id: companyId,
         p_start: start ?? undefined,
+        p_end: end ?? undefined,
       })
     ),
     perf.timed(

@@ -72,6 +72,9 @@ export async function loadStatusInstances(
     filter: StatusFilter | null;
     // Início do período (YYYY-MM-DD) já resolvido; null = todo o período.
     start: string | null;
+    // Fim do período (YYYY-MM-DD, inclusivo); null/ausente = aberto até hoje
+    // (atalhos). Mês/intervalo trazem o limite superior.
+    end?: string | null;
     // Escopa a uma empresa (telas da central). Sem ele, vale o escopo da RLS.
     companyId?: string;
   }
@@ -91,6 +94,7 @@ export async function loadStatusInstances(
 
   if (opts.companyId) query = query.eq("company_id", opts.companyId);
   if (opts.start) query = query.gte("task_date", opts.start);
+  if (opts.end) query = query.lte("task_date", opts.end);
 
   if (opts.filter === "atrasadas") {
     query = query

@@ -174,7 +174,7 @@ export default function CompanyActivityFeed({
       ref={sectionRef}
       className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6"
     >
-      <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+      <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold text-fg">Histórico de atividades</h3>
         {status === "ready" && (
           <span className="text-xs text-fg-subtle">
@@ -184,6 +184,11 @@ export default function CompanyActivityFeed({
           </span>
         )}
       </div>
+      {/* O filtro de período AQUI é próprio desta lista de eventos — não tem
+          relação com o filtro do topo (Visão geral), que recorta os cartões. */}
+      <p className="mb-4 text-xs text-fg-subtle">
+        Os filtros abaixo valem só para esta lista de eventos.
+      </p>
 
       {/* Filtros — mesmos componentes das outras telas. Ficam disponíveis assim
           que a seção carrega. */}

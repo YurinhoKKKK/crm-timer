@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Avatar from "@/components/Avatar";
-import PeriodFilter, { type Period } from "@/app/admin/PeriodFilter";
+import CompanyPeriodFilter from "@/components/company-central/CompanyPeriodFilter";
+import { periodQuery, type ResolvedPeriod } from "@/lib/period";
 import NewTaskForm from "@/app/admin/tarefas/NewTaskForm";
 import CompanyStandardTasks from "@/components/CompanyStandardTasks";
 import CompanyTaskList from "./CompanyTaskList";
@@ -15,27 +16,23 @@ import { formatDuration, formatDue } from "@/lib/format";
 import { btnSecondary } from "@/lib/ui";
 import type { CentralData } from "@/lib/company-central";
 
-const PERIOD_LABEL: Record<Period, string> = {
-  hoje: "hoje",
-  "7d": "nos últimos 7 dias",
-  "30d": "nos últimos 30 dias",
-  tudo: "em todo o período",
-};
-
 // Card numérico dos indicadores (block 2). Com `href`, vira link: leva à
-// lista de tarefas (âncora #tarefas) já filtrada pelo status do card.
+// lista de tarefas (âncora #tarefas) já filtrada pelo status do card. `hint`
+// (texto pequeno sob o valor) explica quando o número NÃO acompanha o filtro.
 function StatCard({
   label,
   value,
   dot,
   tone = "text-fg",
   href,
+  hint,
 }: {
   label: string;
   value: number | string;
   dot?: string;
   tone?: string;
   href?: string;
+  hint?: string;
 }) {
   const inner = (
     <>
@@ -46,6 +43,7 @@ function StatCard({
       <p className={`mt-1.5 font-mono text-2xl font-semibold tabular-nums ${tone}`}>
         {value}
       </p>
+      {hint && <p className="mt-1 text-[11px] text-fg-subtle">{hint}</p>}
     </>
   );
   if (href) {
@@ -80,7 +78,7 @@ export default function CompanyCentral({
   previewHref,
 }: {
   data: CentralData;
-  period: Period;
+  period: ResolvedPeriod;
   // Link para a tela de edição de dados/vínculos (admin). Ausente no consultor.
   editHref?: string;
   // "Informações do cliente" (tela própria) — presente para admin e consultor.
@@ -94,18 +92,26 @@ export default function CompanyCentral({
   const { company, consultants, overview: o } = data;
 
   // Clique num card do funil → tela dedicada com a lista filtrada (mesmo
-  // padrão do dashboard); o período atual é preservado.
+  // padrão do dashboard); o período atual (inclusive mês/intervalo) é preservado.
   const taskHref = (status?: string) =>
-    `${tasksHref}?periodo=${period}${status ? `&status=${status}` : ""}`;
+    `${tasksHref}?${periodQuery(period)}${status ? `&status=${status}` : ""}`;
 
   return (
     <>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-sm font-medium text-fg-muted">
-          Visão geral · {PERIOD_LABEL[period]}
+          Visão geral · {period.label}
         </h2>
-        <PeriodFilter value={period} />
+        <CompanyPeriodFilter value={period} />
       </div>
+
+      {/* Aviso discreto quando a URL trouxe um período inválido (mês inexistente,
+          intervalo invertido, parâmetro corrompido): a tela caiu no padrão. */}
+      {period.invalid && (
+        <p className="mb-4 text-xs text-amber-600 dark:text-amber-400">
+          Período do link inválido — mostrando {period.label}.
+        </p>
+      )}
 
       {/* 1. Cabeçalho da empresa */}
       <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
@@ -218,7 +224,7 @@ export default function CompanyCentral({
 
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
         <StatCard
-          label={`Tempo trabalhado ${PERIOD_LABEL[period]}`}
+          label={`Tempo trabalhado ${period.label}`}
           value={formatDuration(o.secondsPeriod)}
         />
         <StatCard
@@ -228,13 +234,14 @@ export default function CompanyCentral({
         <StatCard
           label="Tempo total da empresa"
           value={formatDuration(o.secondsAll)}
+          hint="Acumulado de sempre — não muda com o filtro"
         />
       </div>
 
       {/* 3. Progresso */}
       <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
         <div className="mb-2 flex items-center justify-between text-sm text-fg-muted">
-          <span className="font-medium text-fg">Progresso {PERIOD_LABEL[period]}</span>
+          <span className="font-medium text-fg">Progresso {period.label}</span>
           <span className="font-mono tabular-nums">
             {o.finalizada} de {o.total} concluída{o.total === 1 ? "" : "s"} ·{" "}
             {o.percent}%
@@ -330,7 +337,7 @@ export default function CompanyCentral({
           Tarefas previstas para o período
         </h3>
         <p className="mb-4 text-xs text-fg-subtle">
-          Lista por prazo ({PERIOD_LABEL[period]}); o tempo em cada tarefa é o
+          Lista por prazo ({period.label}); o tempo em cada tarefa é o
           total gasto nela. O &ldquo;Tempo trabalhado&rdquo; acima conta pelo dia
           em que o trabalho foi feito, então uma tarefa prevista para o período
           pode ter sido trabalhada em outro.

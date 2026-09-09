@@ -6,33 +6,25 @@ import {
   normalizeStatusFilter,
   statusListTitle,
 } from "@/lib/instance-status";
-import { periodStart, type PeriodKey } from "@/lib/period";
+import { resolvePeriod, periodQuery } from "@/lib/period";
 import InstanceStatusList from "@/app/admin/instancias/InstanceStatusList";
-
-type Period = PeriodKey;
-
-const PERIODS: Period[] = ["hoje", "7d", "30d", "tudo"];
-
-function normalizePeriod(value: string | string[] | undefined): Period {
-  const v = Array.isArray(value) ? value[0] : value;
-  return PERIODS.includes(v as Period) ? (v as Period) : "30d";
-}
 
 // Drill-down do funil da central da empresa (consultor): lista dedicada com
 // as tarefas DA EMPRESA no status/período clicado — mesmo padrão do dashboard
 // do admin. A RLS (companies_select / ti_select) só devolve dados de empresas
-// atribuídas ao consultor; empresa fora do escopo cai em notFound.
+// atribuídas ao consultor; empresa fora do escopo cai em notFound. O período
+// (inclusive mês/intervalo) vem resolvido da URL, batendo com a central.
 export default async function ConsultorEmpresaTarefasPage({
   params,
   searchParams,
 }: {
   params: { companyId: string };
-  searchParams: { status?: string; periodo?: string };
+  searchParams: { status?: string; periodo?: string; mes?: string; de?: string; ate?: string };
 }) {
   const { supabase, profile } = await guardRole(["consultor"]);
 
   const filter = normalizeStatusFilter(searchParams?.status);
-  const period = normalizePeriod(searchParams?.periodo);
+  const period = resolvePeriod(searchParams);
 
   const [{ data: companyData }, list] = await Promise.all([
     supabase
@@ -42,7 +34,8 @@ export default async function ConsultorEmpresaTarefasPage({
       .maybeSingle(),
     loadStatusInstances(supabase, {
       filter,
-      start: periodStart(period),
+      start: period.start,
+      end: period.end,
       companyId: params.companyId,
     }),
   ]);
@@ -64,7 +57,7 @@ export default async function ConsultorEmpresaTarefasPage({
         items.length === 1 ? "" : "s"
       }`}
       back={{
-        href: `/consultor/${company.id}?periodo=${period}`,
+        href: `/consultor/${company.id}?${periodQuery(period)}`,
         label: company.name,
       }}
     >

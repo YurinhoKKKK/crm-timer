@@ -521,6 +521,61 @@ export type Database = {
           },
         ]
       }
+      company_note_replies: {
+        Row: {
+          attachments: Json
+          author_id: string
+          body_html: string
+          created_at: string
+          edited_at: string | null
+          id: string
+          note_id: string
+          parent_id: string | null
+        }
+        Insert: {
+          attachments?: Json
+          author_id: string
+          body_html: string
+          created_at?: string
+          edited_at?: string | null
+          id?: string
+          note_id: string
+          parent_id?: string | null
+        }
+        Update: {
+          attachments?: Json
+          author_id?: string
+          body_html?: string
+          created_at?: string
+          edited_at?: string | null
+          id?: string
+          note_id?: string
+          parent_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_note_replies_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_note_replies_note_id_fkey"
+            columns: ["note_id"]
+            isOneToOne: false
+            referencedRelation: "company_notes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_note_replies_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "company_note_replies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       google_accounts: {
         Row: {
           access_token_enc: string
@@ -1080,6 +1135,7 @@ export type Database = {
           created_at: string
           edited_at: string | null
           id: string
+          parent_id: string | null
           ticket_id: string
         }
         Insert: {
@@ -1089,6 +1145,7 @@ export type Database = {
           created_at?: string
           edited_at?: string | null
           id?: string
+          parent_id?: string | null
           ticket_id: string
         }
         Update: {
@@ -1098,6 +1155,7 @@ export type Database = {
           created_at?: string
           edited_at?: string | null
           id?: string
+          parent_id?: string | null
           ticket_id?: string
         }
         Relationships: [
@@ -1106,6 +1164,13 @@ export type Database = {
             columns: ["author_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_ticket_replies_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "support_ticket_replies"
             referencedColumns: ["id"]
           },
           {
@@ -1593,6 +1658,13 @@ export type Database = {
           full_name: string
           seconds: number
           total: number
+        }[]
+      }
+      company_note_reply_counts: {
+        Args: { p_company: string }
+        Returns: {
+          note_id: string
+          reply_count: number
         }[]
       }
       company_overview: {

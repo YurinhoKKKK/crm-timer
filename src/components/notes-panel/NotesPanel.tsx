@@ -13,6 +13,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import Lightbox from "@/components/Lightbox";
 import NoteBody from "@/components/company-central/NoteBody";
 import AreaChips from "@/components/company-central/AreaChips";
+import NoteRepliesSection from "@/components/replies/NoteRepliesSection";
 import { getPanelNotes } from "./notes-panel-actions";
 
 // O editor (TipTap) só entra no bundle quando o painel de fato abre e este
@@ -411,6 +412,13 @@ export default function NotesPanel({
                           {formatDateTime(n.updatedAtISO)}
                         </p>
                       )}
+
+                      <NoteRepliesSection
+                        noteId={n.id}
+                        userId={userId}
+                        replyCount={n.replyCount}
+                        onChanged={() => void reload()}
+                      />
                     </>
                   )}
                 </li>

@@ -103,6 +103,26 @@ export type CompanyNoteView = {
   updatedAtISO: string | null;
   updatedByName: string | null;
   updatedByAvatarUrl: string | null;
+  // Nº de respostas da conversa desta atualização, agregado no banco (RPC
+  // company_note_reply_counts) — TODAS as respostas, independente do nível.
+  replyCount: number;
+};
+
+// Uma resposta DIRIGIDA a uma atualização, pronta para exibir. Mesmo molde da
+// resposta de chamado (TicketReplyView): parent_id aponta para outra resposta
+// da MESMA atualização (nulo = resposta à atualização em si). O corpo já vem
+// sanitizado no ponto único de leitura.
+export type NoteReplyView = {
+  id: string;
+  noteId: string;
+  parentId: string | null;
+  bodyHtml: string;
+  attachments: NoteAttachmentView[];
+  authorId: string;
+  authorName: string;
+  authorAvatarUrl: string | null;
+  createdAtISO: string;
+  editedAtISO: string | null;
 };
 
 function parseAttachments(raw: unknown, publicUrl: (path: string) => string): NoteAttachmentView[] {
@@ -171,12 +191,21 @@ export async function loadCompanyNotes(
   // Empresa sem anotação nenhuma: sai antes de tocar no jsdom.
   if (rows.length === 0) return [];
 
-  // Carrega o sanitizador em PARALELO com a resolução de nomes — o custo do
-  // jsdom (na primeira vez do processo) deixa de ser uma onda extra.
-  const [people, sanitize] = await Promise.all([
+  // Carrega o sanitizador em PARALELO com a resolução de nomes e a contagem de
+  // respostas — o custo do jsdom (na primeira vez do processo) deixa de ser uma
+  // onda extra. A contagem vem AGREGADA do banco (nunca do array carregado).
+  const [people, sanitize, replyCountRes] = await Promise.all([
     resolvePeople(supabase, rows.flatMap((r) => [r.author_id, r.updated_by])),
     getNoteSanitizer(),
+    supabase.rpc("company_note_reply_counts", { p_company: companyId }),
   ]);
+
+  const replyCounts = new Map<string, number>();
+  for (const r of (replyCountRes.data as
+    | { note_id: string; reply_count: number }[]
+    | null) ?? []) {
+    replyCounts.set(r.note_id, Number(r.reply_count));
+  }
 
   const publicUrl = (path: string) =>
     supabase.storage.from("note-files").getPublicUrl(path).data.publicUrl;
@@ -201,5 +230,66 @@ export async function loadCompanyNotes(
     updatedByAvatarUrl: r.updated_by
       ? people.get(r.updated_by)?.avatarUrl ?? null
       : null,
+    replyCount: replyCounts.get(r.id) ?? 0,
   }));
+}
+
+// Respostas de UMA atualização, mais antigas primeiro (a conversa é lida de
+// cima para baixo; o encadeamento é montado na tela pelo parent_id). A RLS
+// cnr_select já escopa quem alcança a empresa da nota. O body_html é sanitizado
+// no MESMO ponto único de leitura das anotações (getNoteSanitizer) — nunca
+// renderizar sem passar por aqui, nunca importar dompurify no topo de rota.
+export async function loadNoteReplies(
+  supabase: Client,
+  noteId: string
+): Promise<NoteReplyView[]> {
+  const { data, error } = await supabase
+    .from("company_note_replies")
+    .select(
+      "id, note_id, parent_id, body_html, attachments, author_id, created_at, edited_at"
+    )
+    .eq("note_id", noteId)
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+
+  type Row = {
+    id: string;
+    note_id: string;
+    parent_id: string | null;
+    body_html: string;
+    attachments: unknown;
+    author_id: string;
+    created_at: string;
+    edited_at: string | null;
+  };
+  const rows = (data as Row[] | null) ?? [];
+  if (rows.length === 0) return [];
+
+  const [people, sanitize] = await Promise.all([
+    resolvePeople(
+      supabase,
+      rows.map((r) => r.author_id)
+    ),
+    getNoteSanitizer(),
+  ]);
+
+  const publicUrl = (path: string) =>
+    supabase.storage.from("note-files").getPublicUrl(path).data.publicUrl;
+
+  return rows.map((r) => {
+    const author = people.get(r.author_id);
+    return {
+      id: r.id,
+      noteId: r.note_id,
+      parentId: r.parent_id,
+      bodyHtml: sanitize(r.body_html),
+      attachments: parseAttachments(r.attachments, publicUrl),
+      authorId: r.author_id,
+      authorName: author?.name ?? "(usuário removido)",
+      authorAvatarUrl: author?.avatarUrl ?? null,
+      createdAtISO: r.created_at,
+      editedAtISO: r.edited_at,
+    };
+  });
 }

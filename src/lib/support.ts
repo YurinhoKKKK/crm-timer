@@ -164,6 +164,10 @@ export type SupportTicketView = {
 export type TicketReplyView = {
   id: string;
   ticketId: string;
+  // Resposta DIRIGIDA: aponta para outra resposta do MESMO chamado. Nulo =
+  // resposta ao chamado em si (raiz da conversa). O encadeamento é montado na
+  // tela (ReplyThread) — o banco só guarda o vínculo.
+  parentId: string | null;
   bodyHtml: string; // já sanitizado (ponto único de leitura)
   attachments: NoteAttachmentView[];
   authorId: string;
@@ -311,17 +315,22 @@ export async function loadTicketReplies(
   supabase: Client,
   ticketId: string
 ): Promise<TicketReplyView[]> {
+  // Ordem ascendente: a conversa é encadeada e lida de cima para baixo
+  // (o ReplyThread agrupa por raiz e resolve o "em resposta a" pelo parent_id).
   const { data, error } = await supabase
     .from("support_ticket_replies")
-    .select("id, ticket_id, body_html, attachments, author_id, created_at, edited_at")
+    .select(
+      "id, ticket_id, parent_id, body_html, attachments, author_id, created_at, edited_at"
+    )
     .eq("ticket_id", ticketId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: true });
 
   if (error) throw error;
 
   type Row = {
     id: string;
     ticket_id: string;
+    parent_id: string | null;
     body_html: string;
     attachments: unknown;
     author_id: string;
@@ -347,6 +356,7 @@ export async function loadTicketReplies(
     return {
       id: r.id,
       ticketId: r.ticket_id,
+      parentId: r.parent_id,
       bodyHtml: sanitize(r.body_html),
       attachments: parseAttachments(r.attachments, publicUrl),
       authorId: r.author_id,

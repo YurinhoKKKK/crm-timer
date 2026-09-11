@@ -14,6 +14,7 @@ import Lightbox from "@/components/Lightbox";
 import Avatar from "@/components/Avatar";
 import NoteBody from "./NoteBody";
 import AreaChips from "./AreaChips";
+import NoteRepliesSection from "@/components/replies/NoteRepliesSection";
 import {
   FilterBar,
   SearchBox,
@@ -461,6 +462,13 @@ export default function CompanyNotes({
                       {formatDateTime(n.updatedAtISO)}
                     </p>
                   )}
+
+                  <NoteRepliesSection
+                    noteId={n.id}
+                    userId={userId}
+                    replyCount={n.replyCount}
+                    onChanged={refresh}
+                  />
                 </>
               )}
             </li>

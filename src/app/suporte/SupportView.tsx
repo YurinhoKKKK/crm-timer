@@ -7,7 +7,6 @@ import {
   useRef,
   useState,
   useTransition,
-  type MouseEvent,
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
@@ -27,6 +26,7 @@ import Avatar from "@/components/Avatar";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import Lightbox from "@/components/Lightbox";
 import Modal from "@/components/Modal";
+import ReplyThread, { classifyReplyError } from "@/components/replies/ReplyThread";
 import { fetchTicketReplies } from "./actions";
 import {
   FilterBar,
@@ -47,7 +47,6 @@ import {
   STATUS_ORDER,
   isOpenStatus,
   type SupportTicketView,
-  type TicketReplyView,
   type TicketStatus,
 } from "@/lib/support";
 
@@ -62,39 +61,6 @@ const TicketFormLazy = dynamic(() => import("./TicketForm"), {
   ),
 });
 
-// O editor de resposta (mesmo NoteEditor da Fatia 1) só entra no bundle quando
-// alguém abre o campo de responder/editar — o detalhe não abre pesado.
-const NoteEditorLazy = dynamic(
-  () => import("@/components/company-central/NoteEditor"),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="rounded-xl border border-line bg-surface p-6 text-sm text-fg-subtle shadow-card">
-        Carregando editor…
-      </div>
-    ),
-  }
-);
-
-// Traduz o erro do Supabase numa causa CLASSIFICADA (permissão / campo /
-// sessão), nunca chutando — mesmo espírito do resto do projeto.
-function classifyMutationError(err: {
-  code?: string;
-  message?: string;
-}): string {
-  const code = err.code ?? "";
-  const msg = (err.message ?? "").toLowerCase();
-  if (code === "42501" || msg.includes("row-level security")) {
-    return "Você não tem permissão para isso (apenas o autor edita a própria resposta).";
-  }
-  if (["23514", "23502", "22001", "23503"].includes(code)) {
-    return "Conteúdo inválido — revise a resposta e tente de novo.";
-  }
-  if (code === "401" || msg.includes("jwt") || msg.includes("session")) {
-    return "Sua sessão expirou. Recarregue a página e entre novamente.";
-  }
-  return err.message ?? "Não foi possível concluir.";
-}
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return "—";
@@ -392,10 +358,13 @@ function Group({
   );
 }
 
-// Respostas do chamado (Fatia 2): "Responder" no topo abre o editor; abaixo, as
-// respostas em ordem cronológica DECRESCENTE. Carregadas sob demanda via server
-// action (sanitização no servidor). Responder NÃO mexe no status — o menu da
-// Fatia 1 segue sendo o único caminho. Sem excluir (append-only).
+// Respostas do chamado: conversa DIRIGIDA (encadeada). Toda a mecânica — fio,
+// "Responder" por mensagem, referência clicável ao pai, editar a própria — vive
+// no ReplyThread compartilhado (mesmo componente das atualizações da empresa).
+// Aqui só ligamos o adaptador do support_ticket_replies: carregar sob demanda
+// no servidor (sanitização no ponto único) e inserir/editar sob a RLS str_*,
+// com autoria e integridade do parent_id garantidas no banco. Responder NÃO
+// mexe no status — o menu da Fatia 1 segue sendo o único caminho.
 function RepliesSection({
   ticketId,
   userId,
@@ -405,207 +374,51 @@ function RepliesSection({
   userId: string;
   onChanged: () => void;
 }) {
-  const [replies, setReplies] = useState<TicketReplyView[] | null>(null); // null = carregando
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [composing, setComposing] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [lightbox, setLightbox] = useState<{
-    images: string[];
-    index: number;
-  } | null>(null);
+  const load = useCallback(
+    () => fetchTicketReplies(ticketId),
+    [ticketId]
+  );
 
-  const reload = useCallback(async () => {
-    try {
-      setReplies(await fetchTicketReplies(ticketId));
-      setLoadError(null);
-    } catch {
-      setLoadError("Não foi possível carregar as respostas.");
-    }
-  }, [ticketId]);
+  const insert = useCallback(
+    async (
+      parentId: string | null,
+      html: string,
+      attachments: NoteAttachmentMeta[]
+    ) => {
+      const supabase = createClient();
+      const { error } = await supabase.from("support_ticket_replies").insert({
+        ticket_id: ticketId,
+        parent_id: parentId,
+        body_html: html,
+        attachments,
+        author_id: userId,
+      });
+      return { error: error ? classifyReplyError(error) : null };
+    },
+    [ticketId, userId]
+  );
 
-  useEffect(() => {
-    setReplies(null);
-    void reload();
-  }, [reload]);
-
-  async function createReply(
-    html: string,
-    _visible: boolean,
-    attachments: NoteAttachmentMeta[]
-  ) {
-    const supabase = createClient();
-    const { error } = await supabase.from("support_ticket_replies").insert({
-      ticket_id: ticketId,
-      body_html: html,
-      attachments,
-      author_id: userId,
-    });
-    if (error) return { error: classifyMutationError(error) };
-    setComposing(false);
-    await reload();
-    onChanged(); // revalida a contagem da lista
-  }
-
-  async function updateReply(
-    id: string,
-    html: string,
-    _visible: boolean,
-    attachments: NoteAttachmentMeta[]
-  ) {
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("support_ticket_replies")
-      .update({ body_html: html, attachments })
-      .eq("id", id);
-    if (error) return { error: classifyMutationError(error) };
-    setEditingId(null);
-    await reload();
-    onChanged();
-  }
-
-  function onImageClick(e: MouseEvent<HTMLDivElement>) {
-    const t = e.target;
-    if (t instanceof HTMLImageElement && t.src) {
-      const imgs = Array.from(e.currentTarget.querySelectorAll("img")).map(
-        (i) => i.src
-      );
-      setLightbox({ images: imgs, index: Math.max(0, imgs.indexOf(t.src)) });
-    }
-  }
+  const update = useCallback(
+    async (id: string, html: string, attachments: NoteAttachmentMeta[]) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("support_ticket_replies")
+        .update({ body_html: html, attachments })
+        .eq("id", id);
+      return { error: error ? classifyReplyError(error) : null };
+    },
+    []
+  );
 
   return (
     <section className="border-t border-line pt-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold text-fg">
-          Respostas
-          {replies && replies.length > 0 ? ` (${replies.length})` : ""}
-        </h3>
-        {!composing && (
-          <button
-            type="button"
-            onClick={() => {
-              setEditingId(null);
-              setComposing(true);
-            }}
-            className={btnPrimary}
-          >
-            Responder
-          </button>
-        )}
-      </div>
-
-      {composing && (
-        <div className="mb-4">
-          <NoteEditorLazy
-            userId={userId}
-            showClientVisibility={false}
-            showAreas={false}
-            saveLabel="Enviar"
-            onSave={createReply}
-            onCancel={() => setComposing(false)}
-          />
-        </div>
-      )}
-
-      {loadError && (
-        <p
-          role="alert"
-          className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300"
-        >
-          {loadError}
-        </p>
-      )}
-
-      {replies === null && !loadError && (
-        <p className="text-sm text-fg-subtle">Carregando respostas…</p>
-      )}
-
-      {replies && replies.length === 0 && !composing && (
-        <p className="text-sm text-fg-subtle">Nenhuma resposta ainda.</p>
-      )}
-
-      {replies && replies.length > 0 && (
-        <ul className="space-y-3">
-          {replies.map((r) => (
-            <li
-              key={r.id}
-              className="rounded-xl border border-line bg-surface-2/40 p-3"
-            >
-              {editingId === r.id ? (
-                <NoteEditorLazy
-                  userId={userId}
-                  initialHTML={r.bodyHtml}
-                  initialAttachments={r.attachments.map(
-                    ({ path, name, size, mime }) => ({ path, name, size, mime })
-                  )}
-                  showClientVisibility={false}
-                  showAreas={false}
-                  saveLabel="Salvar alterações"
-                  onSave={(html, vis, atts) => updateReply(r.id, html, vis, atts)}
-                  onCancel={() => setEditingId(null)}
-                />
-              ) : (
-                <>
-                  <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-                    <span className="inline-flex items-center gap-1.5 font-medium text-fg">
-                      <Avatar
-                        name={r.authorName}
-                        url={r.authorAvatarUrl}
-                        size={20}
-                      />
-                      {r.authorName}
-                    </span>
-                    <span className="text-fg-subtle">
-                      em {formatDateTime(r.createdAtISO)}
-                    </span>
-                    {r.editedAtISO && (
-                      <span className="italic text-fg-subtle">
-                        · editado em {formatDateTime(r.editedAtISO)}
-                      </span>
-                    )}
-                    {r.authorId === userId && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setComposing(false);
-                          setEditingId(r.id);
-                        }}
-                        className="ml-auto rounded-md px-2 py-1 font-medium text-fg-muted transition hover:bg-surface-2 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
-                      >
-                        Editar
-                      </button>
-                    )}
-                  </div>
-
-                  <div
-                    className="rich-text note-view"
-                    onClick={onImageClick}
-                    // Sanitizado no servidor (loadTicketReplies → getNoteSanitizer).
-                    dangerouslySetInnerHTML={{ __html: r.bodyHtml }}
-                  />
-
-                  {r.attachments.length > 0 && (
-                    <div className="mt-3">
-                      <AttachmentList items={r.attachments} />
-                    </div>
-                  )}
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {lightbox && (
-        <Lightbox
-          images={lightbox.images}
-          index={lightbox.index}
-          onClose={() => setLightbox(null)}
-          onNavigate={(i) =>
-            setLightbox((prev) => (prev ? { ...prev, index: i } : prev))
-          }
-        />
-      )}
+      <ReplyThread
+        userId={userId}
+        load={load}
+        insert={insert}
+        update={update}
+        onChanged={onChanged}
+      />
     </section>
   );
 }

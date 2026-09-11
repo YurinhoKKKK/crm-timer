@@ -628,6 +628,48 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          actor_id: string | null
+          body: string | null
+          company_id: string | null
+          created_at: string
+          id: string
+          read_at: string | null
+          source_id: string | null
+          source_type: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          actor_id?: string | null
+          body?: string | null
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          read_at?: string | null
+          source_id?: string | null
+          source_type?: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          actor_id?: string | null
+          body?: string | null
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          read_at?: string | null
+          source_id?: string | null
+          source_type?: string | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       google_accounts: {
         Row: {
           access_token_enc: string
@@ -1727,6 +1769,28 @@ export type Database = {
           avatar_path: string | null
         }[]
       }
+      notifications_feed: {
+        Args: { p_filter?: string; p_limit?: number; p_offset?: number }
+        Returns: {
+          id: string
+          type: string
+          title: string
+          body: string | null
+          company_id: string | null
+          company_name: string | null
+          reachable: boolean
+          source_type: string | null
+          source_id: string | null
+          actor_id: string | null
+          actor_name: string | null
+          actor_avatar_path: string | null
+          created_at: string
+          read_at: string | null
+        }[]
+      }
+      notifications_unread_count: { Args: never; Returns: number }
+      notifications_mark_read: { Args: { p_ids: string[] }; Returns: undefined }
+      notifications_mark_all_read: { Args: never; Returns: undefined }
       sync_content_mentions: {
         Args: {
           p_source_type: string

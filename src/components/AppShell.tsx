@@ -10,6 +10,8 @@ import Avatar from "./Avatar";
 import Logo from "./Logo";
 import ActiveTimerIndicator from "./ActiveTimerIndicator";
 import UnreadValidationsBadge from "./UnreadValidationsBadge";
+import OpenTicketsBadge from "./OpenTicketsBadge";
+import NotificationBell from "./NotificationBell";
 
 type Role = "admin" | "consultor" | "colaborador";
 
@@ -20,6 +22,8 @@ type NavItem = {
   label: string;
   icon: ReactNode;
   validations?: boolean;
+  // Liga o contador de chamados abertos no item "Suporte".
+  openTickets?: boolean;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -126,7 +130,7 @@ const NAV: Record<Role, NavItem[]> = {
     { href: "/admin/tarefas", label: "Tarefas", icon: <Icon>{ic.tasks}</Icon> },
     { href: "/agenda", label: "Agenda", icon: <Icon>{ic.calendar}</Icon> },
     { href: "/admin/validacoes", label: "Validações", icon: <Icon>{ic.badgeCheck}</Icon>, validations: true },
-    { href: "/suporte", label: "Suporte", icon: <Icon>{ic.headset}</Icon> },
+    { href: "/suporte", label: "Suporte", icon: <Icon>{ic.headset}</Icon>, openTickets: true },
     { href: "/colaborador", label: "Meu Trabalho", icon: <Icon>{ic.clock}</Icon> },
   ],
   consultor: [
@@ -135,7 +139,7 @@ const NAV: Record<Role, NavItem[]> = {
     { href: "/consultor/tarefas", label: "Tarefas", icon: <Icon>{ic.tasks}</Icon> },
     { href: "/agenda", label: "Agenda", icon: <Icon>{ic.calendar}</Icon> },
     { href: "/consultor/validacoes", label: "Validações", icon: <Icon>{ic.badgeCheck}</Icon>, validations: true },
-    { href: "/suporte", label: "Suporte", icon: <Icon>{ic.headset}</Icon> },
+    { href: "/suporte", label: "Suporte", icon: <Icon>{ic.headset}</Icon>, openTickets: true },
     { href: "/colaborador", label: "Meu Trabalho", icon: <Icon>{ic.clock}</Icon> },
   ],
   colaborador: [
@@ -144,7 +148,7 @@ const NAV: Record<Role, NavItem[]> = {
     { href: "/colaborador/listagens", label: "Minhas Listagens", icon: <Icon>{ic.bag}</Icon> },
     { href: "/agenda", label: "Agenda", icon: <Icon>{ic.calendar}</Icon> },
     { href: "/colaborador/validacoes", label: "Validações", icon: <Icon>{ic.badgeCheck}</Icon>, validations: true },
-    { href: "/suporte", label: "Suporte", icon: <Icon>{ic.headset}</Icon> },
+    { href: "/suporte", label: "Suporte", icon: <Icon>{ic.headset}</Icon>, openTickets: true },
   ],
 };
 
@@ -199,6 +203,7 @@ function NavLinks({
           {item.icon}
           {item.label}
           {item.validations && <UnreadValidationsBadge />}
+          {item.openTickets && <OpenTicketsBadge />}
         </Link>
       ))}
     </nav>
@@ -326,6 +331,7 @@ export default function AppShell({
             ) : null}
           </div>
 
+          <NotificationBell role={user.role} />
           <ThemeToggle />
         </header>
 

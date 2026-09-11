@@ -27,6 +27,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import Lightbox from "@/components/Lightbox";
 import Modal from "@/components/Modal";
 import ReplyThread, { classifyReplyError } from "@/components/replies/ReplyThread";
+import { syncMentions } from "@/lib/mention-actions";
 import { fetchTicketReplies } from "./actions";
 import {
   FilterBar,
@@ -386,14 +387,21 @@ function RepliesSection({
       attachments: NoteAttachmentMeta[]
     ) => {
       const supabase = createClient();
-      const { error } = await supabase.from("support_ticket_replies").insert({
-        ticket_id: ticketId,
-        parent_id: parentId,
-        body_html: html,
-        attachments,
-        author_id: userId,
-      });
-      return { error: error ? classifyReplyError(error) : null };
+      const { data, error } = await supabase
+        .from("support_ticket_replies")
+        .insert({
+          ticket_id: ticketId,
+          parent_id: parentId,
+          body_html: html,
+          attachments,
+          author_id: userId,
+        })
+        .select("id")
+        .single();
+      if (error) return { error: classifyReplyError(error) };
+      // Menções extraídas/validadas no servidor a partir do conteúdo salvo.
+      await syncMentions("chamado_resposta", data.id);
+      return { error: null };
     },
     [ticketId, userId]
   );
@@ -405,7 +413,9 @@ function RepliesSection({
         .from("support_ticket_replies")
         .update({ body_html: html, attachments })
         .eq("id", id);
-      return { error: error ? classifyReplyError(error) : null };
+      if (error) return { error: classifyReplyError(error) };
+      await syncMentions("chamado_resposta", id);
+      return { error: null };
     },
     []
   );
@@ -418,6 +428,7 @@ function RepliesSection({
         insert={insert}
         update={update}
         onChanged={onChanged}
+        mentionContext={{ sourceType: "chamado_resposta", companyId: null }}
       />
     </section>
   );

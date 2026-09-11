@@ -8,6 +8,7 @@ import type { CompanyNoteView, NoteAttachmentMeta } from "@/lib/notes";
 import type { NoteArea } from "@/lib/types";
 import { NOTE_AREAS } from "@/lib/note-areas";
 import { createClient } from "@/lib/supabase-browser";
+import { syncMentions } from "@/lib/mention-actions";
 import { formatBytes } from "@/lib/format";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import Lightbox from "@/components/Lightbox";
@@ -185,6 +186,8 @@ export default function CompanyNotes({
         .insert(areas.map((area) => ({ note_id: data.id, area })));
       if (aErr) return { error: aErr.message };
     }
+    // Menções extraídas/validadas no servidor a partir do conteúdo salvo.
+    await syncMentions("atualizacao", data.id);
     setCreating(false);
     refresh();
   }
@@ -218,6 +221,7 @@ export default function CompanyNotes({
         .insert(areas.map((area) => ({ note_id: id, area })));
       if (aErr) return { error: aErr.message };
     }
+    await syncMentions("atualizacao", id);
     setEditingId(null);
     refresh();
   }
@@ -269,6 +273,7 @@ export default function CompanyNotes({
         <div className="mb-4">
           <NoteEditor
             userId={userId}
+            mentionContext={{ sourceType: "atualizacao", companyId }}
             onSave={createNote}
             onCancel={() => setCreating(false)}
           />
@@ -363,6 +368,7 @@ export default function CompanyNotes({
                     ({ path, name, size, mime }) => ({ path, name, size, mime })
                   )}
                   initialAreas={n.areas}
+                  mentionContext={{ sourceType: "atualizacao", companyId }}
                   saveLabel="Salvar alterações"
                   onSave={(html, vis, atts, areas) =>
                     updateNote(n.id, html, vis, atts, areas)
@@ -465,6 +471,7 @@ export default function CompanyNotes({
 
                   <NoteRepliesSection
                     noteId={n.id}
+                    companyId={companyId}
                     userId={userId}
                     replyCount={n.replyCount}
                     onChanged={refresh}

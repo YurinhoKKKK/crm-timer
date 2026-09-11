@@ -3,6 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase-browser";
+import { syncMentions } from "@/lib/mention-actions";
 import type { NoteAttachmentMeta } from "@/lib/notes";
 import {
   URGENCY_ORDER,
@@ -90,15 +91,21 @@ export default function TicketForm({
     if (!issueType) return { error: "Escolha o tipo de B.O." };
 
     const supabase = createClient();
-    const { error } = await supabase.from("support_tickets").insert({
-      title: cleanTitle,
-      context_html: html,
-      attachments,
-      urgency,
-      issue_type: issueType,
-      created_by: userId,
-    });
+    const { data, error } = await supabase
+      .from("support_tickets")
+      .insert({
+        title: cleanTitle,
+        context_html: html,
+        attachments,
+        urgency,
+        issue_type: issueType,
+        created_by: userId,
+      })
+      .select("id")
+      .single();
     if (error) return { error: error.message };
+    // Menções extraídas/validadas no servidor a partir do conteúdo salvo.
+    await syncMentions("chamado", data.id);
     onCreated();
   }
 
@@ -160,6 +167,7 @@ export default function TicketForm({
           userId={userId}
           showClientVisibility={false}
           showAreas={false}
+          mentionContext={{ sourceType: "chamado", companyId: null }}
           saveLabel="Abrir chamado"
           onSave={submit}
           onCancel={onCancel}

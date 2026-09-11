@@ -52,7 +52,16 @@ async function loadSanitizer(): Promise<Sanitizer> {
     }
   });
 
-  return (html: string) => DOMPurify.sanitize(html);
+  // Menções (@usuário) são um <span data-type="mention" data-id="<uuid>"
+  // data-label="Nome">@Nome</span> inserido pelo editor. Precisamos preservar
+  // ESSES atributos — o data-id (que liga a menção ao usuário) é o que faz a
+  // menção sobreviver à sanitização. ADD_ATTR amplia a allowlist SOMENTE com
+  // esses três atributos; o resto do sanitizador continua no padrão estrito
+  // (scripts, handlers on*, etc. seguem barrados).
+  return (html: string) =>
+    DOMPurify.sanitize(html, {
+      ADD_ATTR: ["data-type", "data-id", "data-label"],
+    });
 }
 
 // Ponto ÚNICO de sanitização do HTML de anotações — leitura interna

@@ -210,6 +210,17 @@ body {
   border-radius: 0.2em;
   padding: 0.05em 0.15em;
 }
+/* Menção (@usuário): chip discreto da marca, tanto no editor quanto na leitura.
+   Vale para o nó do TipTap (data-type="mention") e para o HTML já salvo. */
+.rich-text .mention,
+.rich-text span[data-type="mention"] {
+  color: #3145ff;
+  background-color: var(--brand-tint);
+  border-radius: 0.35em;
+  padding: 0.02em 0.3em;
+  font-weight: 500;
+  white-space: nowrap;
+}
 /* Tabelas (extensão Table do TipTap) */
 .rich-text .tableWrapper {
   overflow-x: auto;

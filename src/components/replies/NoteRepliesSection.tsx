@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight, MessageSquare } from "lucide-react";
 import { createClient } from "@/lib/supabase-browser";
 import type { NoteAttachmentMeta } from "@/lib/notes";
+import { syncMentions } from "@/lib/mention-actions";
 import ReplyThread, { classifyReplyError, type ReplyView } from "./ReplyThread";
 import { fetchNoteReplies } from "./reply-actions";
 
@@ -16,11 +17,13 @@ import { fetchNoteReplies } from "./reply-actions";
 // de responder, o pai revalida (onChanged) e o número volta atualizado.
 export default function NoteRepliesSection({
   noteId,
+  companyId,
   userId,
   replyCount,
   onChanged,
 }: {
   noteId: string;
+  companyId: string;
   userId: string;
   replyCount: number;
   onChanged?: () => void;
@@ -35,14 +38,21 @@ export default function NoteRepliesSection({
     attachments: NoteAttachmentMeta[]
   ) {
     const supabase = createClient();
-    const { error } = await supabase.from("company_note_replies").insert({
-      note_id: noteId,
-      parent_id: parentId,
-      body_html: html,
-      attachments,
-      author_id: userId,
-    });
-    return { error: error ? classifyReplyError(error) : null };
+    const { data, error } = await supabase
+      .from("company_note_replies")
+      .insert({
+        note_id: noteId,
+        parent_id: parentId,
+        body_html: html,
+        attachments,
+        author_id: userId,
+      })
+      .select("id")
+      .single();
+    if (error) return { error: classifyReplyError(error) };
+    // Menções extraídas/validadas no servidor a partir do conteúdo salvo.
+    await syncMentions("atualizacao_resposta", data.id);
+    return { error: null };
   }
 
   async function update(
@@ -55,7 +65,9 @@ export default function NoteRepliesSection({
       .from("company_note_replies")
       .update({ body_html: html, attachments })
       .eq("id", id);
-    return { error: error ? classifyReplyError(error) : null };
+    if (error) return { error: classifyReplyError(error) };
+    await syncMentions("atualizacao_resposta", id);
+    return { error: null };
   }
 
   return (
@@ -85,6 +97,7 @@ export default function NoteRepliesSection({
             insert={insert}
             update={update}
             onChanged={onChanged}
+            mentionContext={{ sourceType: "atualizacao_resposta", companyId }}
           />
         </div>
       )}

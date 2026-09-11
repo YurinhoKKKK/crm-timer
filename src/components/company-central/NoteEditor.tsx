@@ -16,6 +16,7 @@ import Highlight from "@tiptap/extension-highlight";
 import { TableKit } from "@tiptap/extension-table";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Color, TextStyle } from "@tiptap/extension-text-style";
+import Mention from "@tiptap/extension-mention";
 import {
   AlignCenter,
   AlignJustify,
@@ -52,6 +53,9 @@ import { formatBytes } from "@/lib/format";
 import type { NoteAttachmentMeta } from "@/lib/notes";
 import type { NoteArea } from "@/lib/types";
 import { NOTE_AREAS, NOTE_AREA_COLORS } from "@/lib/note-areas";
+import type { MentionContext, MentionUser } from "@/lib/mentions";
+import { fetchMentionableUsers } from "@/lib/mention-actions";
+import { buildMentionSuggestion } from "./mention-suggestion";
 import { ResizableImage } from "./resizable-image";
 
 const MAX_IMAGE_MB = 5;
@@ -220,6 +224,11 @@ export default function NoteEditor({
   // padrão (atualizações). Some nos reusos 100% internos sem noção de área —
   // ex.: chamados de suporte —, quando a lista de áreas é ignorada no onSave.
   showAreas = true,
+  // Contexto de MENÇÃO (@usuário). Quando presente, o editor habilita o seletor
+  // de @ com as pessoas que alcançam aquele contexto (buscadas no servidor). A
+  // gravação/validação das menções acontece FORA daqui — o pai chama
+  // syncMentions após salvar, a partir do conteúdo salvo. Ausente = sem menção.
+  mentionContext,
   // Offset do topo da barra de ferramentas (sticky). Na página, compensa o
   // header fixo do AppShell (60px). Dentro de um painel lateral, cujo contêiner
   // de rolagem começa logo abaixo do próprio cabeçalho, deve ser "0px" — senão
@@ -237,6 +246,7 @@ export default function NoteEditor({
   placeholder?: string;
   showClientVisibility?: boolean;
   showAreas?: boolean;
+  mentionContext?: MentionContext;
   toolbarOffset?: string;
   onSave: (
     html: string,
@@ -262,12 +272,32 @@ export default function NoteEditor({
   // Arquivos subidos NESTA edição (ainda não salvos na anotação): se o usuário
   // remover o chip ou cancelar, dá para apagar do Storage sem quebrar nada.
   const newPathsRef = useRef<Set<string>>(new Set());
+  // Pessoas marcáveis no contexto (buscadas do servidor uma vez). O seletor de
+  // @ lê deste ref, então a lista carregar depois não obriga a recriar o editor.
+  const mentionUsersRef = useRef<MentionUser[]>([]);
 
   useEffect(() => {
     if (!imgError) return;
     const t = setTimeout(() => setImgError(null), 6000);
     return () => clearTimeout(t);
   }, [imgError]);
+
+  // Carrega, uma vez, quem pode ser marcado neste contexto. A lista já vem
+  // filtrada por acesso no servidor (RPC mentionable_users).
+  useEffect(() => {
+    if (!mentionContext) return;
+    let active = true;
+    fetchMentionableUsers(mentionContext.sourceType, mentionContext.companyId)
+      .then((list) => {
+        if (active) mentionUsersRef.current = list;
+      })
+      .catch(() => {
+        /* silencioso: sem lista, o @ apenas não sugere ninguém */
+      });
+    return () => {
+      active = false;
+    };
+  }, [mentionContext]);
 
   // Sobe a imagem para o Storage e insere no documento (na seleção atual ou,
   // no arrastar-e-soltar, na posição do cursor de drop). Usada pelo botão,
@@ -386,6 +416,23 @@ export default function NoteEditor({
           placeholder ??
           (showClientVisibility ? "Escreva a atualização…" : "Escreva aqui…"),
       }),
+      // Menção só entra quando há contexto. O nó grava data-id (o usuário) e
+      // data-label (o nome no momento) — o id é o que o servidor valida e o
+      // nome é o que sobrevive caso a pessoa saia do sistema.
+      ...(mentionContext
+        ? [
+            Mention.configure({
+              HTMLAttributes: { class: "mention" },
+              suggestion: buildMentionSuggestion(
+                () => mentionUsersRef.current,
+                mentionContext.sourceType === "chamado" ||
+                  mentionContext.sourceType === "chamado_resposta"
+                  ? "Só aparecem pessoas da equipe."
+                  : "Só aparecem pessoas com acesso a esta empresa."
+              ),
+            }),
+          ]
+        : []),
     ],
     content: initialHTML,
     editorProps: {

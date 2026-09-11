@@ -8,6 +8,7 @@ import { Eye, Lock, PencilLine, X } from "lucide-react";
 import type { CompanyNoteView, NoteAttachmentMeta } from "@/lib/notes";
 import type { NoteArea } from "@/lib/types";
 import { createClient } from "@/lib/supabase-browser";
+import { syncMentions } from "@/lib/mention-actions";
 import Avatar from "@/components/Avatar";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import Lightbox from "@/components/Lightbox";
@@ -178,6 +179,7 @@ export default function NotesPanel({
           .insert(areas.map((area) => ({ note_id: id, area })));
         if (aErr) return { error: aErr.message };
       }
+      await syncMentions("atualizacao", id);
       setEditingId(null);
       await reload();
       return { error: null };
@@ -200,6 +202,7 @@ export default function NotesPanel({
         .insert(areas.map((area) => ({ note_id: data.id, area })));
       if (aErr) return { error: aErr.message };
     }
+    await syncMentions("atualizacao", data.id);
     setCreating(false);
     onCountChange(1); // atualiza o balão sem recarregar a tela
     await reload();
@@ -258,6 +261,7 @@ export default function NotesPanel({
               <NoteEditor
                 userId={userId}
                 toolbarOffset="0px"
+                mentionContext={{ sourceType: "atualizacao", companyId }}
                 onSave={(html, vis, atts, areas) =>
                   persist(null, html, vis, atts, areas)
                 }
@@ -324,6 +328,7 @@ export default function NotesPanel({
                         })
                       )}
                       initialAreas={n.areas}
+                      mentionContext={{ sourceType: "atualizacao", companyId }}
                       saveLabel="Salvar alterações"
                       onSave={(html, vis, atts, areas) =>
                         persist(n.id, html, vis, atts, areas)
@@ -415,6 +420,7 @@ export default function NotesPanel({
 
                       <NoteRepliesSection
                         noteId={n.id}
+                        companyId={companyId}
                         userId={userId}
                         replyCount={n.replyCount}
                         onChanged={() => void reload()}

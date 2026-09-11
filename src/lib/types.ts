@@ -576,6 +576,58 @@ export type Database = {
           },
         ]
       }
+      content_mentions: {
+        Row: {
+          author_id: string
+          company_id: string | null
+          created_at: string
+          id: string
+          mentioned_user_id: string
+          source_id: string
+          source_type: string
+        }
+        Insert: {
+          author_id: string
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          mentioned_user_id: string
+          source_id: string
+          source_type: string
+        }
+        Update: {
+          author_id?: string
+          company_id?: string | null
+          created_at?: string
+          id?: string
+          mentioned_user_id?: string
+          source_id?: string
+          source_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_mentions_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_mentions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_mentions_mentioned_user_id_fkey"
+            columns: ["mentioned_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       google_accounts: {
         Row: {
           access_token_enc: string
@@ -1666,6 +1718,22 @@ export type Database = {
           note_id: string
           reply_count: number
         }[]
+      }
+      mentionable_users: {
+        Args: { p_source_type: string; p_company: string | null }
+        Returns: {
+          id: string
+          full_name: string
+          avatar_path: string | null
+        }[]
+      }
+      sync_content_mentions: {
+        Args: {
+          p_source_type: string
+          p_source_id: string
+          p_user_ids: string[]
+        }
+        Returns: undefined
       }
       company_overview: {
         Args: {

@@ -10,6 +10,7 @@ import {
 import dynamic from "next/dynamic";
 import { CornerUpLeft, FileSpreadsheet, FileText, Reply, X } from "lucide-react";
 import type { NoteAttachmentMeta, NoteAttachmentView } from "@/lib/notes";
+import type { MentionContext } from "@/lib/mentions";
 import { formatBytes } from "@/lib/format";
 import { btnPrimary } from "@/lib/ui";
 import Avatar from "@/components/Avatar";
@@ -188,6 +189,7 @@ export default function ReplyThread({
   update,
   onChanged,
   emptyText = "Nenhuma resposta ainda.",
+  mentionContext,
 }: {
   userId: string;
   load: () => Promise<ReplyView[]>;
@@ -203,6 +205,8 @@ export default function ReplyThread({
   ) => Promise<{ error?: string | null }>;
   onChanged?: () => void;
   emptyText?: string;
+  // Habilita @menção no editor das respostas (repassado ao NoteEditor).
+  mentionContext?: MentionContext;
 }) {
   const [replies, setReplies] = useState<ReplyView[] | null>(null); // null = carregando
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -318,6 +322,7 @@ export default function ReplyThread({
           userId={userId}
           showClientVisibility={false}
           showAreas={false}
+          mentionContext={mentionContext}
           toolbarOffset="0px"
           saveLabel="Enviar"
           onSave={(html, _v, atts) => doCreate(target, html, atts)}
@@ -351,6 +356,7 @@ export default function ReplyThread({
               )}
               showClientVisibility={false}
               showAreas={false}
+              mentionContext={mentionContext}
               toolbarOffset="0px"
               saveLabel="Salvar alterações"
               onSave={(html, _v, atts) => doUpdate(r.id, html, atts)}

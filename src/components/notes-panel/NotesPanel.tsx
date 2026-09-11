@@ -6,11 +6,13 @@ import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Eye, Lock, PencilLine, X } from "lucide-react";
 import type { CompanyNoteView, NoteAttachmentMeta } from "@/lib/notes";
+import type { NoteArea } from "@/lib/types";
 import { createClient } from "@/lib/supabase-browser";
 import Avatar from "@/components/Avatar";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import Lightbox from "@/components/Lightbox";
 import NoteBody from "@/components/company-central/NoteBody";
+import AreaChips from "@/components/company-central/AreaChips";
 import { getPanelNotes } from "./notes-panel-actions";
 
 // O editor (TipTap) só entra no bundle quando o painel de fato abre e este
@@ -144,7 +146,8 @@ export default function NotesPanel({
     id: string | null,
     html: string,
     visibleToClient: boolean,
-    attachments: NoteAttachmentMeta[]
+    attachments: NoteAttachmentMeta[],
+    areas: NoteArea[]
   ): Promise<{ error?: string | null }> {
     if (visibleToClient) {
       const ok = await askVisibleConfirm();
@@ -162,18 +165,40 @@ export default function NotesPanel({
         })
         .eq("id", id);
       if (error) return { error: error.message };
+      // Reescreve as áreas: apaga as atuais e insere a nova seleção.
+      const { error: delErr } = await supabase
+        .from("company_note_areas")
+        .delete()
+        .eq("note_id", id);
+      if (delErr) return { error: delErr.message };
+      if (areas.length > 0) {
+        const { error: aErr } = await supabase
+          .from("company_note_areas")
+          .insert(areas.map((area) => ({ note_id: id, area })));
+        if (aErr) return { error: aErr.message };
+      }
       setEditingId(null);
       await reload();
       return { error: null };
     }
-    const { error } = await supabase.from("company_notes").insert({
-      company_id: companyId,
-      author_id: userId,
-      content_html: html,
-      visible_to_client: visibleToClient,
-      attachments,
-    });
+    const { data, error } = await supabase
+      .from("company_notes")
+      .insert({
+        company_id: companyId,
+        author_id: userId,
+        content_html: html,
+        visible_to_client: visibleToClient,
+        attachments,
+      })
+      .select("id")
+      .single();
     if (error) return { error: error.message };
+    if (areas.length > 0) {
+      const { error: aErr } = await supabase
+        .from("company_note_areas")
+        .insert(areas.map((area) => ({ note_id: data.id, area })));
+      if (aErr) return { error: aErr.message };
+    }
     setCreating(false);
     onCountChange(1); // atualiza o balão sem recarregar a tela
     await reload();
@@ -232,7 +257,9 @@ export default function NotesPanel({
               <NoteEditor
                 userId={userId}
                 toolbarOffset="0px"
-                onSave={(html, vis, atts) => persist(null, html, vis, atts)}
+                onSave={(html, vis, atts, areas) =>
+                  persist(null, html, vis, atts, areas)
+                }
                 onCancel={() => setCreating(false)}
               />
             </div>
@@ -295,9 +322,10 @@ export default function NotesPanel({
                           mime,
                         })
                       )}
+                      initialAreas={n.areas}
                       saveLabel="Salvar alterações"
-                      onSave={(html, vis, atts) =>
-                        persist(n.id, html, vis, atts)
+                      onSave={(html, vis, atts, areas) =>
+                        persist(n.id, html, vis, atts, areas)
                       }
                       onCancel={() => setEditingId(null)}
                     />
@@ -341,6 +369,10 @@ export default function NotesPanel({
                           </button>
                         )}
                       </div>
+
+                      {n.areas.length > 0 && (
+                        <AreaChips areas={n.areas} size="xs" className="mb-2" />
+                      )}
 
                       {/* Recolhe anotações longas por ALTURA, com degradê e "Ler
                           mais"/"Ler menos"; clicar numa imagem abre o lightbox.

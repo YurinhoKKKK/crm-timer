@@ -50,6 +50,8 @@ import { createClient } from "@/lib/supabase-browser";
 import { btnPrimary, btnSecondary, inputClass } from "@/lib/ui";
 import { formatBytes } from "@/lib/format";
 import type { NoteAttachmentMeta } from "@/lib/notes";
+import type { NoteArea } from "@/lib/types";
+import { NOTE_AREAS, NOTE_AREA_COLORS } from "@/lib/note-areas";
 import { ResizableImage } from "./resizable-image";
 
 const MAX_IMAGE_MB = 5;
@@ -202,6 +204,7 @@ export default function NoteEditor({
   initialHTML = "",
   initialVisible = false,
   initialAttachments = [],
+  initialAreas = [],
   saveLabel = "Salvar atualização",
   // Texto do placeholder do editor. Quando não informado, deriva do contexto:
   // no de Atualizações (com noção de cliente) fala "atualização"; nos reusos
@@ -213,6 +216,10 @@ export default function NoteEditor({
   // chamados de suporte —, sem mudar o comportamento nas anotações. `visible`
   // fica travado em false nesse caso e é passado assim para o onSave (ignorado).
   showClientVisibility = true,
+  // Seleção de ÁREAS (múltipla e obrigatória) da atualização. Presente por
+  // padrão (atualizações). Some nos reusos 100% internos sem noção de área —
+  // ex.: chamados de suporte —, quando a lista de áreas é ignorada no onSave.
+  showAreas = true,
   // Offset do topo da barra de ferramentas (sticky). Na página, compensa o
   // header fixo do AppShell (60px). Dentro de um painel lateral, cujo contêiner
   // de rolagem começa logo abaixo do próprio cabeçalho, deve ser "0px" — senão
@@ -225,18 +232,22 @@ export default function NoteEditor({
   initialHTML?: string;
   initialVisible?: boolean;
   initialAttachments?: NoteAttachmentMeta[];
+  initialAreas?: NoteArea[];
   saveLabel?: string;
   placeholder?: string;
   showClientVisibility?: boolean;
+  showAreas?: boolean;
   toolbarOffset?: string;
   onSave: (
     html: string,
     visibleToClient: boolean,
-    attachments: NoteAttachmentMeta[]
+    attachments: NoteAttachmentMeta[],
+    areas: NoteArea[]
   ) => Promise<{ error?: string | null } | void>;
   onCancel: () => void;
 }) {
   const [visible, setVisible] = useState(initialVisible);
+  const [areas, setAreas] = useState<NoteArea[]>(initialAreas);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -448,10 +459,17 @@ export default function NoteEditor({
       setSaveError("Escreva algo antes de salvar.");
       return;
     }
+    // Área é obrigatória (pelo menos uma) para o que é criado/editado a partir
+    // de agora — as atualizações antigas "sem área" só recaem nesta regra se
+    // forem reeditadas. Vale só quando o seletor de áreas está presente.
+    if (showAreas && areas.length === 0) {
+      setSaveError("Escolha pelo menos uma área.");
+      return;
+    }
     setBusy(true);
     setSaveError(null);
     try {
-      const res = await onSave(editor.getHTML(), visible, attachments);
+      const res = await onSave(editor.getHTML(), visible, attachments, areas);
       if (res && "error" in res && res.error) {
         setSaveError(res.error);
       } else {
@@ -917,6 +935,52 @@ export default function NoteEditor({
         >
           {imgError}
         </p>
+      )}
+
+      {/* Áreas: seleção múltipla e obrigatória. Cada chip fica colorido quando
+          marcado (identidade da área) e como contorno neutro quando não. */}
+      {showAreas && (
+        <div className="border-t border-line px-3 py-2.5">
+          <p className="mb-1.5 text-xs font-medium text-fg-muted">
+            Áreas <span className="text-fg-subtle">(escolha uma ou mais)</span>
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {NOTE_AREAS.map(({ value, label }) => {
+              const on = areas.includes(value);
+              const c = NOTE_AREA_COLORS[value];
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() =>
+                    setAreas((prev) =>
+                      prev.includes(value)
+                        ? prev.filter((a) => a !== value)
+                        : [...prev, value]
+                    )
+                  }
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd ${
+                    on
+                      ? "shadow-sm ring-1 ring-black/10 dark:ring-white/20"
+                      : "border border-line bg-surface text-fg-muted hover:border-risd/50 hover:text-fg"
+                  }`}
+                  style={on ? { backgroundColor: c.bg, color: c.fg } : undefined}
+                >
+                  <span
+                    aria-hidden="true"
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{
+                      backgroundColor: on ? c.accent ?? c.fg : c.bg,
+                      opacity: on && !c.accent ? 0.7 : 1,
+                    }}
+                  />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* Rodapé: visibilidade + ações */}

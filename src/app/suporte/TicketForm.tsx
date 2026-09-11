@@ -159,6 +159,7 @@ export default function TicketForm({
         <NoteEditor
           userId={userId}
           showClientVisibility={false}
+          showAreas={false}
           saveLabel="Abrir chamado"
           onSave={submit}
           onCancel={onCancel}

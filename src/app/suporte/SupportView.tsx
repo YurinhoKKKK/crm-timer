@@ -499,6 +499,7 @@ function RepliesSection({
           <NoteEditorLazy
             userId={userId}
             showClientVisibility={false}
+            showAreas={false}
             saveLabel="Enviar"
             onSave={createReply}
             onCancel={() => setComposing(false)}
@@ -538,6 +539,7 @@ function RepliesSection({
                     ({ path, name, size, mime }) => ({ path, name, size, mime })
                   )}
                   showClientVisibility={false}
+                  showAreas={false}
                   saveLabel="Salvar alterações"
                   onSave={(html, vis, atts) => updateReply(r.id, html, vis, atts)}
                   onCancel={() => setEditingId(null)}

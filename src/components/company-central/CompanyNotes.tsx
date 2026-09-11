@@ -5,12 +5,15 @@ import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { FileSpreadsheet, FileText } from "lucide-react";
 import type { CompanyNoteView, NoteAttachmentMeta } from "@/lib/notes";
+import type { NoteArea } from "@/lib/types";
+import { NOTE_AREAS } from "@/lib/note-areas";
 import { createClient } from "@/lib/supabase-browser";
 import { formatBytes } from "@/lib/format";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import Lightbox from "@/components/Lightbox";
 import Avatar from "@/components/Avatar";
 import NoteBody from "./NoteBody";
+import AreaChips from "./AreaChips";
 import {
   FilterBar,
   SearchBox,
@@ -99,6 +102,7 @@ export default function CompanyNotes({
 
   const [query, setQuery] = useState("");
   const [author, setAuthor] = useState("");
+  const [area, setArea] = useState("");
   const [period, setPeriod] = useState("");
   const [visibility, setVisibility] = useState("");
   const [has, setHas] = useState("");
@@ -130,6 +134,9 @@ export default function CompanyNotes({
       .filter(({ note: n, text, hasImage }) => {
         if (q && !text.includes(q)) return false;
         if (author && n.authorName !== author) return false;
+        if (area === "__none__" && n.areas.length > 0) return false;
+        if (area && area !== "__none__" && !n.areas.includes(area as NoteArea))
+          return false;
         if (cutoff !== null && new Date(n.createdAtISO).getTime() < cutoff)
           return false;
         if (visibility === "cliente" && !n.visibleToClient) return false;
@@ -144,7 +151,7 @@ export default function CompanyNotes({
       return sort === "antigas" ? cmp : -cmp;
     });
     return out;
-  }, [enriched, query, author, period, visibility, has, sort]);
+  }, [enriched, query, author, area, period, visibility, has, sort]);
 
   const { visible, hasMore, remaining, showMore } = usePaged(filtered);
 
@@ -155,17 +162,28 @@ export default function CompanyNotes({
   async function createNote(
     html: string,
     visibleToClient: boolean,
-    attachments: NoteAttachmentMeta[]
+    attachments: NoteAttachmentMeta[],
+    areas: NoteArea[]
   ) {
     const supabase = createClient();
-    const { error } = await supabase.from("company_notes").insert({
-      company_id: companyId,
-      author_id: userId,
-      content_html: html,
-      visible_to_client: visibleToClient,
-      attachments,
-    });
+    const { data, error } = await supabase
+      .from("company_notes")
+      .insert({
+        company_id: companyId,
+        author_id: userId,
+        content_html: html,
+        visible_to_client: visibleToClient,
+        attachments,
+      })
+      .select("id")
+      .single();
     if (error) return { error: error.message };
+    if (areas.length > 0) {
+      const { error: aErr } = await supabase
+        .from("company_note_areas")
+        .insert(areas.map((area) => ({ note_id: data.id, area })));
+      if (aErr) return { error: aErr.message };
+    }
     setCreating(false);
     refresh();
   }
@@ -174,7 +192,8 @@ export default function CompanyNotes({
     id: string,
     html: string,
     visibleToClient: boolean,
-    attachments: NoteAttachmentMeta[]
+    attachments: NoteAttachmentMeta[],
+    areas: NoteArea[]
   ) {
     const supabase = createClient();
     const { error } = await supabase
@@ -186,6 +205,18 @@ export default function CompanyNotes({
       })
       .eq("id", id);
     if (error) return { error: error.message };
+    // Reescreve as áreas: apaga as atuais e insere a nova seleção.
+    const { error: delErr } = await supabase
+      .from("company_note_areas")
+      .delete()
+      .eq("note_id", id);
+    if (delErr) return { error: delErr.message };
+    if (areas.length > 0) {
+      const { error: aErr } = await supabase
+        .from("company_note_areas")
+        .insert(areas.map((area) => ({ note_id: id, area })));
+      if (aErr) return { error: aErr.message };
+    }
     setEditingId(null);
     refresh();
   }
@@ -258,6 +289,16 @@ export default function CompanyNotes({
             options={authors.map((a) => ({ value: a, label: a }))}
           />
           <SelectFilter
+            value={area}
+            onChange={setArea}
+            allLabel="Qualquer área"
+            ariaLabel="Filtrar por área"
+            options={[
+              ...NOTE_AREAS.map((a) => ({ value: a.value, label: a.label })),
+              { value: "__none__", label: "Sem área" },
+            ]}
+          />
+          <SelectFilter
             value={period}
             onChange={setPeriod}
             allLabel="Qualquer data"
@@ -320,8 +361,11 @@ export default function CompanyNotes({
                   initialAttachments={n.attachments.map(
                     ({ path, name, size, mime }) => ({ path, name, size, mime })
                   )}
+                  initialAreas={n.areas}
                   saveLabel="Salvar alterações"
-                  onSave={(html, vis, atts) => updateNote(n.id, html, vis, atts)}
+                  onSave={(html, vis, atts, areas) =>
+                    updateNote(n.id, html, vis, atts, areas)
+                  }
                   onCancel={() => setEditingId(null)}
                 />
               ) : (
@@ -369,6 +413,10 @@ export default function CompanyNotes({
                       </span>
                     )}
                   </div>
+
+                  {n.areas.length > 0 && (
+                    <AreaChips areas={n.areas} className="mb-2" />
+                  )}
 
                   <NoteBody
                     html={n.contentHtml}

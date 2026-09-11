@@ -1,5 +1,7 @@
 import type { createClient } from "@/lib/supabase-server";
+import type { NoteArea } from "@/lib/types";
 import { resolvePeople } from "@/lib/creator";
+import { sortNoteAreas } from "@/lib/note-areas";
 
 type Client = Awaited<ReturnType<typeof createClient>>;
 
@@ -92,6 +94,10 @@ export type CompanyNoteView = {
   authorAvatarUrl: string | null;
   contentHtml: string;
   visibleToClient: boolean;
+  // Áreas de trabalho às quais a atualização se refere (ML, ERP, Site…). Pode
+  // ter várias. Vazio nas 6 atualizações antigas anteriores ao campo ("sem
+  // área") — não houve backfill; elas podem ser editadas depois.
+  areas: NoteArea[];
   attachments: NoteAttachmentView[];
   createdAtISO: string;
   updatedAtISO: string | null;
@@ -145,7 +151,7 @@ export async function loadCompanyNotes(
   const { data } = await supabase
     .from("company_notes")
     .select(
-      "id, author_id, content_html, visible_to_client, attachments, created_at, updated_at, updated_by"
+      "id, author_id, content_html, visible_to_client, attachments, created_at, updated_at, updated_by, company_note_areas(area)"
     )
     .eq("company_id", companyId)
     .order("created_at", { ascending: false });
@@ -159,6 +165,7 @@ export async function loadCompanyNotes(
     created_at: string;
     updated_at: string | null;
     updated_by: string | null;
+    company_note_areas: { area: NoteArea }[] | null;
   };
   const rows = (data as Row[] | null) ?? [];
   // Empresa sem anotação nenhuma: sai antes de tocar no jsdom.
@@ -179,6 +186,7 @@ export async function loadCompanyNotes(
     authorId: r.author_id,
     authorName: people.get(r.author_id)?.name ?? "(usuário removido)",
     authorAvatarUrl: people.get(r.author_id)?.avatarUrl ?? null,
+    areas: sortNoteAreas((r.company_note_areas ?? []).map((a) => a.area)),
     attachments: parseAttachments(r.attachments, publicUrl),
     // Sanitiza no ponto único de leitura: o HTML vem do editor, mas quem grava
     // é o cliente (RLS) — nunca renderizar sem passar pelo DOMPurify (o mesmo

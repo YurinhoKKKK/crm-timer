@@ -498,6 +498,29 @@ export type Database = {
           },
         ]
       }
+      company_note_areas: {
+        Row: {
+          area: Database["public"]["Enums"]["note_area"]
+          note_id: string
+        }
+        Insert: {
+          area: Database["public"]["Enums"]["note_area"]
+          note_id: string
+        }
+        Update: {
+          area?: Database["public"]["Enums"]["note_area"]
+          note_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_note_areas_note_id_fkey"
+            columns: ["note_id"]
+            isOneToOne: false
+            referencedRelation: "company_notes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       google_accounts: {
         Row: {
           access_token_enc: string
@@ -1900,6 +1923,7 @@ export type Database = {
     }
     Enums: {
       listing_marketplace: "mercado_livre" | "shopee" | "amazon"
+      note_area: "ml" | "amz" | "shp" | "erp" | "site" | "trafego" | "outros"
       task_kind: "unica" | "diaria"
       task_status: "a_fazer" | "iniciada" | "finalizada" | "cancelada"
       template_type: "padrao" | "listagem"
@@ -2047,6 +2071,7 @@ export const Constants = {
   public: {
     Enums: {
       listing_marketplace: ["mercado_livre", "shopee", "amazon"],
+      note_area: ["ml", "amz", "shp", "erp", "site", "trafego", "outros"],
       task_kind: ["unica", "diaria"],
       task_status: ["a_fazer", "iniciada", "finalizada", "cancelada"],
       template_type: ["padrao", "listagem"],
@@ -2083,6 +2108,7 @@ export type TaskKind = Database["public"]["Enums"]["task_kind"]
 export type TaskStatus = Database["public"]["Enums"]["task_status"]
 export type TemplateType = Database["public"]["Enums"]["template_type"]
 export type ListingMarketplace = Database["public"]["Enums"]["listing_marketplace"]
+export type NoteArea = Database["public"]["Enums"]["note_area"]
 
 export type Profile = Tables<"profiles">
 export type Company = Tables<"companies">

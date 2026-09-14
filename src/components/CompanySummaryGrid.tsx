@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { SearchBox, EmptyState, norm } from "@/components/ListControls";
 import LabelChips from "@/components/LabelChips";
+import NewClientChip from "@/components/NewClientChip";
 import type { Label } from "@/lib/labels";
 import { farolOf } from "@/lib/followup";
 import { FarolBadge } from "@/components/followup/FarolBadge";
@@ -20,6 +21,9 @@ export type CompanyCardItem = {
   // Só o painel do colaborador usa estes dois; ficam ocultos quando ausentes.
   dueSoon?: number;
   labels?: Label[];
+  // Início do contrato (company_details.started_on, data pura) para a etiqueta
+  // DERIVADA "Cliente Novo" (≤ 90 dias). Ausente/null → sem selo. Ver [[new-client]].
+  startedOn?: string | null;
   // Semáforo de contato (mesma fonte da /acompanhamento). Presente só onde há
   // acompanhamento (painel do consultor); `days` null = nunca contatado. Quando
   // ausente, o card não mostra badge nem o filtro de atenção aparece.
@@ -140,9 +144,14 @@ export default function CompanySummaryGrid({
                       →
                     </span>
                   </div>
-                  {c.labels && c.labels.length > 0 && (
-                    <LabelChips labels={c.labels} className="mt-2" />
-                  )}
+                  {/* Etiquetas comuns + selo derivado "Cliente Novo". empty:hidden
+                      recolhe a margem quando não há nem etiqueta nem selo. */}
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5 empty:hidden">
+                    {c.labels && c.labels.length > 0 && (
+                      <LabelChips labels={c.labels} />
+                    )}
+                    <NewClientChip startedOn={c.startedOn ?? null} />
+                  </div>
 
                   {/* mt-auto empurra progresso + pendências + badge para a base:
                       a folga extra sobra AQUI (entre o título e o progresso), e os

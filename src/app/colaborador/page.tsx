@@ -5,6 +5,7 @@ import CompanySummaryGrid, {
 } from "@/components/CompanySummaryGrid";
 import { loadAllLabelsByCompany } from "@/lib/labels";
 import { loadCompanyNoteCounts } from "@/lib/notes";
+import { loadStartedOnByCompany } from "@/lib/company-details";
 import { perfRoute } from "@/lib/perf";
 
 type CompanyCountRow = {
@@ -30,7 +31,7 @@ export default async function ColaboradorPage() {
   // escopada ao próprio usuário, já devolve uma linha por empresa onde ele tem
   // tarefa — o mesmo conjunto de antes. As etiquetas vêm de todas as empresas
   // que a RLS (cl_select) permite (mesmo conjunto).
-  const [{ data: countData, error }, labelsByCompany, noteCounts] =
+  const [{ data: countData, error }, labelsByCompany, noteCounts, startedOnByCompany] =
     await Promise.all([
       perf.timed(
         "rpc company_task_counts (do usuário)",
@@ -43,6 +44,9 @@ export default async function ColaboradorPage() {
       // Contagem de anotações por empresa (balão de atalho). Escopo = RLS
       // cn_select (as empresas onde o colaborador tem tarefa).
       perf.timed("rpc company_note_counts", loadCompanyNoteCounts(supabase)),
+      // Início do contrato por empresa (etiqueta derivada "Cliente Novo"), numa
+      // consulta só. RLS cd_select = as empresas onde o colaborador tem tarefa.
+      perf.timed("company_details started_on", loadStartedOnByCompany(supabase)),
     ]);
   perf.done();
 
@@ -93,6 +97,7 @@ export default async function ColaboradorPage() {
               dueSoon: c.dueSoon,
               labels: labelsByCompany.get(c.id) ?? [],
               noteCount: noteCounts.get(c.id) ?? 0,
+              startedOn: startedOnByCompany.get(c.id) ?? null,
             })
           )}
         />

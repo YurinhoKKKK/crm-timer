@@ -147,6 +147,33 @@ export async function loadCompanyDetails(
   };
 }
 
+// started_on de VÁRIAS empresas numa consulta só — para a etiqueta DERIVADA
+// "Cliente Novo" nas listas (ver [[new-client]]). Map company_id → "YYYY-MM-DD"
+// (ou null). Escopo pela RLS cd_select (admin, consultor da carteira, colaborador
+// que alcança) — o mesmo recorte das telas. NUNCA uma consulta por empresa.
+// Omita `companyIds` para trazer tudo que a RLS permite (uma query, sem waterfall).
+export async function loadStartedOnByCompany(
+  supabase: SupabaseServer,
+  companyIds?: string[]
+): Promise<Map<string, string | null>> {
+  const map = new Map<string, string | null>();
+  let query = supabase
+    .from("company_details")
+    .select("company_id, started_on");
+  if (companyIds) {
+    const ids = Array.from(new Set(companyIds.filter(Boolean)));
+    if (ids.length === 0) return map;
+    query = query.in("company_id", ids);
+  }
+  const { data } = await query;
+  for (const row of (data as
+    | { company_id: string; started_on: string | null }[]
+    | null) ?? []) {
+    map.set(row.company_id, row.started_on);
+  }
+  return map;
+}
+
 // ---------------------------------------------------------------------
 // Helpers puros de DATA (compartilhados com o componente de cliente)
 // ---------------------------------------------------------------------

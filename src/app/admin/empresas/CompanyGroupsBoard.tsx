@@ -12,6 +12,7 @@ import {
   type SelectOption,
 } from "@/components/ListControls";
 import LabelChips, { labelChipStyle } from "@/components/LabelChips";
+import NewClientChip from "@/components/NewClientChip";
 import Avatar from "@/components/Avatar";
 import ContractBar from "@/components/ContractBar";
 import ConfirmDialog from "@/components/ConfirmDialog";
@@ -789,6 +790,7 @@ function CompanyRow({
             {company.name}
           </span>
           <LabelChips labels={company.labels} />
+          <NewClientChip startedOn={company.startedOn} />
         </div>
         {company.whatsappGroupName || company.whatsappContactId ? (
           <span className="mt-1 block text-sm text-fg-muted">

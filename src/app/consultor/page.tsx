@@ -6,6 +6,7 @@ import CompanySummaryGrid, {
 } from "@/components/CompanySummaryGrid";
 import { withSelf } from "@/lib/people";
 import { loadCompanyNoteCounts } from "@/lib/notes";
+import { loadStartedOnByCompany } from "@/lib/company-details";
 import { perfRoute } from "@/lib/perf";
 
 type Option = { id: string; name: string };
@@ -43,6 +44,7 @@ export default async function ConsultorPage() {
     { data: countData, error },
     { data: followupData },
     noteCounts,
+    startedOnByCompany,
   ] = await Promise.all([
     // RLS (companies_select) limita às empresas atribuídas a este consultor.
     perf.timed(
@@ -72,6 +74,9 @@ export default async function ConsultorPage() {
     ),
     // Contagem de anotações por empresa (balão de atalho), agregada no banco.
     perf.timed("rpc company_note_counts", loadCompanyNoteCounts(supabase)),
+    // Início do contrato por empresa (etiqueta derivada "Cliente Novo"), numa
+    // consulta só. RLS cd_select limita à carteira do consultor — mesmo conjunto.
+    perf.timed("company_details started_on", loadStartedOnByCompany(supabase)),
   ]);
   perf.done();
 
@@ -160,6 +165,7 @@ export default async function ConsultorPage() {
                   overdue: c.overdue,
                   contact: { days: contactDays.get(c.id) ?? null },
                   noteCount: noteCounts.get(c.id) ?? 0,
+                  startedOn: startedOnByCompany.get(c.id) ?? null,
                 })
               )}
             />

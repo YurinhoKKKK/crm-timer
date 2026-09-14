@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Combobox from "@/components/Combobox";
-import { DateTimeField } from "@/components/DateField";
+import { DateField } from "@/components/DateField";
 import ParticipantPicker from "./ParticipantPicker";
 import {
   createMeeting,
@@ -64,6 +64,23 @@ function defaultTimes(): { start: string; end: string } {
   brt.setUTCHours(brt.getUTCHours() + 1);
   const end = new Date(brt.getTime() + 3600 * 1000);
   return { start: toLocalInput(brt), end: toLocalInput(end) };
+}
+
+// Reunião termina no MESMO dia do início: a UI pede UMA data + hora de início +
+// hora de fim. Estes helpers só recortam/recompõem texto "HH:mm" (sem fuso, sem
+// Date). O fim é limitado ao mesmo dia (máx. 23:59) para nunca virar a meia-noite.
+const DEFAULT_DURATION_MIN = 60;
+
+function timeToMin(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return NaN;
+  return h * 60 + m;
+}
+
+function minToTime(min: number): string {
+  const clamped = Math.max(0, Math.min(23 * 60 + 59, min));
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(Math.floor(clamped / 60))}:${p(clamped % 60)}`;
 }
 
 export type MeetingInitial = {
@@ -131,11 +148,45 @@ export default function MeetingForm({
   // mesmo se o tipo mudar (para restaurar ao voltar); o envio ignora fora do
   // escritório, e o servidor normaliza de novo (fonte da verdade).
   const [room, setRoom] = useState<MeetingRoom | null>(initial?.room ?? null);
-  const [startLocal, setStartLocal] = useState(startInit);
-  const [endLocal, setEndLocal] = useState(endInit);
+  // Data única + horas separadas. O fim herda a data do início ao montar o ISO
+  // (ver startLocal/endLocal). Ao carregar uma reunião antiga cujo fim caía em
+  // outro dia, pegamos só a HORA do fim — a data volta a ser a do início, e o
+  // aviso de "fim antes do início" (se for o caso) pede a correção sem quebrar.
+  const [date, setDate] = useState(startInit.slice(0, 10));
+  const [startTime, setStartTime] = useState(startInit.slice(11, 16));
+  const [endTime, setEndTime] = useState(endInit.slice(11, 16));
+  // Duração desejada (min): mudar o início empurra o fim mantendo-a; mexer no fim
+  // redefine-a. Duração inválida (fim ≤ início, ex.: reunião antiga cruzando o
+  // dia) cai no padrão de 1h.
+  const durationRef = useRef(
+    (() => {
+      const d = timeToMin(endInit.slice(11, 16)) - timeToMin(startInit.slice(11, 16));
+      return d > 0 ? d : DEFAULT_DURATION_MIN;
+    })()
+  );
   const [participants, setParticipants] = useState<Set<string>>(
     new Set(initial?.participantIds ?? [])
   );
+
+  // ISO wall-clock BRT recomposto: o fim SEMPRE usa a data do início (mesmo dia).
+  const startLocal = date ? `${date}T${startTime || "00:00"}` : "";
+  const endLocal = date ? `${date}T${endTime || "00:00"}` : "";
+  const endBeforeStart =
+    !!startTime && !!endTime && timeToMin(endTime) <= timeToMin(startTime);
+
+  // Mudar a HORA DE INÍCIO empurra o fim mantendo a duração atual.
+  const onStartTimeChange = (t: string) => {
+    setStartTime(t);
+    if (t) setEndTime(minToTime(timeToMin(t) + durationRef.current));
+  };
+  // Mexer na HORA DE FIM redefine a duração lembrada (só se for válida).
+  const onEndTimeChange = (t: string) => {
+    setEndTime(t);
+    if (t && startTime) {
+      const dur = timeToMin(t) - timeToMin(startTime);
+      if (dur > 0) durationRef.current = dur;
+    }
+  };
 
   const [conflicts, setConflicts] = useState<ConflictLike[]>([]);
   const [checking, setChecking] = useState(false);
@@ -371,27 +422,51 @@ export default function MeetingForm({
         </fieldset>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label className={labelClass}>
-            Início <span className={hintClass}>(horário de Brasília)</span>
-          </label>
-          <DateTimeField
-            value={startLocal}
-            onChange={setStartLocal}
-            ariaLabel="Início da reunião"
-          />
+      {/* Data ÚNICA + hora de início + hora de fim. A reunião termina no mesmo
+          dia em que começa, então não há campo de data de fim: mudar a data move
+          início e fim juntos; mudar o início empurra o fim mantendo a duração. */}
+      <div>
+        <label className={labelClass}>
+          Data e horário <span className={hintClass}>(horário de Brasília)</span>
+        </label>
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+          <div>
+            <span className="mb-1 block text-xs text-fg-subtle">Data</span>
+            <DateField
+              value={date}
+              onChange={setDate}
+              ariaLabel="Data da reunião"
+            />
+          </div>
+          <div>
+            <span className="mb-1 block text-xs text-fg-subtle">Início</span>
+            <input
+              type="time"
+              value={startTime}
+              onChange={(e) => onStartTimeChange(e.target.value)}
+              aria-label="Hora de início"
+              className={`${inputClass} w-32 tabular-nums`}
+            />
+          </div>
+          <div>
+            <span className="mb-1 block text-xs text-fg-subtle">Fim</span>
+            <input
+              type="time"
+              value={endTime}
+              onChange={(e) => onEndTimeChange(e.target.value)}
+              aria-label="Hora de fim"
+              aria-invalid={endBeforeStart}
+              className={`${inputClass} w-32 tabular-nums ${
+                endBeforeStart ? "border-red-400 focus:border-red-400" : ""
+              }`}
+            />
+          </div>
         </div>
-        <div>
-          <label className={labelClass}>
-            Fim <span className={hintClass}>(horário de Brasília)</span>
-          </label>
-          <DateTimeField
-            value={endLocal}
-            onChange={setEndLocal}
-            ariaLabel="Fim da reunião"
-          />
-        </div>
+        {endBeforeStart && (
+          <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">
+            A hora de fim precisa ser depois da hora de início.
+          </p>
+        )}
       </div>
 
       <div>

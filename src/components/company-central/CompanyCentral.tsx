@@ -10,6 +10,7 @@ import CompanyActivityFeed from "./CompanyActivityFeed";
 import CreatorMeta from "@/components/CreatorMeta";
 import ContractBar from "@/components/ContractBar";
 import LabelChips from "@/components/LabelChips";
+import NewClientChip from "@/components/NewClientChip";
 import TaskDetailLink from "@/components/TaskDetailLink";
 import { STATUS_META } from "@/lib/status";
 import { formatDuration, formatDue } from "@/lib/format";
@@ -117,9 +118,12 @@ export default function CompanyCentral({
       <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 space-y-2">
-            {company.labels.length > 0 && (
-              <LabelChips labels={company.labels} size="md" />
-            )}
+            <div className="flex flex-wrap items-center gap-1.5 empty:hidden">
+              {company.labels.length > 0 && (
+                <LabelChips labels={company.labels} size="md" />
+              )}
+              <NewClientChip startedOn={company.startedOn} size="md" />
+            </div>
             <div>
               <p className="text-xs text-fg-subtle">Consultor(es) responsável(is)</p>
               {consultants.length > 0 ? (

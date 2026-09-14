@@ -87,6 +87,8 @@ export default async function EmpresasPage() {
     supabase
       .from("standard_tasks")
       .select("id, title, kind")
+      // Molde inativo não aparece para ESCOLHER ao cadastrar a empresa.
+      .eq("active", true)
       .order("title", { ascending: true }),
     loadLabelCatalog(supabase),
     // Consultores por empresa — a RLS de company_consultants escopa ao admin

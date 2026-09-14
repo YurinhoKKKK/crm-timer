@@ -158,14 +158,30 @@ export async function applyCompanyStandards(
     }
   }
 
+  // Moldes INATIVOS são "blindados": eles somem do seletor da empresa, então nunca
+  // estarão em `desired`. Sem isto, um save da empresa desativaria o vínculo de um
+  // molde recém-inativado — e desativar um molde NÃO pode alterar as tarefas que já
+  // o usam. Descobrimos quais dos molds ligados estão inativos para PULÁ-LOS em (a).
+  const inactiveStandards = new Set<string>();
+  const linkedStandardIds = Array.from(activeByStandard.keys());
+  if (linkedStandardIds.length > 0) {
+    const { data: stData, error: stErr } = await supabase
+      .from("standard_tasks")
+      .select("id, active")
+      .in("id", linkedStandardIds);
+    if (stErr) return stErr.message;
+    for (const s of stData ?? []) if (!s.active) inactiveStandards.add(s.id);
+  }
+
   const desired = new Map<string, CompanyStandardAssignment>();
   for (const a of assignments) {
     if (a.standardId && a.collaboratorId) desired.set(a.standardId, a);
   }
 
-  // (a) Desativar os que saíram da seleção.
+  // (a) Desativar os que saíram da seleção — exceto os de molde INATIVO (blindados).
   for (const [standardId, tmpl] of Array.from(activeByStandard.entries())) {
     if (desired.has(standardId)) continue;
+    if (inactiveStandards.has(standardId)) continue;
     const e = await deactivateLink(supabase, tmpl.id);
     if (e) return e;
   }

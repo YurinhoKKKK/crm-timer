@@ -78,7 +78,7 @@ export default async function TarefasPage() {
       "standard_tasks (catálogo)",
       supabase
         .from("standard_tasks")
-        .select("id, title, description, instructions, kind, due_time, weekdays")
+        .select("id, title, description, instructions, kind, due_time, weekdays, active")
         .order("created_at", { ascending: false })
     ),
     // Templates ativos ligados a padrões: contam o uso e, agora, dizem em quais

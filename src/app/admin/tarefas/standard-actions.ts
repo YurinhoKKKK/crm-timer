@@ -218,6 +218,72 @@ export async function deleteStandardTask(
   return { error: null };
 }
 
+// Ativa/desativa VÁRIOS moldes do catálogo de uma vez (reestruturação de
+// tarefas). NÃO altera nenhuma tarefa que já usa o molde: só liga/desliga a
+// disponibilidade dele para ESCOLHER (o molde inativo some dos seletores de criar
+// tarefa/cadastro da empresa; ver applyCompanyStandards, que "blinda" os vínculos
+// de molde inativo). Sem sync_standard_task de propósito — desativar um molde não
+// deve propagar nada às tarefas existentes. RLS st_admin_all autoriza (só admin).
+// Devolve quantos moldes foram afetados para a confirmação/feedback.
+export async function setStandardTasksActive(
+  standardIds: string[],
+  active: boolean
+): Promise<{ error: string | null; count: number }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Sessão expirada. Faça login novamente.", count: 0 };
+  }
+
+  const ids = Array.from(new Set(standardIds.filter(Boolean)));
+  if (ids.length === 0) return { error: null, count: 0 };
+
+  const { data, error } = await supabase
+    .from("standard_tasks")
+    .update({ active })
+    .in("id", ids)
+    .select("id");
+
+  if (error) return { error: error.message, count: 0 };
+
+  // Some/aparece nos seletores de molde (central da empresa e cadastro).
+  revalidateLinkPaths();
+  return { error: null, count: (data as { id: string }[] | null)?.length ?? 0 };
+}
+
+// Exclui VÁRIOS moldes do catálogo de uma vez. O FK standard_task_id é ON DELETE
+// SET NULL: as tarefas, instâncias, horas e relatos das empresas que usavam os
+// moldes PERMANECEM intactos — só perdem o vínculo vivo (deixam de receber
+// atualizações do molde). RLS st_admin_all autoriza (só admin). Devolve quantos
+// moldes saíram do catálogo.
+export async function deleteStandardTasks(
+  standardIds: string[]
+): Promise<{ error: string | null; count: number }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Sessão expirada. Faça login novamente.", count: 0 };
+  }
+
+  const ids = Array.from(new Set(standardIds.filter(Boolean)));
+  if (ids.length === 0) return { error: null, count: 0 };
+
+  const { data, error } = await supabase
+    .from("standard_tasks")
+    .delete()
+    .in("id", ids)
+    .select("id");
+
+  if (error) return { error: error.message, count: 0 };
+
+  revalidateLinkPaths();
+  return { error: null, count: (data as { id: string }[] | null)?.length ?? 0 };
+}
+
 // ---------------------------------------------------------------------------
 // 2. Atribuição a uma empresa (admin + consultor)
 // ---------------------------------------------------------------------------

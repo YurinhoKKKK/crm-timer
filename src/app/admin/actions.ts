@@ -649,3 +649,43 @@ export async function deleteTaskTemplate(
   revalidatePath("/admin/instancias");
   return { error: null };
 }
+
+// Ativa/desativa VÁRIOS task_templates de uma vez (reestruturação de tarefas).
+// NÃO é exclusão: nenhuma instância, apontamento de tempo ou relato é tocado — só
+// liga/desliga a GERAÇÃO futura (o cron generate_daily_tasks e os gatilhos de
+// "ocorrência de hoje" filtram active=true; as instâncias já criadas, inclusive a
+// de hoje, seguem intactas e concluíveis). A desativação/reativação de RECORRENTES
+// registra evento no histórico via gatilho (migration 0072, deriva auth.uid()). A
+// RLS tt_update autoriza (admin todos; consultor os que criou). Devolve quantos
+// modelos foram de fato afetados (respeitando a RLS) para a confirmação/feedback.
+export async function setTaskTemplatesActive(
+  templateIds: string[],
+  active: boolean
+): Promise<{ error: string | null; count: number }> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Sessão expirada. Faça login novamente.", count: 0 };
+  }
+
+  const ids = Array.from(new Set(templateIds.filter(Boolean)));
+  if (ids.length === 0) return { error: null, count: 0 };
+
+  const { data, error } = await supabase
+    .from("task_templates")
+    .update({ active })
+    .in("id", ids)
+    .select("id");
+
+  if (error) {
+    return { error: error.message, count: 0 };
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/tarefas");
+  revalidatePath("/admin/instancias");
+  return { error: null, count: (data as { id: string }[] | null)?.length ?? 0 };
+}

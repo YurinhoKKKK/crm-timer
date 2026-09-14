@@ -247,6 +247,9 @@ export async function loadCompanyCentral(
       supabase
         .from("standard_tasks")
         .select("id, title, kind")
+        // Molde inativo não aparece para ESCOLHER no cadastro/central da empresa.
+        // Os vínculos já existentes seguem intactos (ver applyCompanyStandards).
+        .eq("active", true)
         .order("title", { ascending: true })
     ),
     perf.timed(

@@ -676,7 +676,9 @@ export async function setTaskTemplatesActive(
 
   const { data, error } = await supabase
     .from("task_templates")
-    .update({ active })
+    // Origem 'individual': esta é uma decisão manual, não a propagação do
+    // catálogo (0078) — assim uma reativação "só do catálogo" não a atropela.
+    .update({ active, active_source: "individual" })
     .in("id", ids)
     .select("id");
 

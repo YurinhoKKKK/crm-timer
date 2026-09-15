@@ -253,6 +253,59 @@ export async function setStandardTasksActive(
   return { error: null, count: (data as { id: string }[] | null)?.length ?? 0 };
 }
 
+// Propaga a situação (ativo/inativo) de UM molde para as tarefas que nasceram
+// dele nas empresas. É a segunda ação, distinta de desativar o molde no catálogo:
+// aqui as PRÓPRIAS tarefas param (ou voltam) de ocorrer.
+//
+// Feita SEMPRE por critério (standard_task_id), num único UPDATE — o navegador
+// nunca manda lista de ids. NADA é apagado: só liga/desliga a geração futura
+// (o cron e os gatilhos de "ocorrência de hoje" filtram active=true); instâncias,
+// horas e relatos já existentes ficam intactos.
+//
+// `active_source='catalog'` marca a ORIGEM desta mudança — é o que permite, na
+// reativação, distinguir os desativados pela propagação dos desativados
+// INDIVIDUALMENTE (que devem ser preservados). O gatilho 0078 lê essa origem e
+// registra o evento próprio (desativada/reativada pelo catálogo) no histórico de
+// cada empresa afetada. Devolve QUANTAS tarefas foram de fato alteradas, vindo do
+// resultado da operação. A RLS tt_update autoriza (is_admin() ⇒ todas).
+//
+// Ao REATIVAR, `onlyCatalog=true` reativa apenas as que a propagação desativou
+// (active_source='catalog'), preservando as desativadas individualmente.
+export async function propagateStandardActive(
+  standardId: string,
+  active: boolean,
+  onlyCatalog = false
+): Promise<{ error: string | null; count: number }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Sessão expirada. Faça login novamente.", count: 0 };
+  }
+  if (!standardId) return { error: null, count: 0 };
+
+  // Só as tarefas no estado OPOSTO ao alvo (desativar ⇒ as ativas; reativar ⇒ as
+  // inativas). Assim o count reflete exatamente o que mudou.
+  let query = supabase
+    .from("task_templates")
+    .update({ active, active_source: "catalog" })
+    .eq("standard_task_id", standardId)
+    .eq("active", !active);
+
+  // Ao reativar, opcionalmente restringe às desativadas pela propagação.
+  if (active && onlyCatalog) {
+    query = query.eq("active_source", "catalog");
+  }
+
+  const { data, error } = await query.select("id");
+  if (error) return { error: error.message, count: 0 };
+
+  revalidateLinkPaths();
+  revalidatePath("/admin/instancias");
+  return { error: null, count: (data as { id: string }[] | null)?.length ?? 0 };
+}
+
 // Exclui VÁRIOS moldes do catálogo de uma vez. O FK standard_task_id é ON DELETE
 // SET NULL: as tarefas, instâncias, horas e relatos das empresas que usavam os
 // moldes PERMANECEM intactos — só perdem o vínculo vivo (deixam de receber

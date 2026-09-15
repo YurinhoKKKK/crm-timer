@@ -81,14 +81,14 @@ export default async function TarefasPage() {
         .select("id, title, description, instructions, kind, due_time, weekdays, active")
         .order("created_at", { ascending: false })
     ),
-    // Templates ativos ligados a padrões: contam o uso e, agora, dizem em quais
-    // empresas (com qual responsável) cada padrão está atribuída (Direção 1).
+    // Templates ligados a padrões: contam o uso (ativos → em quais empresas, com
+    // qual responsável, para o seletor da Direção 1) e a situação de todos (para a
+    // propagação do catálogo — quantos ativos/inativos e a origem da desativação).
     perf.timed(
       "task_templates (uso das padrões)",
       supabase
         .from("task_templates")
-        .select("standard_task_id, company_id, collaborator_id")
-        .eq("active", true)
+        .select("standard_task_id, company_id, collaborator_id, active, active_source")
         .not("standard_task_id", "is", null)
     ),
     // Etiquetas herdadas por empresa (exibidas em cada tarefa da lista). Sem
@@ -133,33 +133,56 @@ export default async function TarefasPage() {
     Label[]
   >;
 
-  // Uso por padrão: contagem + em quais empresas está atribuída e com quem
-  // (para o seletor de empresas na edição da padrão — Direção 1).
+  // Uso por padrão: contagem dos ATIVOS + em quais empresas está atribuída e com
+  // quem (para o seletor de empresas na edição da padrão — Direção 1). Além disso,
+  // a situação de TODAS as tarefas do molde, para a propagação do catálogo:
+  // total, inativas e — dentre as inativas — quantas foram desativadas PELA
+  // propagação (active_source='catalog'), o que a reativação "só do catálogo" usa.
   const usageByStandard = new Map<string, number>();
+  const totalByStandard = new Map<string, number>();
+  const inactiveByStandard = new Map<string, number>();
+  const catalogInactiveByStandard = new Map<string, number>();
   const linksByStandard = new Map<
     string,
     { companyId: string; collaboratorId: string }[]
   >();
+  const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
   for (const row of (usageData as {
     standard_task_id: string | null;
     company_id: string;
     collaborator_id: string;
+    active: boolean;
+    active_source: string | null;
   }[]) ?? []) {
     if (!row.standard_task_id) continue;
-    usageByStandard.set(
-      row.standard_task_id,
-      (usageByStandard.get(row.standard_task_id) ?? 0) + 1
-    );
-    const list = linksByStandard.get(row.standard_task_id) ?? [];
-    list.push({ companyId: row.company_id, collaboratorId: row.collaborator_id });
-    linksByStandard.set(row.standard_task_id, list);
+    const sid = row.standard_task_id;
+    bump(totalByStandard, sid);
+    if (row.active) {
+      bump(usageByStandard, sid);
+      const list = linksByStandard.get(sid) ?? [];
+      list.push({ companyId: row.company_id, collaboratorId: row.collaborator_id });
+      linksByStandard.set(sid, list);
+    } else {
+      bump(inactiveByStandard, sid);
+      if (row.active_source === "catalog") bump(catalogInactiveByStandard, sid);
+    }
   }
 
   const standardItems: StandardItem[] = (
-    (standardData as Omit<StandardItem, "usageCount" | "assignments">[]) ?? []
+    (standardData as Omit<
+      StandardItem,
+      | "usageCount"
+      | "assignments"
+      | "taskTotal"
+      | "taskInactive"
+      | "taskCatalogInactive"
+    >[]) ?? []
   ).map((s) => ({
     ...s,
     usageCount: usageByStandard.get(s.id) ?? 0,
+    taskTotal: totalByStandard.get(s.id) ?? 0,
+    taskInactive: inactiveByStandard.get(s.id) ?? 0,
+    taskCatalogInactive: catalogInactiveByStandard.get(s.id) ?? 0,
     assignments: linksByStandard.get(s.id) ?? [],
   }));
 

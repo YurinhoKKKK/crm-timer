@@ -65,7 +65,9 @@ async function deactivateLink(
 ): Promise<string | null> {
   const { error } = await supabase
     .from("task_templates")
-    .update({ active: false })
+    // Origem 'individual': desmarcar o vínculo numa empresa é decisão manual, não
+    // a propagação do catálogo (0078) — preserva-a numa reativação "só do catálogo".
+    .update({ active: false, active_source: "individual" })
     .eq("id", templateId);
   if (error) return error.message;
 

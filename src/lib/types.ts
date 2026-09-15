@@ -1421,6 +1421,7 @@ export type Database = {
       task_templates: {
         Row: {
           active: boolean
+          active_source: string
           collaborator_id: string
           company_id: string
           created_at: string
@@ -1442,6 +1443,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          active_source?: string
           collaborator_id: string
           company_id: string
           created_at?: string
@@ -1463,6 +1465,7 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          active_source?: string
           collaborator_id?: string
           company_id?: string
           created_at?: string

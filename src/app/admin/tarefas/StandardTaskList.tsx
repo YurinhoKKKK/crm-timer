@@ -9,6 +9,7 @@ import {
   setStandardTaskCompanies,
   setStandardTasksActive,
   deleteStandardTasks,
+  propagateStandardActive,
 } from "./standard-actions";
 import StandardFields, { type StandardFormValue } from "./StandardFields";
 import {
@@ -46,7 +47,10 @@ export type StandardItem = {
   due_time: string | null;
   weekdays: number[] | null;
   active: boolean;
-  usageCount: number; // em quantas empresas está atribuída (templates ativos)
+  usageCount: number; // em quantas empresas está atribuída (templates ATIVOS)
+  taskTotal: number; // total de tarefas nascidas do molde (ativas + inativas)
+  taskInactive: number; // quantas dessas tarefas estão inativas
+  taskCatalogInactive: number; // dentre as inativas, quantas a propagação desativou
   // Empresas onde está atribuída, com o responsável — para o seletor na edição.
   assignments: { companyId: string; collaboratorId: string }[];
 };
@@ -127,7 +131,32 @@ function StandardRow({
   );
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  // Reativação (separada e explícita) das tarefas nas empresas.
+  const [reactivating, setReactivating] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const catalogInactive = item.taskCatalogInactive;
+  const individualInactive = item.taskInactive - item.taskCatalogInactive;
+
+  function runReactivateTasks(onlyCatalog: boolean) {
+    setError(null);
+    setNotice(null);
+    startTransition(async () => {
+      const res = await propagateStandardActive(item.id, true, onlyCatalog);
+      if (res.error) {
+        setError(res.error);
+        return;
+      }
+      setReactivating(false);
+      setNotice(
+        `${res.count} tarefa${res.count === 1 ? "" : "s"} reativada${
+          res.count === 1 ? "" : "s"
+        } nas empresas.`
+      );
+      router.refresh();
+    });
+  }
 
   const companyItems: PickerItem[] = companies.map((c) => ({
     id: c.id,
@@ -317,10 +346,84 @@ function StandardRow({
           </div>
         </div>
 
+            {notice && (
+              <p className="mt-2 text-sm text-emerald-700 dark:text-emerald-300">
+                {notice}
+              </p>
+            )}
             {error && (
               <p className="mt-2 text-sm text-red-600 dark:text-red-400">
                 {error}
               </p>
+            )}
+
+            {/* Reativação SEPARADA e explícita das tarefas nas empresas. Reativar o
+                molde no catálogo NÃO reativa tarefa nenhuma — esta é a ação para
+                isso, e ela oferece preservar as desativadas individualmente. */}
+            {item.taskInactive > 0 && !reactivating && (
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setNotice(null);
+                  setReactivating(true);
+                }}
+                className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-fg-muted transition hover:border-risd/40 hover:text-fg"
+              >
+                Reativar tarefas nas empresas
+              </button>
+            )}
+            {reactivating && (
+              <div className="mt-2 rounded-lg border border-line bg-surface-2/50 p-3 text-sm">
+                <p className="text-fg-muted">
+                  <span className="font-semibold text-fg">{item.taskInactive}</span>{" "}
+                  tarefa{item.taskInactive === 1 ? "" : "s"} nascida
+                  {item.taskInactive === 1 ? "" : "s"} deste molde{" "}
+                  {item.taskInactive === 1 ? "está" : "estão"} desativada
+                  {item.taskInactive === 1 ? "" : "s"}:{" "}
+                  <span className="font-semibold text-fg">{catalogInactive}</span>{" "}
+                  pela propagação do catálogo e{" "}
+                  <span className="font-semibold text-fg">{individualInactive}</span>{" "}
+                  individualmente. Reativar quais?
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {catalogInactive > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => runReactivateTasks(true)}
+                      disabled={isPending}
+                      className={`${btnPrimary} disabled:cursor-not-allowed disabled:opacity-50`}
+                    >
+                      {isPending
+                        ? "Reativando…"
+                        : `Reativar as ${catalogInactive} do catálogo`}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => runReactivateTasks(false)}
+                    disabled={isPending}
+                    className={`${btnSecondary} disabled:cursor-not-allowed disabled:opacity-50`}
+                  >
+                    {`Reativar todas as ${item.taskInactive}`}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReactivating(false)}
+                    disabled={isPending}
+                    className="rounded-lg px-2 py-1.5 text-sm text-fg-subtle transition hover:text-fg disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+                {catalogInactive > 0 && individualInactive > 0 && (
+                  <p className="mt-2 text-xs text-fg-subtle">
+                    “Reativar as {catalogInactive} do catálogo” preserva as{" "}
+                    {individualInactive} desativada
+                    {individualInactive === 1 ? "" : "s"} individualmente.
+                  </p>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -390,6 +493,16 @@ export default function StandardTaskList({
     (sum, id) => sum + (byId.get(id)?.usageCount ?? 0),
     0
   );
+  // Propagação da desativação: quantas tarefas ATIVAS parariam (soma do "Em uso")
+  // e o total de tarefas nascidas dos moldes selecionados ativos.
+  const propagateTaskCount = activeSelectedIds.reduce(
+    (sum, id) => sum + (byId.get(id)?.usageCount ?? 0),
+    0
+  );
+  const propagateTotalCount = activeSelectedIds.reduce(
+    (sum, id) => sum + (byId.get(id)?.taskTotal ?? 0),
+    0
+  );
 
   const filteredIds = filtered.map((t) => t.id);
   const allFilteredSelected =
@@ -436,6 +549,34 @@ export default function StandardTaskList({
           : `${res.count} molde${res.count === 1 ? "" : "s"} desativado${
               res.count === 1 ? "" : "s"
             } — nenhuma tarefa existente foi alterada.`
+      );
+      router.refresh();
+    });
+  }
+
+  // Desativa os moldes E propaga a desativação às tarefas das empresas (ação (b)).
+  // Primeiro tira da seleção (moldes), depois propaga por critério, molde a molde
+  // (cada propagateStandardActive é UM UPDATE por standard_task_id). O total de
+  // tarefas paradas vem do resultado real das operações.
+  function runDeactivateWithPropagation() {
+    setError(null);
+    startTransition(async () => {
+      const res = await setStandardTasksActive(activeSelectedIds, false);
+      if (res.error) return setError(res.error);
+      let total = 0;
+      for (const id of activeSelectedIds) {
+        const p = await propagateStandardActive(id, false);
+        if (p.error) return setError(p.error);
+        total += p.count;
+      }
+      setConfirming(null);
+      setSelected(new Set());
+      setFeedback(
+        `${res.count} molde${res.count === 1 ? "" : "s"} desativado${
+          res.count === 1 ? "" : "s"
+        }; ${total} tarefa${total === 1 ? "" : "s"} nas empresas ${
+          total === 1 ? "foi desativada" : "foram desativadas"
+        } e ${total === 1 ? "vai parar" : "vão parar"} de ocorrer — nenhum histórico, hora ou relato foi perdido.`
       );
       router.refresh();
     });
@@ -573,34 +714,84 @@ export default function StandardTaskList({
               </div>
             )}
 
-            {/* Confirmação da DESATIVAÇÃO — diz quantos e que nada existente muda. */}
+            {/* Confirmação da DESATIVAÇÃO — DUAS ações distintas, a escolha é do
+                usuário: (a) só tirar da seleção (nada nas empresas muda); (b) tirar
+                da seleção E desativar as tarefas nas empresas (elas param de
+                ocorrer). Nada é apagado em nenhum dos casos. */}
             {confirming === "deactivate" && (
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="flex w-full flex-col gap-3 rounded-lg border border-amber-300/60 bg-amber-50/60 p-3 dark:border-amber-500/30 dark:bg-amber-500/5">
                 <p className="text-sm text-fg-muted">
                   Desativar{" "}
                   <span className="font-semibold text-fg">{selActive}</span> molde
-                  {selActive === 1 ? "" : "s"}? Somem dos seletores de criar tarefa
-                  e de cadastro da empresa. As tarefas que já os usam continuam
-                  iguais — nenhum histórico, hora ou relato é perdido.
+                  {selActive === 1 ? "" : "s"} do catálogo? Escolha o alcance —
+                  nenhum histórico, hora ou relato é perdido em nenhuma das opções.
                 </p>
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex flex-col gap-2 rounded-md border border-line bg-surface p-2.5">
+                  <p className="text-xs text-fg-muted">
+                    <span className="font-medium text-fg">Só tirar da seleção.</span>{" "}
+                    {selActive === 1 ? "O molde some" : "Os moldes somem"} dos
+                    seletores de criar tarefa e de cadastro. As tarefas que já{" "}
+                    {selActive === 1 ? "o usam" : "os usam"} continuam ocorrendo
+                    normalmente.
+                  </p>
                   <button
                     type="button"
                     onClick={() => runSetActive(false, activeSelectedIds)}
                     disabled={isPending}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300/70 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200"
+                    className={`${btnSecondary} self-start disabled:cursor-not-allowed disabled:opacity-50`}
                   >
-                    {isPending ? "Desativando…" : "Sim, desativar"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirming(null)}
-                    disabled={isPending}
-                    className="rounded-lg px-2 py-1.5 text-sm text-fg-subtle transition hover:text-fg disabled:opacity-50"
-                  >
-                    Cancelar
+                    {isPending ? "Desativando…" : "Só tirar da seleção"}
                   </button>
                 </div>
+                <div className="flex flex-col gap-2 rounded-md border border-amber-300/70 bg-surface p-2.5 dark:border-amber-500/40">
+                  <p className="text-xs text-fg-muted">
+                    <span className="font-medium text-fg">
+                      Tirar da seleção e desativar as tarefas nas empresas.
+                    </span>{" "}
+                    {propagateTotalCount > 0 ? (
+                      <>
+                        {propagateTotalCount} tarefa
+                        {propagateTotalCount === 1 ? "" : "s"} nasceu
+                        {propagateTotalCount === 1 ? "" : "ram"} {selActive === 1 ? "deste molde" : "desses moldes"}
+                        {propagateTaskCount !== propagateTotalCount && (
+                          <>
+                            {" "}({propagateTaskCount} ativa
+                            {propagateTaskCount === 1 ? "" : "s"})
+                          </>
+                        )}
+                        .{" "}
+                        <span className="font-medium text-fg">
+                          {propagateTaskCount}
+                        </span>{" "}
+                        ativa{propagateTaskCount === 1 ? "" : "s"} vão parar de
+                        ocorrer (o cron não gera mais). Fica registrado no histórico
+                        de cada empresa.
+                      </>
+                    ) : (
+                      <>Nenhuma empresa usa {selActive === 1 ? "este molde" : "esses moldes"} — nada a propagar.</>
+                    )}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={runDeactivateWithPropagation}
+                    disabled={isPending || propagateTaskCount === 0}
+                    className="inline-flex items-center gap-1.5 self-start rounded-lg border border-amber-300/70 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200"
+                  >
+                    {isPending
+                      ? "Desativando…"
+                      : `Desativar molde e ${propagateTaskCount} tarefa${
+                          propagateTaskCount === 1 ? "" : "s"
+                        }`}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConfirming(null)}
+                  disabled={isPending}
+                  className="self-start rounded-lg px-2 py-1 text-sm text-fg-subtle transition hover:text-fg disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
               </div>
             )}
 

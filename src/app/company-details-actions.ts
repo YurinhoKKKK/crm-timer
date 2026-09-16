@@ -23,7 +23,11 @@ const CADENCES = new Set<string>([
   "quinzenal_semanal",
 ]);
 const TEXT_CAP = 5000;
-const DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[12]\d|3[01]|0[1-9])$/;
+// Data pura "AAAA-MM-DD". O dia cobre 01–09, 10–29 e 30–31.
+// (O regex antigo tinha `0[12]\d` — só casava strings de 3 dígitos como "010",
+// nunca um dia real 10–29 — e por isso rejeitava todo contrato começando entre
+// os dias 10 e 29. Corrigido para `[12]\d`.)
+const DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
 async function requireUser() {
   const supabase = await createClient();
@@ -75,10 +79,14 @@ export async function saveCompanyDetails(
   const started = input.startedOn.trim();
   const ends = input.endsOn.trim();
   if (started && !DATE_RE.test(started)) {
-    return { error: "Data de início inválida." };
+    return {
+      error: `Data de início inválida: recebi "${started}", mas o formato esperado é AAAA-MM-DD (ex.: 2026-07-10).`,
+    };
   }
   if (ends && !DATE_RE.test(ends)) {
-    return { error: "Data de término inválida." };
+    return {
+      error: `Data de término inválida: recebi "${ends}", mas o formato esperado é AAAA-MM-DD (ex.: 2027-07-10).`,
+    };
   }
   if (started && ends && ends < started) {
     return { error: "A data de término não pode ser antes da de início." };

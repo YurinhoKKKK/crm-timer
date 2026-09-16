@@ -16,7 +16,9 @@ export const NOTE_AREAS: { value: NoteArea; label: string }[] = [
   { value: "erp", label: "ERP" },
   { value: "site", label: "Site" },
   { value: "trafego", label: "Tráfego" },
-  { value: "outros", label: "Outros" },
+  { value: "comercial", label: "Comercial" },
+  { value: "cs", label: "CS" },
+  { value: "diagnostico", label: "Diagnóstico" },
 ];
 
 const AREA_LABELS = Object.fromEntries(
@@ -48,8 +50,11 @@ export const NOTE_AREA_COLORS: Record<
   ml: { bg: "#FFE600", fg: "#2D3277" },
   amz: { bg: "#232F3E", fg: "#FFFFFF", accent: "#FF9900" },
   shp: { bg: "#EE4D2D", fg: "#FFFFFF" },
-  erp: { bg: "#475569", fg: "#FFFFFF" },
+  erp: { bg: "#43A0D6", fg: "#FFFFFF" },
   site: { bg: "#57534E", fg: "#FFFFFF" },
   trafego: { bg: "#52525B", fg: "#FFFFFF" },
   outros: { bg: "#6B7280", fg: "#FFFFFF" },
+  comercial: { bg: "#6B7280", fg: "#FFFFFF" },
+  cs: { bg: "#6B7280", fg: "#FFFFFF" },
+  diagnostico: { bg: "#6B7280", fg: "#FFFFFF" },
 };

@@ -200,7 +200,13 @@
       "Bash(curl -s -o /dev/null -w \"3000 raiz: %{http_code}\\\\n\" http://localhost:3000/)",
       "Bash(curl -s -o /dev/null -w \"3000 -> %{http_code}\\\\n\" --max-time 4 http://localhost:3000/admin/empresas)",
       "Bash(powershell.exe -NoProfile -Command 'Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { try { Stop-Process -Id $_ -Force -ErrorAction Stop; Write-Output \"killed $_\" } catch {} }')",
-      "Bash(curl -s -o /dev/null -w \"3000 -> %{http_code}\\\\n\" --max-time 5 http://localhost:3000/admin/empresas)"
+      "Bash(curl -s -o /dev/null -w \"3000 -> %{http_code}\\\\n\" --max-time 5 http://localhost:3000/admin/empresas)",
+      "PowerShell(ConvertTo-Json *)",
+      "PowerShell($f = \"C:\\\\Users\\\\renat\\\\Downloads\\\\respostas-encadeadas-teste.gif\"; if \\(Test-Path $f\\) { Get-Item $f | Select-Object FullName, @{n='MB';e={[math]::Round\\($_.Length/1MB,1\\)}} | Format-List } else { \"not found\" })",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:3000/login\" -TimeoutSec 4 -UseBasicParsing; \"3000 -> $\\($r.StatusCode\\)\" } catch { \"3000 down: $\\($_.Exception.Message\\)\" })",
+      "PowerShell($env:PORT=3100; npx next start -p 3100)",
+      "PowerShell(Start-Sleep -Seconds 6; try { $r = Invoke-WebRequest -Uri \"http://localhost:3100/login\" -TimeoutSec 6 -UseBasicParsing; \"3100 -> $\\($r.StatusCode\\)\" } catch { \"3100 not ready: $\\($_.Exception.Message\\)\" })",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/login)"
     ]
   }
 }

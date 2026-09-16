@@ -2130,7 +2130,7 @@ export type Database = {
     }
     Enums: {
       listing_marketplace: "mercado_livre" | "shopee" | "amazon"
-    note_area: "ml" | "amz" | "shp" | "erp" | "site" | "trafego" | "outros" | "comercial" | "cs" | "diagnostico"
+      note_area: "ml" | "amz" | "shp" | "erp" | "site" | "trafego" | "outros" | "cs" | "comercial" | "diagnostico"
       task_kind: "unica" | "diaria"
       task_status: "a_fazer" | "iniciada" | "finalizada" | "cancelada"
       template_type: "padrao" | "listagem"
@@ -2278,7 +2278,7 @@ export const Constants = {
   public: {
     Enums: {
       listing_marketplace: ["mercado_livre", "shopee", "amazon"],
-      note_area: ["ml", "amz", "shp", "erp", "site", "trafego", "outros"],
+      note_area: ["ml", "amz", "shp", "erp", "site", "trafego", "outros", "cs", "comercial", "diagnostico"],
       task_kind: ["unica", "diaria"],
       task_status: ["a_fazer", "iniciada", "finalizada", "cancelada"],
       template_type: ["padrao", "listagem"],

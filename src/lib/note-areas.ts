@@ -19,6 +19,7 @@ export const NOTE_AREAS: { value: NoteArea; label: string }[] = [
   { value: "comercial", label: "Comercial" },
   { value: "cs", label: "CS" },
   { value: "diagnostico", label: "Diagnóstico" },
+  { value: "outros", label: "Outros" },
 ];
 
 const AREA_LABELS = Object.fromEntries(
@@ -39,10 +40,13 @@ export function sortNoteAreas(areas: NoteArea[]): NoteArea[] {
 }
 
 // Cores das etiquetas. ML/AMZ/SHP reaproveitam a IDENTIDADE de marketplace já
-// usada no sistema (as mesmas cores do MarketplaceBadge — coerência visual),
-// enquanto ERP/Site/Tráfego/Outros ganham tons NEUTROS próprios, para nunca
-// serem confundidos com os marketplaces. Fixas nos dois temas (são identidade,
-// não tokens do tema); o texto e o nome sempre aparecem — nunca só a cor.
+// usada no sistema (as mesmas cores do MarketplaceBadge — coerência visual);
+// ERP/Site/Tráfego/Outros ficam em tons NEUTROS, para nunca serem confundidos
+// com os marketplaces. As áreas de TIME (não-marketplace) ganham cores que
+// remetem ao assunto: Comercial em verde (vendas/crescimento), CS em teal
+// (relacionamento/suporte) e Diagnóstico em violeta (análise/diagnóstico).
+// Fixas nos dois temas (são identidade, não tokens do tema); o texto e o nome
+// sempre aparecem — nunca só a cor.
 export const NOTE_AREA_COLORS: Record<
   NoteArea,
   { bg: string; fg: string; accent?: string }
@@ -54,7 +58,7 @@ export const NOTE_AREA_COLORS: Record<
   site: { bg: "#57534E", fg: "#FFFFFF" },
   trafego: { bg: "#52525B", fg: "#FFFFFF" },
   outros: { bg: "#6B7280", fg: "#FFFFFF" },
-  comercial: { bg: "#6B7280", fg: "#FFFFFF" },
-  cs: { bg: "#6B7280", fg: "#FFFFFF" },
-  diagnostico: { bg: "#6B7280", fg: "#FFFFFF" },
+  comercial: { bg: "#15803D", fg: "#FFFFFF" }, // verde — vendas/crescimento
+  cs: { bg: "#0D9488", fg: "#FFFFFF" }, // teal — relacionamento/suporte
+  diagnostico: { bg: "#7C3AED", fg: "#FFFFFF" }, // violeta — análise/diagnóstico
 };

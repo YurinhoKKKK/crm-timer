@@ -63,6 +63,12 @@ nada.
 | `about` | string | não | Texto livre, até 5000 chars. |
 | `contracted_services` | array de string | não | Cada item ∈ `mercado_livre`, `shopee`, `amazon`, `trafego`, `gestao_site`, `desenvolvimento_site`. |
 
+> ⚠️ **`contracted_services` usa o enum `contracted_service` — NÃO é o `sales_channel` do faturamento.** São **taxonomias diferentes, não confundir**:
+> - `contracted_service` (**este campo** — o que foi VENDIDO no contrato): `mercado_livre`, `shopee`, `amazon`, `trafego`, `gestao_site`, `desenvolvimento_site`. **Não** tem `site_proprio`; tem tráfego e os dois tipos de site.
+> - `sales_channel` (faturamento — canais de RECEITA, outra parte do sistema, **fora deste contrato**): `mercado_livre`, `shopee`, `amazon`, `site_proprio`.
+>
+> Os valores em comum (`mercado_livre`/`shopee`/`amazon`) têm a mesma grafia por coincidência, mas os conjuntos **não são iguais** e **não se sincronizam**. Envie aqui **apenas** valores do `contracted_service`; qualquer outro (inclusive `site_proprio`) é recusado com `422 validation`.
+
 O **nome** da empresa é montado assim (padrão atual do sistema):
 
 ```

@@ -44,9 +44,14 @@ export async function middleware(request: NextRequest) {
   // afrouxada).
   const isPasswordReset =
     path === "/esqueci-senha" || path === "/redefinir-senha";
+  // Intake do CRM comercial: server-to-server, SEM sessão de usuário. A proteção
+  // é o SEGREDO COMPARTILHADO conferido dentro da própria rota (tempo constante)
+  // — redirecionar para /login quebraria a integração. Só este prefixo é
+  // liberado; nenhuma outra rota de API é afrouxada.
+  const isCrmIntake = path.startsWith("/api/crm/");
 
   // Sem usuário e tentando acessar área protegida -> login
-  if (!user && !isAuthPage && !isClientPortal && !isPasswordReset) {
+  if (!user && !isAuthPage && !isClientPortal && !isPasswordReset && !isCrmIntake) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 

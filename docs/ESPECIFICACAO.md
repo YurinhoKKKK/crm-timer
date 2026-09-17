@@ -121,6 +121,12 @@ Projeto Supabase: `odpcgeiaikdvpoydcfyu` (CRM/Timer - Monvatti).
 ### Segurança (RLS)
 Todas as tabelas têm RLS ativo. Funções auxiliares `is_admin()`, `my_consultant_companies()`, `my_collaborator_companies()` (todas `SECURITY DEFINER`). O isolamento por colaborador é garantido na política `ti_select` (`collaborator_id = auth.uid()`).
 
+#### Exceção controlada: service_role na integração do CRM comercial
+Regra do projeto: **sem `service_role`** — todo acesso passa pela RLS, e as integrações (ex.: Google Calendar) derivam `auth.uid()` por dentro de funções `SECURITY DEFINER`, nunca com uma chave que ignora a RLS. **Uma única exceção**, aberta conscientemente: a **integração de entrada do CRM comercial** (migration `0084`, ver `docs/CRM_INTAKE_CONTRATO.md`). Ela é **server-to-server e não tem sessão de usuário**, então não há `auth.uid()` para a RLS ancorar. Contenção da exceção:
+- A chave mora em `SUPABASE_SERVICE_ROLE_KEY` (**sem** `NEXT_PUBLIC_`, nunca no navegador) e o client fica em `src/lib/supabase-admin.ts`, importado **apenas** por `src/app/api/crm/**`. Qualquer novo uso exige decisão explícita do dono do produto.
+- A porta é estreita: o client só chama duas RPCs `SECURITY DEFINER` (`crm_intake_create`, `crm_intake_check_duplicate`) concedidas **só a `service_role`**; a autenticação é por **segredo compartilhado** conferido na rota (tempo constante), com rate limit e auditoria no banco.
+- A regra antiga (sem service_role) **continua valendo** para todo o resto do sistema.
+
 #### ⚠️ Armadilha: policy de SELECT que relê a própria tabela quebra `INSERT ... RETURNING`
 Uma função de visibilidade `SECURITY DEFINER` usada como policy de **SELECT** **não pode buscar a linha nova pela própria PK na própria tabela**. Foi o bug que impedia criar reunião (migration 0047 corrigiu).
 

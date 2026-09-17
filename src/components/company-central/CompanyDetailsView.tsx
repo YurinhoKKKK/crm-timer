@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { btnPrimary, btnSecondary, inputClass, labelClass } from "@/lib/ui";
 import { DateRangeField } from "@/components/DateField";
-import { CHANNEL_LABEL, SALES_CHANNELS, type SalesChannel } from "@/lib/revenue";
 import {
   saveCompanyDetails,
   fetchCompanyDetails,
@@ -11,12 +10,15 @@ import {
 import {
   CADENCES,
   CADENCE_LABEL,
+  CONTRACTED_SERVICES,
+  CONTRACTED_SERVICE_LABEL,
   PROJECT_MODELS,
   PROJECT_MODEL_LABEL,
   computePeriodInfo,
   formatPureDate,
   todayBRT,
   type CompanyDetails,
+  type ContractedService,
   type PeriodInfo,
 } from "@/lib/company-details";
 
@@ -132,82 +134,24 @@ function PeriodDisplay({ info }: { info: PeriodInfo }) {
   );
 }
 
-// --- Marketplaces contratados x ativos no faturamento (decisão 2) ------------
-function ContractedChannels({ data }: { data: CompanyDetails }) {
-  const contracted = data.contractedChannels;
-  const active = data.activeChannels; // null = colaborador (não vê faturamento)
+// --- Serviços contratados (lista simples do que foi vendido) -----------------
+// Desacoplado do faturamento (migration 0083): é só a lista do que foi vendido,
+// sem cruzar com os canais ativos no faturamento.
+function ContractedServices({ data }: { data: CompanyDetails }) {
+  const contracted = data.contractedServices;
 
-  if (contracted.length === 0 && (active === null || active.length === 0)) {
-    return <Empty />;
-  }
-
-  // Colaborador: só a lista de contratados, sem cruzar com faturamento.
-  if (active === null) {
-    return (
-      <div className="flex flex-wrap gap-2">
-        {contracted.map((c) => (
-          <span
-            key={c}
-            className="rounded-lg border border-line bg-surface-2 px-3 py-1 text-sm text-fg"
-          >
-            {CHANNEL_LABEL[c]}
-          </span>
-        ))}
-      </div>
-    );
-  }
-
-  const notYetActive = contracted.filter((c) => !active.includes(c));
-  const activeNotContracted = active.filter((c) => !contracted.includes(c));
+  if (contracted.length === 0) return <Empty />;
 
   return (
-    <div className="space-y-3">
-      {contracted.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {contracted.map((c) => {
-            const on = active.includes(c);
-            return (
-              <span
-                key={c}
-                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1 text-sm ${
-                  on
-                    ? "border-line bg-surface-2 text-fg"
-                    : "border-amber-300/60 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300"
-                }`}
-              >
-                {CHANNEL_LABEL[c]}
-                <span
-                  className={`text-xs ${
-                    on ? "text-emerald-600 dark:text-emerald-400" : ""
-                  }`}
-                >
-                  {on ? "· ativo no faturamento" : "· ainda não ativado"}
-                </span>
-              </span>
-            );
-          })}
-        </div>
-      ) : (
-        <p className="text-sm text-fg-subtle">
-          Nenhum marketplace contratado informado.
-        </p>
-      )}
-
-      {notYetActive.length > 0 && (
-        <p className="rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-          <strong className="font-semibold">Falta ativar:</strong>{" "}
-          {notYetActive.map((c) => CHANNEL_LABEL[c]).join(", ")} — contratado(s)
-          mas ainda sem operação no faturamento.
-        </p>
-      )}
-
-      {activeNotContracted.length > 0 && (
-        <p className="rounded-lg border border-red-300/60 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
-          <strong className="font-semibold">Cadastro incompleto:</strong>{" "}
-          {activeNotContracted.map((c) => CHANNEL_LABEL[c]).join(", ")} —
-          ativo(s) no faturamento mas não consta(m) como contratado(s).
-        </p>
-      )}
+    <div className="flex flex-wrap gap-2">
+      {contracted.map((s) => (
+        <span
+          key={s}
+          className="rounded-lg border border-line bg-surface-2 px-3 py-1 text-sm text-fg"
+        >
+          {CONTRACTED_SERVICE_LABEL[s]}
+        </span>
+      ))}
     </div>
   );
 }
@@ -244,8 +188,8 @@ function ReadView({ data }: { data: CompanyDetails }) {
         </div>
 
         <div className="sm:col-span-2">
-          <Field label="Marketplaces contratados">
-            <ContractedChannels data={data} />
+          <Field label="Serviços contratados">
+            <ContractedServices data={data} />
           </Field>
         </div>
       </div>
@@ -304,8 +248,8 @@ function EditView({
   const [systemUsed, setSystemUsed] = useState(data.systemUsed ?? "");
   const [mainPain, setMainPain] = useState(data.mainPain ?? "");
   const [about, setAbout] = useState(data.about ?? "");
-  const [channels, setChannels] = useState<Set<SalesChannel>>(
-    () => new Set(data.contractedChannels)
+  const [services, setServices] = useState<Set<ContractedService>>(
+    () => new Set(data.contractedServices)
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -316,11 +260,11 @@ function EditView({
   );
   const invertedDates = !!startedOn && !!endsOn && endsOn < startedOn;
 
-  const toggleChannel = (c: SalesChannel) =>
-    setChannels((prev) => {
+  const toggleService = (s: ContractedService) =>
+    setServices((prev) => {
       const next = new Set(prev);
-      if (next.has(c)) next.delete(c);
-      else next.add(c);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
       return next;
     });
 
@@ -339,7 +283,7 @@ function EditView({
       systemUsed,
       mainPain,
       about,
-      channels: Array.from(channels),
+      services: Array.from(services),
     });
     if (res.error) {
       setSaving(false);
@@ -436,19 +380,18 @@ function EditView({
         </div>
 
         <div className="sm:col-span-2">
-          <label className={labelClass}>Marketplaces contratados</label>
+          <label className={labelClass}>Serviços contratados</label>
           <p className="mb-2 text-xs text-fg-subtle">
-            O que foi vendido no contrato. Diferente dos canais já ativos no
-            faturamento (aquilo já começou a operar) — não sincroniza com eles.
+            O que foi vendido no contrato.
           </p>
           <div className="flex flex-wrap gap-2">
-            {SALES_CHANNELS.map((c) => {
-              const on = channels.has(c.value);
+            {CONTRACTED_SERVICES.map((c) => {
+              const on = services.has(c.value);
               return (
                 <button
                   key={c.value}
                   type="button"
-                  onClick={() => toggleChannel(c.value)}
+                  onClick={() => toggleService(c.value)}
                   aria-pressed={on}
                   className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${
                     on

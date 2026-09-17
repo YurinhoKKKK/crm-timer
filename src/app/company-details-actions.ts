@@ -3,18 +3,21 @@
 import { createClient } from "@/lib/supabase-server";
 import {
   loadCompanyDetails,
+  CONTRACTED_SERVICES,
   type CompanyDetails,
   type Cadence,
+  type ContractedService,
   type ProjectModel,
 } from "@/lib/company-details";
-import { SALES_CHANNELS, type SalesChannel } from "@/lib/revenue";
 
 // Informações do cliente — lado INTERNO. A gravação passa pela RPC
 // company_details_save (SECURITY INVOKER): a RLS é a fronteira real — só admin
 // escreve; consultor/colaborador recebem 42501 e a action traduz para um aviso.
 // As páginas que expõem estas ações já são guardadas por guardRole.
 
-const CHANNEL_VALUES = new Set<string>(SALES_CHANNELS.map((c) => c.value));
+const SERVICE_VALUES = new Set<string>(
+  CONTRACTED_SERVICES.map((s) => s.value)
+);
 const PROJECT_MODELS = new Set<string>(["bpo", "consultoria"]);
 const CADENCES = new Set<string>([
   "semanal",
@@ -38,14 +41,13 @@ async function requireUser() {
 }
 
 // Ressincroniza a tela após salvar (mesma leitura do render inicial). Só o admin
-// chega a chamar isto (a página só mostra o botão de editar para ele), então
-// canSeeRevenue = true.
+// chega a chamar isto (a página só mostra o botão de editar para ele).
 export async function fetchCompanyDetails(
   companyId: string
 ): Promise<CompanyDetails | null> {
   const { supabase, user } = await requireUser();
   if (!user) return null;
-  return loadCompanyDetails(supabase, companyId, true);
+  return loadCompanyDetails(supabase, companyId);
 }
 
 export type SaveDetailsInput = {
@@ -56,7 +58,7 @@ export type SaveDetailsInput = {
   systemUsed: string;
   mainPain: string;
   about: string;
-  channels: string[]; // canais contratados
+  services: string[]; // serviços contratados
 };
 
 export async function saveCompanyDetails(
@@ -100,7 +102,7 @@ export async function saveCompanyDetails(
     return { error: `Cada texto pode ter no máximo ${TEXT_CAP} caracteres.` };
   }
 
-  const channels = input.channels.filter((c) => CHANNEL_VALUES.has(c));
+  const services = input.services.filter((s) => SERVICE_VALUES.has(s));
 
   const { error } = await supabase.rpc("company_details_save", {
     p_company: companyId,
@@ -111,7 +113,7 @@ export async function saveCompanyDetails(
     p_system_used: input.systemUsed,
     p_main_pain: input.mainPain,
     p_about: input.about,
-    p_channels: channels as SalesChannel[],
+    p_channels: services as ContractedService[],
   });
   // A RLS recusa (42501) se o usuário não for admin; o check de datas também
   // pode barrar no banco (rede de segurança além da validação acima).

@@ -1,6 +1,5 @@
 import type { createClient } from "@/lib/supabase-server";
 import { resolvePeople } from "@/lib/creator";
-import { SALES_CHANNELS, type SalesChannel } from "@/lib/revenue";
 
 // Informações do cliente (tela própria dentro da página da empresa) — lado do
 // servidor + helpers puros compartilhados com o componente de cliente.
@@ -33,6 +32,27 @@ export const CADENCES = [
 
 export type Cadence = (typeof CADENCES)[number]["value"];
 
+// Serviços CONTRATADOS (o que foi vendido) — enum PRÓPRIO (contracted_service),
+// desacoplado do sales_channel do faturamento (migration 0083). Marketplaces
+// primeiro (mesma ordem histórica), depois os serviços que não são canais de
+// receita. NÃO tem 'site_proprio' — foi substituído por gestão/desenvolvimento
+// de site NESTE campo (o faturamento mantém 'site_proprio' à parte).
+export const CONTRACTED_SERVICES = [
+  { value: "mercado_livre", label: "Mercado Livre" },
+  { value: "shopee", label: "Shopee" },
+  { value: "amazon", label: "Amazon" },
+  { value: "trafego", label: "Tráfego" },
+  { value: "gestao_site", label: "Gestão de site" },
+  { value: "desenvolvimento_site", label: "Desenvolvimento de site" },
+] as const;
+
+export type ContractedService = (typeof CONTRACTED_SERVICES)[number]["value"];
+
+export const CONTRACTED_SERVICE_LABEL: Record<ContractedService, string> =
+  Object.fromEntries(
+    CONTRACTED_SERVICES.map((s) => [s.value, s.label])
+  ) as Record<ContractedService, string>;
+
 export const PROJECT_MODEL_LABEL: Record<ProjectModel, string> =
   Object.fromEntries(PROJECT_MODELS.map((m) => [m.value, m.label])) as Record<
     ProjectModel,
@@ -55,30 +75,24 @@ export type CompanyDetails = {
   about: string | null;
   updatedAtISO: string | null;
   updatedByName: string | null;
-  // Marketplaces CONTRATADOS (o que foi vendido), na ordem do enum.
-  contractedChannels: SalesChannel[];
-  // Canais já ATIVOS no faturamento (company_sales_channels.active). Vem VAZIO
-  // para o colaborador (a RLS de faturamento não o inclui) — a tela então omite
-  // o cruzamento contratado×ativo para ele, coerente com "colaborador não vê
-  // faturamento". null = "não sei" (colaborador); [] só ocorre p/ admin/consultor.
-  activeChannels: SalesChannel[] | null;
+  // Serviços CONTRATADOS (o que foi vendido), na ordem do enum.
+  contractedServices: ContractedService[];
 };
 
-const CHANNEL_ORDER: SalesChannel[] = SALES_CHANNELS.map((c) => c.value);
+const SERVICE_ORDER: ContractedService[] = CONTRACTED_SERVICES.map(
+  (s) => s.value
+);
 
-function sortChannels(channels: SalesChannel[]): SalesChannel[] {
-  return CHANNEL_ORDER.filter((c) => channels.includes(c));
+function sortServices(services: ContractedService[]): ContractedService[] {
+  return SERVICE_ORDER.filter((s) => services.includes(s));
 }
 
-// Carrega tudo da tela em três leituras paralelas, cada uma escopada pela RLS.
-// `canSeeRevenue` decide se sequer tentamos ler os canais ativos do faturamento
-// (o colaborador não passa na RLS de company_sales_channels; nem tentamos).
+// Carrega tudo da tela em duas leituras paralelas, cada uma escopada pela RLS.
 export async function loadCompanyDetails(
   supabase: SupabaseServer,
-  companyId: string,
-  canSeeRevenue: boolean
+  companyId: string
 ): Promise<CompanyDetails> {
-  const [detailRes, contractedRes, activeRes] = await Promise.all([
+  const [detailRes, contractedRes] = await Promise.all([
     supabase
       .from("company_details")
       .select(
@@ -90,13 +104,6 @@ export async function loadCompanyDetails(
       .from("company_contracted_channels")
       .select("channel")
       .eq("company_id", companyId),
-    canSeeRevenue
-      ? supabase
-          .from("company_sales_channels")
-          .select("channel")
-          .eq("company_id", companyId)
-          .eq("active", true)
-      : Promise.resolve({ data: null as { channel: SalesChannel }[] | null }),
   ]);
 
   const d = detailRes.data as
@@ -113,18 +120,11 @@ export async function loadCompanyDetails(
       }
     | null;
 
-  const contracted = sortChannels(
-    ((contractedRes.data as { channel: SalesChannel }[] | null) ?? []).map(
+  const contracted = sortServices(
+    ((contractedRes.data as { channel: ContractedService }[] | null) ?? []).map(
       (r) => r.channel
     )
   );
-  const active = canSeeRevenue
-    ? sortChannels(
-        ((activeRes.data as { channel: SalesChannel }[] | null) ?? []).map(
-          (r) => r.channel
-        )
-      )
-    : null;
 
   let updatedByName: string | null = null;
   if (d?.updated_by) {
@@ -142,8 +142,7 @@ export async function loadCompanyDetails(
     about: d?.about ?? null,
     updatedAtISO: d?.updated_at ?? null,
     updatedByName,
-    contractedChannels: contracted,
-    activeChannels: active,
+    contractedServices: contracted,
   };
 }
 

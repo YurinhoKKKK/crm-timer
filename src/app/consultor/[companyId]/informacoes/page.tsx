@@ -20,7 +20,7 @@ export default async function ConsultorCompanyInfoPage({
       .select("id, name")
       .eq("id", params.companyId)
       .maybeSingle(),
-    loadCompanyDetails(supabase, params.companyId, true),
+    loadCompanyDetails(supabase, params.companyId),
   ]);
   if (!company) notFound();
 

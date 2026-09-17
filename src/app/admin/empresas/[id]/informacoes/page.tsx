@@ -14,7 +14,7 @@ export default async function AdminCompanyInfoPage({
 
   const [{ data: company }, details] = await Promise.all([
     supabase.from("companies").select("id, name").eq("id", params.id).maybeSingle(),
-    loadCompanyDetails(supabase, params.id, true),
+    loadCompanyDetails(supabase, params.id),
   ]);
   if (!company) notFound();
 

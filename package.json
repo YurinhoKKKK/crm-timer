@@ -25,7 +25,7 @@
     "@tiptap/suggestion": "^3.27.3",
     "isomorphic-dompurify": "2.26.0",
     "lucide-react": "^1.24.0",
-    "next": "14.2.15",
+    "next": "14.2.35",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^3.8.1",

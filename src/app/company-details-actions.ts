@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase-server";
 import {
   loadCompanyDetails,
   CONTRACTED_SERVICES,
+  isValidCnpj,
+  onlyDigits,
   type CompanyDetails,
   type Cadence,
   type ContractedService,
@@ -18,7 +20,7 @@ import {
 const SERVICE_VALUES = new Set<string>(
   CONTRACTED_SERVICES.map((s) => s.value)
 );
-const PROJECT_MODELS = new Set<string>(["bpo", "consultoria"]);
+const PROJECT_MODELS = new Set<string>(["bpo", "consultoria", "ema"]);
 const CADENCES = new Set<string>([
   "semanal",
   "quinzenal",
@@ -52,6 +54,7 @@ export async function fetchCompanyDetails(
 
 export type SaveDetailsInput = {
   projectModel: string; // "" | ProjectModel
+  cnpj: string; // "" | com ou sem máscara (normalizado aqui p/ dígitos)
   startedOn: string; // "" | "YYYY-MM-DD"
   endsOn: string;
   cadence: string; // "" | Cadence
@@ -78,6 +81,17 @@ export async function saveCompanyDetails(
     return { error: "Cadência inválida." };
   }
 
+  // CNPJ: guardamos só os 14 dígitos. Vazio → limpa (null). Preenchido →
+  // valida os dígitos verificadores (inválido é recusado, não "corrigido").
+  const cnpjDigits = onlyDigits(input.cnpj);
+  if (cnpjDigits && !isValidCnpj(cnpjDigits)) {
+    return {
+      error:
+        "CNPJ inválido. Confira os 14 dígitos — ele não passou na verificação dos dígitos verificadores.",
+    };
+  }
+  const cnpjValue = cnpjDigits === "" ? null : cnpjDigits;
+
   const started = input.startedOn.trim();
   const ends = input.endsOn.trim();
   if (started && !DATE_RE.test(started)) {
@@ -103,6 +117,28 @@ export async function saveCompanyDetails(
   }
 
   const services = input.services.filter((s) => SERVICE_VALUES.has(s));
+
+  // CNPJ mora em companies (não em company_details). Gravamos ANTES de salvar o
+  // resto: se colidir com outra empresa (índice único) ou for barrado pelo CHECK
+  // do banco, paramos aqui sem gravar as demais informações. RLS (companies:
+  // is_admin) é a fronteira real — não-admin recebe erro e nada é salvo.
+  const { error: cnpjError } = await supabase
+    .from("companies")
+    .update({ cnpj: cnpjValue })
+    .eq("id", companyId);
+  if (cnpjError) {
+    // 23505 = unique_violation (CNPJ já usado por outra empresa).
+    if (cnpjError.code === "23505") {
+      return {
+        error: "Este CNPJ já está cadastrado em outra empresa.",
+      };
+    }
+    // 23514 = check_violation (dígitos inválidos — rede de segurança do banco).
+    if (cnpjError.code === "23514") {
+      return { error: "CNPJ inválido." };
+    }
+    return { error: "Não foi possível salvar o CNPJ." };
+  }
 
   const { error } = await supabase.rpc("company_details_save", {
     p_company: companyId,

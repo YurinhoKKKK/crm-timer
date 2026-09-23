@@ -53,8 +53,9 @@ nada.
 |---|---|---|---|
 | `number` | inteiro (ou string numérica) | **sim** | Inteiro positivo, até 9 dígitos. É o número do cliente, gerado pelo CRM. Vira o prefixo do nome. Recusa se já estiver em uso. |
 | `razao_social` | string | **sim** | 1–200 chars. |
+| `cnpj` | string | **sim** | CNPJ do cliente. Aceita **com ou sem máscara** (`11.222.333/0001-81` ou `11222333000181`) — normalizamos para **só os 14 dígitos**. Validamos os **dígitos verificadores**: CNPJ inválido é **recusado** (`422`), nunca "corrigido". Se já existir em **outra empresa**, recusa com `409 cnpj_in_use`. |
 | `contato` | string | não | Máx. 120 chars. Vai entre parênteses no fim do nome. |
-| `project_model` | string | não | `bpo` \| `consultoria`. |
+| `project_model` | string | não | `bpo` \| `consultoria` \| `ema`. |
 | `started_on` | string | não | `AAAA-MM-DD`. |
 | `ends_on` | string | não | `AAAA-MM-DD`. Não pode ser antes de `started_on`. |
 | `cadence` | string | não | `semanal` \| `quinzenal` \| `semanal_quinzenal` \| `quinzenal_semanal`. |
@@ -87,6 +88,7 @@ curl -X POST https://SEU-DOMINIO/api/crm/companies \
   -d '{
     "number": 381,
     "razao_social": "ACME COMERCIO LTDA",
+    "cnpj": "11.222.333/0001-81",
     "contato": "João",
     "project_model": "bpo",
     "started_on": "2026-09-17",
@@ -117,9 +119,10 @@ Formato: `{ "ok": false, "error": "<código>", "message": "<texto>", "collision"
 |---|---|---|---|
 | 401 | `unauthorized` | Segredo ausente/errado. | |
 | 400 | `bad_json` | Corpo não é objeto JSON válido. | |
-| 422 | `validation` | Campo faltando/ inválido (número, razão, enum, data, tamanho, serviço). | |
+| 422 | `validation` | Campo faltando/ inválido (número, razão, **CNPJ ausente ou inválido**, enum, data, tamanho, serviço). | |
+| 409 | `cnpj_in_use` | O `cnpj` já está cadastrado em outra empresa (**duplicado forte**, bloqueio direto). | `collision: { id, name }` |
 | 409 | `number_in_use` | O `number` já é usado por outra empresa. | `collision: { id, name }` |
-| 409 | `duplicate` | Já existe empresa **muito parecida** por nome (bloqueio). | `collision: { id, name, group, similarity }` |
+| 409 | `duplicate` | Já existe empresa **muito parecida** por nome (bloqueio, rede de segurança). | `collision: { id, name, group, similarity }` |
 | 429 | `rate_limited` | Passou de **60 criações/min**. | |
 | 500 | `internal` | Falha interna ao criar. | |
 | 500 | `server_misconfig` | Env não configurada no servidor. | |
@@ -141,6 +144,20 @@ Exemplo de recusa por duplicado:
 }
 ```
 
+Exemplo de recusa por CNPJ já em uso:
+
+```json
+{
+  "ok": false,
+  "error": "cnpj_in_use",
+  "message": "O CNPJ informado já está cadastrado na empresa \"362. MERCADO MULTIPEÇAS LTDA (RODRIGO)\".",
+  "collision": {
+    "id": "b9baa6a0-ffd6-46f5-a8be-2c0d25d3f3b3",
+    "name": "362. MERCADO MULTIPEÇAS LTDA (RODRIGO)"
+  }
+}
+```
+
 ---
 
 ## 4. Endpoint — Conferir duplicado
@@ -149,18 +166,28 @@ Exemplo de recusa por duplicado:
 POST /api/crm/companies/check-duplicate
 ```
 
-Consulta (não cria nada): dada uma razão social, devolve as empresas
-**parecidas** já existentes. Comparação tolerante — ignora maiúsculas, acentos,
-pontuação, sufixos jurídicos (LTDA/ME/EPP/EIRELI/SA) e o número do início do
-nome. Serve para o CRM avisar o operador **antes** de fechar.
+Consulta (não cria nada): dada uma razão social (e, opcionalmente, um CNPJ),
+devolve as empresas já existentes que podem ser a mesma. Duas naturezas de
+correspondência, **claramente sinalizadas**:
 
-> Não há CNPJ nesta base: a comparação é por **nome** e **aproximada**.
+- **por CNPJ = certeza** (`cnpj_match`, `match_type: "cnpj"`). Só aparece quando
+  você manda um `cnpj` válido e ele já existe aqui. Independe do nome.
+- **por nome = aproximada** (`matches[]`, `match_type: "name"`). Comparação
+  tolerante — ignora maiúsculas, acentos, pontuação, sufixos jurídicos
+  (LTDA/ME/EPP/EIRELI/SA) e o número do início do nome.
+
+Serve para o CRM avisar o operador **antes** de fechar.
+
+> As 148 empresas atuais **não têm CNPJ**, então nunca casarão por CNPJ — para
+> elas vale só a rede de segurança por **nome** (aproximada). CNPJ só casa contra
+> empresas cadastradas com CNPJ (as novas, vindas daqui pra frente).
 
 ### Corpo
 
 | Campo | Tipo | Obrigatório |
 |---|---|---|
 | `razao_social` | string | sim |
+| `cnpj` | string | não — com ou sem máscara. Se ausente/ inválido, a resposta traz só as correspondências por nome. |
 
 ### Exemplo
 
@@ -169,7 +196,7 @@ curl -X POST https://SEU-DOMINIO/api/crm/companies/check-duplicate \
   -H "Content-Type: application/json" \
   -H "x-crm-secret: $CRM_INTAKE_SECRET" \
   -H "x-crm-source: crm-comercial" \
-  -d '{ "razao_social": "MERCADO MULTIPECAS" }'
+  -d '{ "razao_social": "MERCADO MULTIPECAS", "cnpj": "11.222.333/0001-81" }'
 ```
 
 ### Sucesso — `200 OK`
@@ -177,19 +204,32 @@ curl -X POST https://SEU-DOMINIO/api/crm/companies/check-duplicate \
 ```json
 {
   "ok": true,
+  "cnpj_match": {
+    "id": "b9baa6a0-ffd6-46f5-a8be-2c0d25d3f3b3",
+    "name": "381. MERCADO MULTIPEÇAS LTDA (RODRIGO)",
+    "group": "On Boarding",
+    "match_type": "cnpj",
+    "certain": true
+  },
   "matches": [
     {
       "id": "b9baa6a0-ffd6-46f5-a8be-2c0d25d3f3b3",
       "name": "362. MERCADO MULTIPEÇAS LTDA (RODRIGO, OLÍMPIO BOGO)",
       "group": "Ativos",
-      "similarity": 1.0
+      "similarity": 1.0,
+      "match_type": "name",
+      "certain": false
     }
   ]
 }
 ```
 
-`matches` vem ordenado da mais parecida para a menos (máx. 20). Lista vazia =
-nenhuma parecida. `similarity` vai de 0 a 1.
+- `cnpj_match` é o objeto da empresa com **o mesmo CNPJ** (correspondência
+  **certa**) ou **`null`** se você não mandou CNPJ, ele é inválido, ou nenhuma
+  empresa tem esse CNPJ.
+- `matches` vem ordenado da mais parecida para a menos (máx. 20). Lista vazia =
+  nenhuma parecida por nome. `similarity` vai de 0 a 1. Cada item é uma
+  correspondência **aproximada** (`certain: false`).
 
 ### Erros
 
@@ -208,13 +248,17 @@ nenhuma parecida. `similarity` vai de 0 a 1.
 
 - **Número** faz parte do texto do nome; este sistema **não** gera número (chega
   pronto). Empresa **sem número não é criada**. Número já em uso → recusa.
+- **CNPJ é obrigatório e é o critério FORTE de duplicidade.** Guardamos só os 14
+  dígitos (único quando preenchido) e validamos os dígitos verificadores. **CNPJ
+  igual = duplicado, bloqueio direto** (`409 cnpj_in_use`), sem depender do nome.
+- A **semelhança de nome continua valendo como rede de segurança**: as 148
+  empresas atuais **não têm CNPJ** e portanto nunca casariam por ele, então o
+  bloqueio por nome ainda protege contra recadastro delas. Limiar de bloqueio:
+  similaridade ≥ 0,80 **ou** núcleo do nome idêntico. O check-duplicate lista a
+  partir de ≥ 0,35. (0,80 foi calibrado contra as empresas reais: em 0,72 havia
+  falso positivo entre nomes que só compartilham "materiais de construção".)
 - Nasce em **On Boarding**, sem consultor/colaborador. A distribuição é feita
   depois por um admin, dentro do sistema.
-- A criação **também bloqueia** duplicado forte por nome (não é só o
-  check-duplicate). Limiar de bloqueio: similaridade ≥ 0,80 **ou** núcleo do nome
-  idêntico. O check-duplicate lista a partir de ≥ 0,35. (0,80 foi calibrado contra
-  as empresas reais: em 0,72 havia falso positivo entre nomes que só compartilham
-  "materiais de construção".)
 - Só cria — **não** atualiza, **não** apaga, **não** toca em tarefa, faturamento
   ou usuário.
 - Cada chamada é **auditada** (tabela `crm_intake_log`: quando, origem, IP

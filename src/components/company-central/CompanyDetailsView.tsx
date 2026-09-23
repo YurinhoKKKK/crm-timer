@@ -15,7 +15,10 @@ import {
   PROJECT_MODELS,
   PROJECT_MODEL_LABEL,
   computePeriodInfo,
+  formatCnpj,
   formatPureDate,
+  isValidCnpj,
+  onlyDigits,
   todayBRT,
   type CompanyDetails,
   type ContractedService,
@@ -168,7 +171,7 @@ function ReadView({ data }: { data: CompanyDetails }) {
       <div className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
         <Field
           label="Modelo do projeto"
-          hint="Campo independente da etiqueta CONSULTORIA/BPO — mudar um não muda o outro."
+          hint="Ao definir o modelo, a etiqueta correspondente (CONSULTORIA / BPO / Ema) é atribuída automaticamente. Você pode alterá-la à mão depois — nesse caso ela pode divergir do modelo e não volta a sincronizar sozinha."
         >
           {data.projectModel ? (
             PROJECT_MODEL_LABEL[data.projectModel]
@@ -179,6 +182,14 @@ function ReadView({ data }: { data: CompanyDetails }) {
 
         <Field label="Cadência de contato">
           {data.cadence ? CADENCE_LABEL[data.cadence] : <Empty />}
+        </Field>
+
+        <Field label="CNPJ">
+          {data.cnpj ? (
+            <span className="tabular-nums">{formatCnpj(data.cnpj)}</span>
+          ) : (
+            <Empty />
+          )}
         </Field>
 
         <div className="sm:col-span-2">
@@ -243,6 +254,7 @@ function EditView({
 }) {
   const [projectModel, setProjectModel] = useState(data.projectModel ?? "");
   const [cadence, setCadence] = useState(data.cadence ?? "");
+  const [cnpj, setCnpj] = useState(data.cnpj ? formatCnpj(data.cnpj) : "");
   const [startedOn, setStartedOn] = useState(data.startedOn ?? "");
   const [endsOn, setEndsOn] = useState(data.endsOn ?? "");
   const [systemUsed, setSystemUsed] = useState(data.systemUsed ?? "");
@@ -259,6 +271,8 @@ function EditView({
     [startedOn, endsOn]
   );
   const invertedDates = !!startedOn && !!endsOn && endsOn < startedOn;
+  const cnpjDigits = onlyDigits(cnpj);
+  const cnpjInvalid = cnpjDigits.length > 0 && !isValidCnpj(cnpjDigits);
 
   const toggleService = (s: ContractedService) =>
     setServices((prev) => {
@@ -273,10 +287,15 @@ function EditView({
       setError("A data de término não pode ser antes da de início.");
       return;
     }
+    if (cnpjInvalid) {
+      setError("CNPJ inválido. Confira os 14 dígitos.");
+      return;
+    }
     setSaving(true);
     setError(null);
     const res = await saveCompanyDetails(data.companyId, {
       projectModel,
+      cnpj,
       startedOn,
       endsOn,
       cadence,
@@ -321,7 +340,10 @@ function EditView({
             ))}
           </select>
           <p className="mt-1 text-xs text-fg-subtle">
-            Independente da etiqueta CONSULTORIA/BPO — mudar um não muda o outro.
+            Ao salvar, a etiqueta correspondente (CONSULTORIA / BPO / Ema) é
+            atribuída automaticamente. A etiqueta ainda pode ser alterada à mão
+            depois — aí ela pode divergir do modelo e não volta a sincronizar
+            sozinha.
           </p>
         </div>
 
@@ -342,6 +364,34 @@ function EditView({
               </option>
             ))}
           </select>
+        </div>
+
+        <div>
+          <label className={labelClass} htmlFor="cd-cnpj">
+            CNPJ
+          </label>
+          <input
+            id="cd-cnpj"
+            type="text"
+            inputMode="numeric"
+            value={cnpj}
+            onChange={(e) => setCnpj(formatCnpj(e.target.value))}
+            placeholder="00.000.000/0000-00"
+            aria-invalid={cnpjInvalid}
+            className={`${inputClass} tabular-nums ${
+              cnpjInvalid ? "border-red-400 focus:border-red-400" : ""
+            }`}
+          />
+          {cnpjInvalid ? (
+            <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+              CNPJ inválido — confira os 14 dígitos.
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-fg-subtle">
+              Guardamos só os dígitos; a máscara é de exibição. Deixe vazio se
+              não tiver.
+            </p>
+          )}
         </div>
 
         <div className="sm:col-span-2">
@@ -476,7 +526,7 @@ function EditView({
         <button
           type="button"
           onClick={save}
-          disabled={saving || invertedDates}
+          disabled={saving || invertedDates || cnpjInvalid}
           className={btnPrimary}
         >
           {saving ? "Salvando…" : "Salvar"}

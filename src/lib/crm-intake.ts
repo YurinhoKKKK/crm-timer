@@ -67,6 +67,7 @@ export function statusForError(error: string | undefined): number {
     case "validation":
       return 422;
     case "number_in_use":
+    case "cnpj_in_use":
     case "duplicate":
       return 409;
     case "rate_limited":

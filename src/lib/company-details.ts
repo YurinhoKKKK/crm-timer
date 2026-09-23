@@ -16,9 +16,12 @@ type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
 
 // --- Enums (rótulos legíveis) ------------------------------------------------
 
+// project_model é campo PRÓPRIO — NÃO é o grupo "Ema" nem a etiqueta "Ema"
+// (três coisas distintas, decisão consciente do Mauricio; não sincronizam).
 export const PROJECT_MODELS = [
   { value: "bpo", label: "BPO" },
   { value: "consultoria", label: "Consultoria" },
+  { value: "ema", label: "Ema" },
 ] as const;
 
 export type ProjectModel = (typeof PROJECT_MODELS)[number]["value"];
@@ -67,6 +70,7 @@ export const CADENCE_LABEL: Record<Cadence, string> = Object.fromEntries(
 
 export type CompanyDetails = {
   projectModel: ProjectModel | null;
+  cnpj: string | null; // SÓ os 14 dígitos (sem máscara); formatação é de exibição
   startedOn: string | null; // "YYYY-MM-DD" (data pura)
   endsOn: string | null;
   cadence: Cadence | null;
@@ -92,7 +96,9 @@ export async function loadCompanyDetails(
   supabase: SupabaseServer,
   companyId: string
 ): Promise<CompanyDetails> {
-  const [detailRes, contractedRes] = await Promise.all([
+  // cnpj mora em companies (não em company_details); leitura escopada pela mesma
+  // RLS que já alcança a empresa (companies_select).
+  const [detailRes, contractedRes, companyRes] = await Promise.all([
     supabase
       .from("company_details")
       .select(
@@ -104,6 +110,11 @@ export async function loadCompanyDetails(
       .from("company_contracted_channels")
       .select("channel")
       .eq("company_id", companyId),
+    supabase
+      .from("companies")
+      .select("cnpj")
+      .eq("id", companyId)
+      .maybeSingle(),
   ]);
 
   const d = detailRes.data as
@@ -132,8 +143,12 @@ export async function loadCompanyDetails(
     updatedByName = people.get(d.updated_by)?.name ?? null;
   }
 
+  const cnpj =
+    (companyRes.data as { cnpj: string | null } | null)?.cnpj ?? null;
+
   return {
     projectModel: d?.project_model ?? null,
+    cnpj,
     startedOn: d?.started_on ?? null,
     endsOn: d?.ends_on ?? null,
     cadence: d?.cadence ?? null,
@@ -203,6 +218,60 @@ function utcOf(iso: string): number {
 export function formatPureDate(iso: string): string {
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
+}
+
+// ---------------------------------------------------------------------
+// Helpers puros de CNPJ (compartilhados entre tela e action)
+// ---------------------------------------------------------------------
+// GUARDAMOS SÓ OS DÍGITOS (14). A máscara é só de exibição. A validação dos
+// dígitos verificadores espelha is_valid_cnpj no banco (rede de segurança) —
+// aqui é para dar uma mensagem amigável ANTES de gravar. CNPJ inválido é
+// RECUSADO, nunca "corrigido".
+
+// Tira tudo que não for dígito.
+export function onlyDigits(s: string): string {
+  return (s ?? "").replace(/\D/g, "");
+}
+
+// "11222333000181" → "11.222.333/0001-81". Deriva das partes; parcial enquanto
+// digita (mostra o que der). Vazio → "".
+export function formatCnpj(digits: string): string {
+  const d = onlyDigits(digits).slice(0, 14);
+  if (!d) return "";
+  const p = [
+    d.slice(0, 2),
+    d.slice(2, 5),
+    d.slice(5, 8),
+    d.slice(8, 12),
+    d.slice(12, 14),
+  ];
+  let out = p[0];
+  if (p[1]) out += "." + p[1];
+  if (p[2]) out += "." + p[2];
+  if (p[3]) out += "/" + p[3];
+  if (p[4]) out += "-" + p[4];
+  return out;
+}
+
+// Valida 14 dígitos + os dois dígitos verificadores. Recebe dígitos ou máscara.
+export function isValidCnpj(input: string): boolean {
+  const d = onlyDigits(input);
+  if (d.length !== 14) return false;
+  if (/^(\d)\1{13}$/.test(d)) return false; // sequências repetidas
+
+  const w1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  const w2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  const dv = (weights: number[]) => {
+    let sum = 0;
+    for (let i = 0; i < weights.length; i++) {
+      sum += Number(d[i]) * weights[i];
+    }
+    const r = sum % 11;
+    return r < 2 ? 0 : 11 - r;
+  };
+  if (dv(w1) !== Number(d[12])) return false;
+  if (dv(w2) !== Number(d[13])) return false;
+  return true;
 }
 
 // Informação do período do contrato, CALCULADA (nunca guardada). Contrato

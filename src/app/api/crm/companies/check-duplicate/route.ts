@@ -22,16 +22,20 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-  const razao =
+  const obj =
     body && typeof body === "object" && !Array.isArray(body)
-      ? (body as Record<string, unknown>).razao_social
-      : undefined;
+      ? (body as Record<string, unknown>)
+      : {};
+  const razao = obj.razao_social;
   if (typeof razao !== "string") {
     return NextResponse.json(
       { ok: false, error: "validation", message: "Informe razao_social (texto)." },
       { status: 422 }
     );
   }
+  // cnpj é OPCIONAL nesta conferência. Aceita com ou sem máscara; a RPC
+  // normaliza e sinaliza a correspondência por CNPJ (certeza) além do nome.
+  const cnpj = typeof obj.cnpj === "string" ? obj.cnpj : null;
 
   let supabase;
   try {
@@ -53,6 +57,7 @@ export async function POST(req: NextRequest) {
     p_razao: razao,
     p_source: sourceOf(req),
     p_ip: ipOf(req),
+    p_cnpj: cnpj,
   });
 
   if (error) {

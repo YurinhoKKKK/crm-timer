@@ -120,29 +120,13 @@ Formato: `{ "ok": false, "error": "<código>", "message": "<texto>", "collision"
 | 401 | `unauthorized` | Segredo ausente/errado. | |
 | 400 | `bad_json` | Corpo não é objeto JSON válido. | |
 | 422 | `validation` | Campo faltando/ inválido (número, razão, **CNPJ ausente ou inválido**, enum, data, tamanho, serviço). | |
-| 409 | `cnpj_in_use` | O `cnpj` já está cadastrado em outra empresa (**duplicado forte**, bloqueio direto). | `collision: { id, name }` |
+| 409 | `cnpj_in_use` | O `cnpj` já está cadastrado em outra empresa (**único critério de duplicidade**, bloqueio direto). | `collision: { id, name }` |
 | 409 | `number_in_use` | O `number` já é usado por outra empresa. | `collision: { id, name }` |
-| 409 | `duplicate` | Já existe empresa **muito parecida** por nome (bloqueio, rede de segurança). | `collision: { id, name, group, similarity }` |
+| 409 | `duplicate` | Colisão do **índice único** do banco (nome/CNPJ já existente) — rede de segurança rara, não é mais por semelhança de nome. | |
 | 429 | `rate_limited` | Passou de **60 criações/min**. | |
 | 500 | `internal` | Falha interna ao criar. | |
 | 500 | `server_misconfig` | Env não configurada no servidor. | |
 | 502 | `rpc_error` | Falha de comunicação com o banco. | |
-
-Exemplo de recusa por duplicado:
-
-```json
-{
-  "ok": false,
-  "error": "duplicate",
-  "message": "Já existe empresa muito parecida: \"362. MERCADO MULTIPEÇAS LTDA (RODRIGO)\".",
-  "collision": {
-    "id": "b9baa6a0-ffd6-46f5-a8be-2c0d25d3f3b3",
-    "name": "362. MERCADO MULTIPEÇAS LTDA (RODRIGO)",
-    "group": "Ativos",
-    "similarity": 1.0
-  }
-}
-```
 
 Exemplo de recusa por CNPJ já em uso:
 
@@ -170,17 +154,22 @@ Consulta (não cria nada): dada uma razão social (e, opcionalmente, um CNPJ),
 devolve as empresas já existentes que podem ser a mesma. Duas naturezas de
 correspondência, **claramente sinalizadas**:
 
-- **por CNPJ = certeza** (`cnpj_match`, `match_type: "cnpj"`). Só aparece quando
-  você manda um `cnpj` válido e ele já existe aqui. Independe do nome.
+- **por CNPJ = certeza** (`cnpj_match`, `match_type: "cnpj"`). É o que importa:
+  só aparece quando você manda um `cnpj` válido e ele já existe aqui. Independe
+  do nome. É o mesmo critério que a criação usa para bloquear.
 - **por nome = aproximada** (`matches[]`, `match_type: "name"`). Comparação
   tolerante — ignora maiúsculas, acentos, pontuação, sufixos jurídicos
-  (LTDA/ME/EPP/EIRELI/SA) e o número do início do nome.
+  (LTDA/ME/EPP/EIRELI/SA) e o número do início do nome. É **apenas informativo**:
+  a criação **não** bloqueia por nome, então o comercial pode ignorar este campo.
 
 Serve para o CRM avisar o operador **antes** de fechar.
 
-> As 148 empresas atuais **não têm CNPJ**, então nunca casarão por CNPJ — para
-> elas vale só a rede de segurança por **nome** (aproximada). CNPJ só casa contra
-> empresas cadastradas com CNPJ (as novas, vindas daqui pra frente).
+> **Limitação conhecida e consciente:** hoje só **2 das 159 empresas** têm CNPJ.
+> Até o Mauricio preencher os CNPJs antigos, o reenvio de um cliente **antigo**
+> (sem CNPJ cadastrado) **não** será detectado como duplicado — nem aqui nem na
+> criação. CNPJ só casa contra empresas cadastradas com CNPJ (as novas, vindas
+> daqui pra frente). O `matches[]` por nome segue disponível como pista, mas não
+> bloqueia nada.
 
 ### Corpo
 
@@ -248,15 +237,16 @@ curl -X POST https://SEU-DOMINIO/api/crm/companies/check-duplicate \
 
 - **Número** faz parte do texto do nome; este sistema **não** gera número (chega
   pronto). Empresa **sem número não é criada**. Número já em uso → recusa.
-- **CNPJ é obrigatório e é o critério FORTE de duplicidade.** Guardamos só os 14
+- **CNPJ é obrigatório e é o ÚNICO critério de duplicidade.** Guardamos só os 14
   dígitos (único quando preenchido) e validamos os dígitos verificadores. **CNPJ
   igual = duplicado, bloqueio direto** (`409 cnpj_in_use`), sem depender do nome.
-- A **semelhança de nome continua valendo como rede de segurança**: as 148
-  empresas atuais **não têm CNPJ** e portanto nunca casariam por ele, então o
-  bloqueio por nome ainda protege contra recadastro delas. Limiar de bloqueio:
-  similaridade ≥ 0,80 **ou** núcleo do nome idêntico. O check-duplicate lista a
-  partir de ≥ 0,35. (0,80 foi calibrado contra as empresas reais: em 0,72 havia
-  falso positivo entre nomes que só compartilham "materiais de construção".)
+- **A semelhança de nome NÃO bloqueia mais** (decisão do Mauricio). A criação
+  verifica duplicidade só por CNPJ (+ número). O check-duplicate ainda **lista**
+  parecidas por nome, mas como informação — o comercial não usa. As funções de
+  normalização de nome continuam no banco (podem servir depois).
+- **Limitação conhecida e consciente:** só **2 das 159 empresas** têm CNPJ hoje.
+  Até os CNPJs antigos serem preenchidos, o reenvio de um cliente **antigo** (sem
+  CNPJ cadastrado) não será detectado como duplicado.
 - Nasce em **On Boarding**, sem consultor/colaborador. A distribuição é feita
   depois por um admin, dentro do sistema.
 - Só cria — **não** atualiza, **não** apaga, **não** toca em tarefa, faturamento
@@ -272,5 +262,6 @@ curl -X POST https://SEU-DOMINIO/api/crm/companies/check-duplicate \
 | Criar | 60 requisições/min |
 | Conferir duplicado | 120 requisições/min |
 
-Estourou → `429 rate_limited`. (Os limiares de rate e de similaridade estão na
-migration `0084_crm_intake.sql` e podem ser ajustados lá.)
+Estourou → `429 rate_limited`. (Os limiares de rate estão na migration
+`0084_crm_intake.sql`. O bloqueio por semelhança de nome foi **removido** na
+migration `0087_crm_intake_dedup_cnpj_only.sql` — dedup só por CNPJ.)

@@ -12,7 +12,9 @@ import AdjustableTaskList, {
   type AdjustItem,
   type Adjustment,
 } from "./AdjustableTaskList";
-import TimeByCompanyChart, { type CompanyTime } from "../../TimeByCompanyChart";
+import CategoryTimeByCompanyChart, {
+  type CompanyCategoryTime,
+} from "../../CategoryTimeByCompanyChart";
 import PeriodFilter, { type Period } from "../../PeriodFilter";
 import { periodStart } from "@/lib/period";
 
@@ -147,17 +149,25 @@ export default async function CollaboratorDetailPage({
     { data: activityData },
     { data: timeByCompanyData },
     { data: countData },
+    { data: companyCategoryData },
   ] = await Promise.all([
     instancesQuery,
     activityQuery,
     // Tempo TRABALHADO no período por empresa, escopado a este responsável
     // (time_entries por started_at BRT). Fonte do "Tempo trabalhado no período"
-    // e do gráfico — o total_seconds das instâncias (por task_date) inflava
-    // dias errados.
+    // (total) e dos nomes de empresa — o total_seconds das instâncias (por
+    // task_date) inflava dias errados.
     supabase.rpc("time_by_company", { p_start: start, p_collaborator: params.id }),
     // Contagens do cabeçalho (total/concluídas/atrasadas) agregadas no banco,
     // escopadas a este responsável — imunes ao teto de linhas da lista.
     supabase.rpc("task_status_counts", { p_start: start, p_collaborator: params.id }),
+    // Tempo por (empresa, categoria) deste responsável — fonte do gráfico
+    // "Tempo por empresa" (reforma do cadastro). Só tarefas categorizadas
+    // (+ listagem); o resto fica de fora.
+    supabase.rpc("time_by_company_category", {
+      p_start: start,
+      p_collaborator: params.id,
+    }),
   ]);
 
   const allInstances = (instancesData as InstanceRow[]) ?? [];
@@ -241,17 +251,33 @@ export default async function CollaboratorDetailPage({
     }
   }
 
-  // --- Tempo por empresa (mesmo gráfico da dashboard) ---
-  // Mantém o id da empresa (chave) para habilitar o detalhamento por clique,
-  // escopado a este colaborador. Tempo por time_entries (bate com a barra).
-  const chartData: CompanyTime[] = timeRows
-    .map((r) => ({
-      id: r.company_id,
-      name: companyNames.get(r.company_id) ?? "(empresa)",
-      seconds: Number(r.seconds),
+  // --- Tempo por empresa QUEBRADO POR CATEGORIA (mesmo gráfico da dashboard) ---
+  // Escopado a este colaborador; o detalhamento por clique numa categoria também
+  // reflete só o tempo dele. Tempo por time_entries (bate com a barra).
+  const catByCompany = new Map<
+    string,
+    { category: string; seconds: number }[]
+  >();
+  for (const r of (companyCategoryData as
+    | { company_id: string; category: string; seconds: number }[]
+    | null) ?? []) {
+    const s = Number(r.seconds);
+    if (s <= 0) continue;
+    const list = catByCompany.get(r.company_id) ?? [];
+    list.push({ category: r.category, seconds: s });
+    catByCompany.set(r.company_id, list);
+  }
+  const categoryChartData: CompanyCategoryTime[] = Array.from(
+    catByCompany.entries()
+  )
+    .map(([id, byCategory]) => ({
+      id,
+      name: companyNames.get(id) ?? "(empresa)",
+      total: byCategory.reduce((sum, c) => sum + c.seconds, 0),
+      byCategory,
     }))
-    .filter((d) => d.seconds > 0)
-    .sort((a, b) => b.seconds - a.seconds);
+    .filter((d) => d.total > 0)
+    .sort((a, b) => b.total - a.total);
 
   // --- Itens para a lista com busca/filtros + ajuste de tempo ---
   const items: AdjustItem[] = instances.map((r) => ({
@@ -423,10 +449,10 @@ export default async function CollaboratorDetailPage({
             <h3 className="mb-4 text-sm font-semibold text-fg">
               Tempo por empresa
             </h3>
-            <TimeByCompanyChart
-              data={chartData}
-              drilldownPeriod={period}
-              drilldownCollaboratorId={person.id}
+            <CategoryTimeByCompanyChart
+              data={categoryChartData}
+              period={period}
+              collaboratorId={person.id}
             />
           </section>
 

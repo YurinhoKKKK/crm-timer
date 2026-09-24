@@ -184,6 +184,7 @@ export default function CompanyCentral({
           companies={[{ id: company.id, name: company.name }]}
           collaborators={data.collaborators}
           lockedCompany={{ id: company.id, name: company.name }}
+          isAdmin={data.clientAccess.role === "admin"}
         />
       )}
 

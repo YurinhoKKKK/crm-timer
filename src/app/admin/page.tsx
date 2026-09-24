@@ -4,7 +4,9 @@ import { perfRoute } from "@/lib/perf";
 import AppShell from "@/components/AppShell";
 import type { TaskStatus } from "@/lib/types";
 import PeriodFilter, { type Period } from "./PeriodFilter";
-import TimeByCompanyChart, { type CompanyTime } from "./TimeByCompanyChart";
+import CategoryTimeByCompanyChart, {
+  type CompanyCategoryTime,
+} from "./CategoryTimeByCompanyChart";
 import CollaboratorSummary, {
   type CollaboratorRow,
 } from "./CollaboratorSummary";
@@ -90,6 +92,7 @@ export default async function AdminPage({
     { data: collaboratorsData },
     { data: companyTimeData },
     { data: collaboratorTimeData },
+    { data: companyCategoryData },
   ] = await Promise.all([
     perf.timed(
       "rpc task_status_counts",
@@ -117,6 +120,14 @@ export default async function AdminPage({
     perf.timed(
       "rpc time_by_collaborator",
       supabase.rpc("time_by_collaborator", { p_start: start })
+    ),
+    // Tempo por (empresa, categoria) — fonte do gráfico "Tempo por empresa"
+    // (reforma do cadastro). Só tarefas categorizadas (+ listagem); o resto
+    // fica de fora. O card "Tempo total gasto" e o resumo por responsável
+    // seguem com o tempo TOTAL (time_by_company/collaborator).
+    perf.timed(
+      "rpc time_by_company_category",
+      supabase.rpc("time_by_company_category", { p_start: start })
     ),
   ]);
   perf.done();
@@ -178,15 +189,30 @@ export default async function AdminPage({
     ])
   );
 
-  // Lista completa; o gráfico faz Top N + agrupamento da cauda (Passo 18).
-  const chartData: CompanyTime[] = Array.from(companyTime.entries())
-    .map(([id, seconds]) => ({
+  // Tempo por empresa QUEBRADO POR CATEGORIA (gráfico da reforma). Agrupa as
+  // linhas (empresa, categoria) do banco por empresa; o componente faz Top N,
+  // legenda e o detalhamento por clique numa categoria.
+  const catByCompany = new Map<string, { category: string; seconds: number }[]>();
+  for (const r of (companyCategoryData as
+    | { company_id: string; category: string; seconds: number }[]
+    | null) ?? []) {
+    const s = Number(r.seconds);
+    if (s <= 0) continue;
+    const list = catByCompany.get(r.company_id) ?? [];
+    list.push({ category: r.category, seconds: s });
+    catByCompany.set(r.company_id, list);
+  }
+  const categoryChartData: CompanyCategoryTime[] = Array.from(
+    catByCompany.entries()
+  )
+    .map(([id, byCategory]) => ({
       id,
       name: companyName.get(id) ?? "(empresa removida)",
-      seconds,
+      total: byCategory.reduce((sum, c) => sum + c.seconds, 0),
+      byCategory,
     }))
-    .filter((d) => d.seconds > 0)
-    .sort((a, b) => b.seconds - a.seconds);
+    .filter((d) => d.total > 0)
+    .sort((a, b) => b.total - a.total);
 
   const collaboratorRows: CollaboratorRow[] = collaborators
     .map((p) => {
@@ -295,7 +321,10 @@ export default async function AdminPage({
             <h3 className="mb-4 text-sm font-semibold text-fg">
               Tempo por empresa
             </h3>
-            <TimeByCompanyChart data={chartData} drilldownPeriod={period} />
+            <CategoryTimeByCompanyChart
+              data={categoryChartData}
+              period={period}
+            />
           </section>
 
           {/* Resumo por colaborador */}

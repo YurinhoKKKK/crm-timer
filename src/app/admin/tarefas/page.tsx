@@ -223,7 +223,11 @@ export default async function TarefasPage() {
             )}
 
             {canCreate && (
-              <NewTaskForm companies={companies} collaborators={collaborators} />
+              <NewTaskForm
+                companies={companies}
+                collaborators={collaborators}
+                isAdmin
+              />
             )}
 
             <h2 className="mb-3 mt-2 text-sm font-medium text-fg-muted">

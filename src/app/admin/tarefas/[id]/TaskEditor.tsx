@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { TaskTemplate } from "@/lib/types";
 import { updateTaskTemplate, type TodayGenStatus } from "../../actions";
+import { categoryLabel } from "@/lib/task-category";
 import Combobox from "@/components/Combobox";
 import { DateField } from "@/components/DateField";
 import ListingFields, {
@@ -21,12 +22,11 @@ import {
 type Option = { id: string; name: string };
 type PersonOption = { id: string; full_name: string; email: string };
 type Status = "idle" | "saving" | "saved" | "error";
-type FormMode = "unica" | "diaria" | "listagem";
+type Kind = "unica" | "diaria";
 
-const TYPE_OPTIONS: { value: FormMode; label: string }[] = [
+const KIND_OPTIONS: { value: Kind; label: string }[] = [
   { value: "unica", label: "Única" },
   { value: "diaria", label: "Diária" },
-  { value: "listagem", label: "Listagem de marcas" },
 ];
 
 const WEEKDAYS = [
@@ -43,13 +43,7 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-// Status que MERECEM uma nota. Só mostramos o que INFORMA algo:
-//   'gerada'        → aconteceu algo relevante;
-//   'nao_e_dia' / 'inativa' / 'fora_do_periodo' → explica por que a tarefa de
-//     hoje não apareceu (o silêncio que queríamos matar).
-// De fora, de propósito: 'ja_existia' (caso rotineiro — avisar em todo
-// salvamento vira ruído, e ruído constante faz ignorarem os avisos que importam)
-// e 'nao_aplica' (não é diária).
+// Status que MERECEM uma nota (ver createTaskTemplate/generate_template_today_edit).
 type NotedStatus = "gerada" | "nao_e_dia" | "inativa" | "fora_do_periodo";
 
 const TODAY_NOTE: Record<NotedStatus, { tone: "ok" | "warn"; text: string }> = {
@@ -76,7 +70,6 @@ const TODAY_NOTE_CLASS: Record<"ok" | "warn", string> = {
   warn: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
 };
 
-// Só os status com nota; estreita o tipo para indexar TODAY_NOTE com segurança.
 function isNotedStatus(s: TodayGenStatus): s is NotedStatus {
   return s === "gerada" || s === "nao_e_dia" || s === "inativa" || s === "fora_do_periodo";
 }
@@ -86,20 +79,28 @@ export default function TaskEditor({
   companies,
   collaborators,
   brands: initialBrands = [],
+  isAdmin = true,
 }: {
   template: TaskTemplate;
   companies: Option[];
   collaborators: PersonOption[];
   brands?: string[];
+  // O TIPO (única/diária) só o admin muda. Esta tela já é admin-only; a prop
+  // mantém a regra explícita (o servidor também a reforça).
+  isAdmin?: boolean;
 }) {
   const router = useRouter();
-  const [title, setTitle] = useState(template.title);
+  const isListing = template.template_type === "listagem";
+  // Tarefa anterior à padronização: sem categoria e sem ser listagem. O título
+  // livre antigo é preservado (nunca recategorizamos o passado).
+  const isLegacy = !template.category && !isListing;
+
   const [description, setDescription] = useState(template.description ?? "");
   const [instructions, setInstructions] = useState(template.instructions ?? "");
   const [companyId, setCompanyId] = useState(template.company_id);
   const [collaboratorId, setCollaboratorId] = useState(template.collaborator_id);
-  const [mode, setMode] = useState<FormMode>(
-    template.template_type === "listagem" ? "listagem" : template.kind
+  const [kind, setKind] = useState<Kind>(
+    template.kind === "diaria" ? "diaria" : "unica"
   );
   const [startDate, setStartDate] = useState(template.start_date ?? todayISO());
   const [dueTime, setDueTime] = useState(template.due_time?.slice(0, 5) ?? "");
@@ -108,7 +109,7 @@ export default function TaskEditor({
   );
   const [endDate, setEndDate] = useState(template.end_date ?? "");
   const [listing, setListing] = useState<ListingFormValue>(() =>
-    template.template_type === "listagem"
+    isListing
       ? {
           brands: initialBrands,
           marketplaces: new Set(template.listing_marketplaces ?? []),
@@ -123,10 +124,12 @@ export default function TaskEditor({
   const [active, setActive] = useState(template.active);
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  // Nota persistente sobre a ocorrência de HOJE (só para diárias). Fica até o
-  // próximo salvar; não some com o flash "Salvo".
   const [todayNote, setTodayNote] = useState<TodayGenStatus | null>(null);
   const [, startTransition] = useTransition();
+
+  // Pontual quando: listagem; ou tipo "única" (para não-admin, kind é sempre o
+  // valor preservado — mas a tela é admin-only).
+  const isPunctual = isListing || kind === "unica";
 
   function toggleWeekday(value: number) {
     setWeekdays((prev) => {
@@ -141,22 +144,20 @@ export default function TaskEditor({
     e.preventDefault();
     setErrorMsg(null);
     setTodayNote(null);
-    // O seletor do projeto (que substituiu o <input type="date" required>) não
-    // valida no navegador — garantimos a data obrigatória aqui.
-    if ((mode === "unica" || mode === "listagem") && !startDate.trim()) {
+    if (isPunctual && !startDate.trim()) {
       setErrorMsg("Informe a data da tarefa.");
       return;
     }
     setStatus("saving");
 
-    const isListing = mode === "listagem";
+    // Categoria e título NÃO são enviados: o servidor preserva os do molde
+    // (nada de recategorizar o passado). Enviamos apenas o que é editável.
     const { error, todayStatus } = await updateTaskTemplate(template.id, {
-      title,
       description,
       instructions,
       companyId,
       collaboratorId,
-      kind: mode === "diaria" ? "diaria" : "unica",
+      kind: isAdmin && !isListing && kind === "diaria" ? "diaria" : "unica",
       startDate,
       dueTime,
       weekdays: Array.from(weekdays),
@@ -186,18 +187,29 @@ export default function TaskEditor({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Categoria/título — SOMENTE LEITURA (não se recategoriza uma tarefa). */}
       <div>
-        <label htmlFor="t-title" className={labelClass}>
-          Título
-        </label>
-        <input
-          id="t-title"
-          type="text"
-          required
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className={inputClass}
-        />
+        <p className={labelClass}>Categoria</p>
+        {isLegacy ? (
+          <div className="mt-1">
+            <p className="text-sm text-fg">{template.title}</p>
+            <p className={`mt-1 ${hintClass}`}>
+              Tarefa anterior à padronização — mantém o título antigo e não
+              recebe categoria.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-1">
+            <span className="inline-flex items-center rounded-lg border border-line bg-surface-2 px-3 py-1 text-sm font-medium text-fg">
+              {template.category
+                ? categoryLabel(template.category)
+                : "Listagem"}
+            </span>
+            <p className={`mt-1 ${hintClass}`}>
+              O título é definido pela categoria e não é alterado na edição.
+            </p>
+          </div>
+        )}
       </div>
 
       <div>
@@ -258,28 +270,31 @@ export default function TaskEditor({
         </div>
       </div>
 
-      <fieldset>
-        <legend className={labelClass}>Tipo</legend>
-        <div className="flex flex-wrap gap-2">
-          {TYPE_OPTIONS.map((opt) => {
-            const isActive = mode === opt.value;
-            return (
-              <label key={opt.value} className={chipClass(isActive)}>
-                <input
-                  type="radio"
-                  name="t-kind"
-                  className="accent-risd"
-                  checked={isActive}
-                  onChange={() => setMode(opt.value)}
-                />
-                {opt.label}
-              </label>
-            );
-          })}
-        </div>
-      </fieldset>
+      {/* Tipo — só admin, e não se aplica a Listagem (sempre pontual). */}
+      {isAdmin && !isListing && (
+        <fieldset>
+          <legend className={labelClass}>Tipo</legend>
+          <div className="flex flex-wrap gap-2">
+            {KIND_OPTIONS.map((opt) => {
+              const isActive = kind === opt.value;
+              return (
+                <label key={opt.value} className={chipClass(isActive)}>
+                  <input
+                    type="radio"
+                    name="t-kind"
+                    className="accent-risd"
+                    checked={isActive}
+                    onChange={() => setKind(opt.value)}
+                  />
+                  {opt.label}
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+      )}
 
-      {mode === "unica" || mode === "listagem" ? (
+      {isPunctual ? (
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className={labelClass}>Data</label>
@@ -350,7 +365,7 @@ export default function TaskEditor({
         </div>
       )}
 
-      {mode === "listagem" && (
+      {isListing && (
         <ListingFields
           idPrefix="edit-listing"
           value={listing}

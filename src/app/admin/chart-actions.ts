@@ -34,15 +34,18 @@ type Row = {
 
 // Passo 17 — tarefas que compõem o tempo de uma empresa no período, ordenadas
 // da que mais consumiu para a que menos. O tempo por tarefa é o TRABALHADO no
-// período (time_entries por started_at, via RPC time_by_task), não o
-// total_seconds da tarefa — assim a soma bate exatamente com a barra do
-// gráfico, que também vem de time_entries. `collaboratorId` opcional escopa o
-// detalhamento a um único responsável (gráfico da tela do colaborador). A RLS
-// (ti_select / te_select) protege o acesso.
+// período (time_entries por started_at), não o total_seconds da tarefa — assim
+// a soma bate exatamente com a barra do gráfico, que também vem de time_entries.
+// `collaboratorId` opcional escopa o detalhamento a um único responsável
+// (gráfico da tela do colaborador). `category` (reforma do cadastro) escopa o
+// detalhamento a UMA categoria dentro da empresa — quando presente, usamos a
+// RPC time_by_task_category (mesma regra de inclusão do gráfico por categoria).
+// A RLS (ti_select / te_select) protege o acesso.
 export async function getCompanyTimeBreakdown(
   companyId: string,
   period: Period,
-  collaboratorId?: string
+  collaboratorId?: string,
+  category?: string
 ): Promise<{
   error: string | null;
   tasks?: BreakdownTask[];
@@ -56,11 +59,21 @@ export async function getCompanyTimeBreakdown(
 
   const start = periodStart(period);
 
-  // 1) Tempo por tarefa no período (fonte de verdade: time_entries).
-  const { data: timeData, error: timeError } = await supabase.rpc(
-    "time_by_task",
-    { p_company: companyId, p_start: start, p_collaborator: collaboratorId ?? null }
-  );
+  // 1) Tempo por tarefa no período (fonte de verdade: time_entries). Com
+  // categoria, restringe às tarefas daquela categoria (bucket 'listagem' cobre
+  // as listagens novas e antigas).
+  const { data: timeData, error: timeError } = category
+    ? await supabase.rpc("time_by_task_category", {
+        p_company: companyId,
+        p_category: category,
+        p_start: start,
+        p_collaborator: collaboratorId ?? null,
+      })
+    : await supabase.rpc("time_by_task", {
+        p_company: companyId,
+        p_start: start,
+        p_collaborator: collaboratorId ?? null,
+      });
   if (timeError) return { error: timeError.message };
 
   const secondsByTask = new Map(

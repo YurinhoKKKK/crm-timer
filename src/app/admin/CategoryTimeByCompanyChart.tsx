@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { type ComponentProps, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -16,17 +15,25 @@ import { STATUS_META } from "@/lib/status";
 import { formatDuration } from "@/lib/format";
 import Person from "@/components/Person";
 import TaskDetailLink from "@/components/TaskDetailLink";
-import type { Period } from "./PeriodFilter";
 import {
-  getCompanyTimeBreakdown,
-  type BreakdownTask,
-} from "./chart-actions";
+  categoryColor,
+  categoryLabel,
+  CATEGORY_ORDER,
+} from "@/lib/task-category";
+import type { Period } from "./PeriodFilter";
+import { getCompanyTimeBreakdown, type BreakdownTask } from "./chart-actions";
 
-export type CompanyTime = {
+// Tempo de UMA empresa quebrado por categoria (reforma do cadastro). `total` é a
+// soma das categorias — só entram tarefas categorizadas (+ listagem, agrupada
+// por template_type). O detalhamento por título aparece só ao clicar.
+export type CompanyCategoryTime = {
+  id: string;
   name: string;
-  seconds: number;
-  id?: string; // presente no dashboard, habilita o detalhamento ao clicar
+  total: number;
+  byCategory: { category: string; seconds: number }[];
 };
+
+const OUTRAS_KEY = "__outras__";
 
 // Tooltip: minutos quando < 1h, horas com 1 casa quando >= 1h.
 function formatSmart(seconds: number): string {
@@ -34,15 +41,12 @@ function formatSmart(seconds: number): string {
   return `${(seconds / 3600).toFixed(1)}h`;
 }
 
-// Encurta um rótulo com reticências (o nome completo fica no tooltip / no
-// <title> do próprio rótulo).
 function truncate(value: string, max: number): string {
   if (value.length <= max) return value;
   return `${value.slice(0, Math.max(1, max - 1)).trimEnd()}…`;
 }
 
-// Largura real do contêiner (via ResizeObserver), para calcular quantos rótulos
-// cabem e o tamanho de cada um sem colisão — inclusive no celular.
+// Largura real do contêiner (via ResizeObserver), para dosar os rótulos do eixo.
 function useWidth<T extends HTMLElement>() {
   const ref = useRef<T>(null);
   const [width, setWidth] = useState(0);
@@ -73,12 +77,15 @@ function useIsDark(): boolean {
 }
 
 type Selected = {
-  id: string;
-  name: string;
-  barSeconds: number;
+  companyId: string;
+  companyName: string;
+  // Ausente = empresa inteira (todas as tarefas). Presente = só aquela categoria.
+  category?: string;
 };
 
-// Painel lateral com as tarefas que compõem o tempo de uma empresa (Passo 17).
+// Painel lateral: as tarefas que compõem o tempo — da empresa inteira (clique no
+// corpo da coluna) ou de uma categoria (clique numa faixa). z-overlay (50); o
+// detalhe da tarefa (TaskDetailLink) abre por cima em z-sheet (60).
 function BreakdownPanel({
   selected,
   period,
@@ -99,11 +106,15 @@ function BreakdownPanel({
     let active = true;
     setLoading(true);
     setError(null);
-    getCompanyTimeBreakdown(selected.id, period, collaboratorId).then((res) => {
+    getCompanyTimeBreakdown(
+      selected.companyId,
+      period,
+      collaboratorId,
+      selected.category
+    ).then((res) => {
       if (!active) return;
-      if (res.error) {
-        setError(res.error);
-      } else {
+      if (res.error) setError(res.error);
+      else {
         setTasks(res.tasks ?? []);
         setTotal(res.totalSeconds ?? 0);
       }
@@ -112,7 +123,7 @@ function BreakdownPanel({
     return () => {
       active = false;
     };
-  }, [selected.id, period, collaboratorId]);
+  }, [selected.companyId, selected.category, period, collaboratorId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -122,10 +133,10 @@ function BreakdownPanel({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // Portal para o <body>: durante o animate-fade-in o <main> tem `transform`
-  // e seria o containing block deste painel `fixed` (desde a correção do fill
-  // "backwards" o transform some ao fim da animação, mas o portal continua
-  // sendo o caminho robusto). z-overlay (50): escala em tailwind.config.ts.
+  const heading = selected.category
+    ? categoryLabel(selected.category)
+    : "Tempo por empresa";
+
   return createPortal(
     <div className="fixed inset-0 z-overlay flex justify-end">
       <div
@@ -136,16 +147,16 @@ function BreakdownPanel({
       <aside
         role="dialog"
         aria-modal="true"
-        aria-label={`Detalhamento de tempo — ${selected.name}`}
+        aria-label={`Tarefas — ${selected.companyName}`}
         className="relative flex h-full w-full max-w-md flex-col overflow-hidden bg-surface shadow-pop"
       >
         <header className="flex items-start justify-between gap-3 border-b border-line p-5">
           <div className="min-w-0">
             <p className="text-xs uppercase tracking-wide text-fg-subtle">
-              Tempo por empresa
+              {heading}
             </p>
             <h2 className="truncate text-lg font-semibold text-fg">
-              {selected.name}
+              {selected.companyName}
             </h2>
             <p className="mt-1 font-mono text-sm tabular-nums text-risd">
               {formatDuration(total)}
@@ -163,9 +174,7 @@ function BreakdownPanel({
 
         <div className="flex-1 overflow-y-auto p-5">
           {loading ? (
-            <p className="py-8 text-center text-sm text-fg-subtle">
-              Carregando…
-            </p>
+            <p className="py-8 text-center text-sm text-fg-subtle">Carregando…</p>
           ) : error ? (
             <p className="py-8 text-center text-sm text-red-600 dark:text-red-400">
               {error}
@@ -182,8 +191,6 @@ function BreakdownPanel({
                   total > 0 ? Math.round((t.seconds / total) * 100) : 0;
                 return (
                   <li key={t.id}>
-                    {/* Clique abre o painel de detalhe unificado da tarefa
-                        (por cima deste, que é z-50 — o sheet usa z-60). */}
                     <TaskDetailLink
                       taskId={t.id}
                       className="block w-full rounded-xl border border-line bg-surface p-3 text-left transition hover:border-risd/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
@@ -232,29 +239,34 @@ function BreakdownPanel({
   );
 }
 
-export default function TimeByCompanyChart({
+type Row = {
+  name: string;
+  id?: string;
+  isOthers: boolean;
+  total: number; // segundos (para o tooltip)
+  sec: Record<string, number>; // segundos por categoria (para o tooltip)
+  [key: string]: number | string | boolean | Record<string, number> | undefined;
+};
+
+export default function CategoryTimeByCompanyChart({
   data,
-  drilldownPeriod,
-  drilldownCollaboratorId,
+  period,
+  collaboratorId,
   topN = 8,
 }: {
-  data: CompanyTime[];
-  // Quando definido, as barras ficam clicáveis e abrem o detalhamento por
-  // empresa. Usado no dashboard e na página do colaborador.
-  drilldownPeriod?: Period;
-  // Escopa o detalhamento a um responsável (página do colaborador), para o
-  // painel refletir só o tempo dele naquela empresa.
-  drilldownCollaboratorId?: string;
-  // Quantas empresas exibir como barras próprias antes de agrupar a cauda em
-  // "Outras" (Passo 18 — escala). Recebe a lista COMPLETA e agrupa aqui.
+  data: CompanyCategoryTime[];
+  period: Period;
+  collaboratorId?: string;
   topN?: number;
 }) {
   const dark = useIsDark();
   const [wrapRef, width] = useWidth<HTMLDivElement>();
   const [selected, setSelected] = useState<Selected | null>(null);
   const [showAll, setShowAll] = useState(false);
-
-  const clickable = !!drilldownPeriod && data.some((d) => d.id);
+  // Guarda para não abrir DUAS vezes ao clicar numa faixa: o onClick da faixa
+  // (categoria) roda antes do onClick da coluna; marcamos aqui para o da coluna
+  // se abster.
+  const segmentClicked = useRef(false);
 
   if (data.length === 0) {
     return (
@@ -266,74 +278,119 @@ export default function TimeByCompanyChart({
 
   const grid = dark ? "#2A313A" : "#E4E2DF";
   const axis = dark ? "#9AA2AC" : "#5B636C";
-  // Realce da COLUNA sob o cursor (faixa de topo a base, largura da empresa).
-  // Tinta da marca, translúcida, para deixar claro o que será aberto ao clicar.
   const cursor = dark ? "rgba(120,140,255,0.14)" : "rgba(49,69,255,0.08)";
   const othersFill = dark ? "#4B535C" : "#B8BEC5";
 
-  // Ordena por tempo (desc) e, com muitas empresas, agrupa a cauda numa barra
-  // "Outras" para o gráfico ficar legível — sem esconder tempo (a soma bate).
-  // A alternância "ver todas" reexpande; a barra "Outras" também expande ao ser
-  // clicada. "Outras" não tem id → não abre o detalhamento por empresa.
-  const sorted = [...data].sort((a, b) => b.seconds - a.seconds);
-  const overflow = sorted.length > topN;
-  const source =
-    overflow && !showAll
-      ? [
-          ...sorted.slice(0, topN),
-          {
-            name: `Outras (${sorted.length - topN})`,
-            seconds: sorted
-              .slice(topN)
-              .reduce((s, d) => s + d.seconds, 0),
-            isOthers: true as const,
-          },
-        ]
-      : sorted;
+  // Categorias presentes, na ordem canônica — definem as séries empilhadas e a
+  // legenda.
+  const present = Array.from(
+    new Set(data.flatMap((d) => d.byCategory.map((c) => c.category)))
+  ).sort((a, b) => (CATEGORY_ORDER[a] ?? 99) - (CATEGORY_ORDER[b] ?? 99));
 
-  // Escolhe a unidade do eixo conforme o maior valor da série: quando ninguém
-  // passa de 1h, o eixo fica em minutos (evita ticks como 0.03h).
-  const maxSeconds = source.reduce((m, d) => Math.max(m, d.seconds), 0);
+  // Ordena por tempo (desc) e, com muitas empresas, agrupa a cauda numa barra
+  // "Outras" (sem quebra por categoria — clicar nela reexpande).
+  const sorted = [...data].sort((a, b) => b.total - a.total);
+  const overflow = sorted.length > topN;
+  const head = overflow && !showAll ? sorted.slice(0, topN) : sorted;
+  const tail = overflow && !showAll ? sorted.slice(topN) : [];
+
+  // Unidade do eixo conforme o maior total.
+  const maxSeconds = head.reduce(
+    (m, d) => Math.max(m, d.total),
+    tail.reduce((s, d) => s + d.total, 0)
+  );
   const useHours = maxSeconds >= 3600;
   const divisor = useHours ? 3600 : 60;
 
-  const chartData = source.map((d) => ({
-    name: d.name,
-    value: d.seconds / divisor,
-    seconds: d.seconds,
-    id: "id" in d ? d.id : undefined,
-    isOthers: "isOthers" in d,
-  }));
+  const chartData: Row[] = head.map((company) => {
+    const sec: Record<string, number> = {};
+    const row: Row = {
+      name: company.name,
+      id: company.id,
+      isOthers: false,
+      total: company.total,
+      sec,
+    };
+    for (const c of company.byCategory) {
+      sec[c.category] = c.seconds;
+      row[c.category] = c.seconds / divisor; // altura da faixa (unidade do eixo)
+    }
+    return row;
+  });
+  if (tail.length > 0) {
+    const tailTotal = tail.reduce((s, d) => s + d.total, 0);
+    chartData.push({
+      name: `Outras (${tail.length})`,
+      isOthers: true,
+      total: tailTotal,
+      sec: {},
+      [OUTRAS_KEY]: tailTotal / divisor,
+    });
+  }
 
   const formatTick = (v: number): string => {
     if (useHours) return v % 1 === 0 ? String(v) : v.toFixed(1);
     return String(Math.round(v));
   };
 
-  function handleSelect(entry: (typeof chartData)[number]) {
-    // Clicar em "Outras" reexpande a lista completa em vez de detalhar.
-    if (entry.isOthers) {
+  function openWholeCompany(row: Row) {
+    if (row.isOthers) {
       setShowAll(true);
       return;
     }
-    if (!clickable || !entry.id) return;
-    setSelected({ id: entry.id, name: entry.name, barSeconds: entry.seconds });
+    if (!row.id) return;
+    setSelected({ companyId: row.id, companyName: row.name });
   }
 
-  // Layout dos rótulos do eixo X, a partir da largura REAL medida: (1) trunca
-  // cada nome ao que cabe numa "faixa" e (2) pula rótulos quando há barras
-  // demais para caberem sem colidir. As barras continuam todas; só os rótulos
-  // são ralados. O nome completo fica no tooltip e no <title> do rótulo.
+  function openCategory(row: Row, category: string) {
+    if (!row.id) return;
+    segmentClicked.current = true;
+    setSelected({
+      companyId: row.id,
+      companyName: row.name,
+      category,
+    });
+  }
+
+  // Clique na COLUNA (qualquer altura, do topo à base): resolve a empresa sob o
+  // cursor. Se o clique foi numa faixa de categoria, o handler da faixa já
+  // tratou — este se abstém.
+  function handleColumnClick(state: unknown) {
+    if (segmentClicked.current) {
+      segmentClicked.current = false;
+      return;
+    }
+    const s = state as {
+      activeTooltipIndex?: number | string | null;
+      activeIndex?: number | string | null;
+      activeLabel?: string | number | null;
+    };
+    const raw = s.activeTooltipIndex ?? s.activeIndex;
+    let row: Row | undefined;
+    if (raw != null && raw !== "") {
+      const idx = Number(raw);
+      if (Number.isInteger(idx) && idx >= 0 && idx < chartData.length) {
+        row = chartData[idx];
+      }
+    }
+    if (!row && s.activeLabel != null) {
+      row = chartData.find((d) => d.name === s.activeLabel);
+    }
+    if (row) openWholeCompany(row);
+  }
+
+  // Layout dos rótulos do eixo X (igual ao gráfico anterior): trunca ao que cabe
+  // numa "faixa" e rala rótulos quando há barras demais. As barras continuam
+  // todas; o nome completo fica no tooltip e no <title> do rótulo.
   const count = chartData.length;
-  const effWidth = width || 640; // fallback antes da 1ª medição
-  const MIN_LABEL_PX = 58; // espaço horizontal mínimo por rótulo inclinado
+  const effWidth = width || 640;
+  const MIN_LABEL_PX = 58;
   const maxLabels = Math.max(1, Math.floor(effWidth / MIN_LABEL_PX));
   const labelInterval = count <= maxLabels ? 0 : Math.ceil(count / maxLabels) - 1;
   const shownLabels = Math.ceil(count / (labelInterval + 1));
   const bandPx = effWidth / shownLabels;
   const LABEL_ANGLE = -35;
   const maxChars = Math.min(26, Math.max(6, Math.floor(bandPx / 6.2)));
-  // Reserva vertical na base, proporcional ao maior rótulo inclinado.
   const axisHeight = Math.min(
     116,
     Math.max(
@@ -366,48 +423,88 @@ export default function TimeByCompanyChart({
     );
   }
 
+  // Tooltip: quebra por categoria da empresa sob o cursor + total. Tipo mínimo
+  // local (o recharts injeta active/payload); a prop `content` é casada com o
+  // tipo exato aceito pelo componente no uso, evitando atrito com os genéricos.
+  function renderTooltip({
+    active,
+    payload,
+  }: {
+    active?: boolean;
+    payload?: { payload?: Row }[];
+  }) {
+    if (!active || !payload || payload.length === 0) return null;
+    const row = payload[0]?.payload;
+    if (!row) return null;
+    const parts = present
+      .filter((cat) => (row.sec[cat] ?? 0) > 0)
+      .map((cat) => ({ cat, seconds: row.sec[cat] }));
+    return (
+      <div
+        className="rounded-xl border border-line bg-surface p-3 text-xs shadow-pop"
+        style={{ color: "var(--fg)" }}
+      >
+        <p className="mb-1 font-semibold text-fg">{row.name}</p>
+        {row.isOthers ? (
+          <p className="text-fg-muted">{formatSmart(row.total)}</p>
+        ) : (
+          <>
+            <ul className="space-y-0.5">
+              {parts.map((p) => (
+                <li key={p.cat} className="flex items-center gap-1.5 text-fg-muted">
+                  <span
+                    aria-hidden="true"
+                    className="h-2 w-2 rounded-sm"
+                    style={{ background: categoryColor(p.cat, dark) }}
+                  />
+                  <span className="text-fg">{categoryLabel(p.cat)}</span>
+                  <span className="ml-auto tabular-nums">
+                    {formatSmart(p.seconds)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1.5 flex items-center justify-between border-t border-line pt-1 font-medium text-fg">
+              <span>Total</span>
+              <span className="tabular-nums">{formatSmart(row.total)}</span>
+            </p>
+          </>
+        )}
+      </div>
+    );
+  }
+
   return (
     <>
-      {/* outline-none nos descendentes: ao clicar, os <rect>/<path> do recharts
-          recebem :focus e o navegador desenha um contorno (os "quadriculados
-          brancos" em posições estranhas). Suprimimos esse foco visual. */}
+      {/* Legenda das categorias (nome escrito). */}
+      <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1.5">
+        {present.map((cat) => (
+          <span
+            key={cat}
+            className="inline-flex items-center gap-1.5 text-xs text-fg-muted"
+          >
+            <span
+              aria-hidden="true"
+              className="h-2.5 w-2.5 rounded-sm"
+              style={{ background: categoryColor(cat, dark) }}
+            />
+            {categoryLabel(cat)}
+          </span>
+        ))}
+      </div>
+
       <div
         ref={wrapRef}
         style={{ height: 220 + axisHeight }}
-        className={`w-full [&_*:focus]:outline-none [&_svg]:outline-none ${
-          clickable || overflow ? "[&_.recharts-wrapper]:cursor-pointer" : ""
-        }`}
+        className="w-full [&_*:focus]:outline-none [&_svg]:outline-none [&_.recharts-wrapper]:cursor-pointer"
       >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}
             margin={{ top: 8, right: 8, left: 0, bottom: 4 }}
-            // Alvo de clique = COLUNA INTEIRA (do topo à base), não só a barra.
-            // O recharts resolve a categoria sob o cursor em qualquer altura;
-            // assim empresas com barra de poucos pixels ficam tão clicáveis quanto
-            // as grandes. No recharts v3 o estado do onClick traz activeTooltipIndex
-            // (número OU string) e activeLabel — NÃO activePayload. Resolvemos pelo
-            // índice, com fallback pelo nome. handleSelect já trata "Outras" e o
-            // caso não clicável, então é seguro sempre ouvir.
-            onClick={(state) => {
-              const s = state as {
-                activeTooltipIndex?: number | string | null;
-                activeIndex?: number | string | null;
-                activeLabel?: string | number | null;
-              };
-              const raw = s.activeTooltipIndex ?? s.activeIndex;
-              let entry: (typeof chartData)[number] | undefined;
-              if (raw != null && raw !== "") {
-                const idx = Number(raw);
-                if (Number.isInteger(idx) && idx >= 0 && idx < chartData.length) {
-                  entry = chartData[idx];
-                }
-              }
-              if (!entry && s.activeLabel != null) {
-                entry = chartData.find((d) => d.name === s.activeLabel);
-              }
-              if (entry) handleSelect(entry);
-            }}
+            // Alvo de clique = COLUNA INTEIRA (do topo à base). O recharts
+            // resolve a empresa sob o cursor em qualquer altura.
+            onClick={handleColumnClick}
           >
             <CartesianGrid strokeDasharray="3 3" stroke={grid} vertical={false} />
             <XAxis
@@ -434,50 +531,49 @@ export default function TimeByCompanyChart({
             />
             <Tooltip
               cursor={{ fill: cursor }}
-              contentStyle={{
-                borderRadius: 12,
-                border: "1px solid var(--line)",
-                background: "var(--surface)",
-                color: "var(--fg)",
-                fontSize: 12,
-                boxShadow: "var(--shadow-pop)",
-              }}
-              labelStyle={{ color: "var(--fg)", fontWeight: 600 }}
-              itemStyle={{ color: "var(--fg-muted)" }}
-              formatter={(_value, _name, item) => [
-                formatSmart((item?.payload as { seconds: number }).seconds),
-                "Tempo",
-              ]}
+              content={
+                renderTooltip as unknown as ComponentProps<
+                  typeof Tooltip
+                >["content"]
+              }
             />
-            <Bar
-              dataKey="value"
-              radius={[6, 6, 0, 0]}
-              maxBarSize={56}
-              // Barra com valor minúsculo ganha alguns pixels de altura para não
-              // sumir. O clique é da coluna inteira (BarChart onClick), então a
-              // altura da barra deixou de importar para acertar o alvo.
-              minPointSize={3}
-              // Evita a barra "ativa" que o recharts sobrepõe ao clicar/focar.
-              activeBar={false}
-              cursor={clickable || overflow ? "pointer" : undefined}
-            >
-              {chartData.map((entry) => (
-                <Cell
-                  key={entry.name}
-                  fill={entry.isOthers ? othersFill : "#3145FF"}
-                />
-              ))}
-            </Bar>
+            {/* Uma série por categoria, empilhada. Clicar numa faixa abre as
+                tarefas daquela categoria (marca o guard p/ a coluna se abster). */}
+            {present.map((cat, i) => (
+              <Bar
+                key={cat}
+                dataKey={cat}
+                stackId="a"
+                fill={categoryColor(cat, dark)}
+                activeBar={false}
+                cursor="pointer"
+                // Canto arredondado só no topo da última série (aparência do
+                // gráfico original).
+                radius={i === present.length - 1 ? [4, 4, 0, 0] : undefined}
+                onClick={(entry: unknown) => {
+                  const p = (entry as { payload?: Row } | undefined)?.payload;
+                  if (p) openCategory(p, cat);
+                }}
+              />
+            ))}
+            {tail.length > 0 && (
+              <Bar
+                dataKey={OUTRAS_KEY}
+                stackId="a"
+                fill={othersFill}
+                activeBar={false}
+                cursor="pointer"
+                radius={[4, 4, 0, 0]}
+              />
+            )}
           </BarChart>
         </ResponsiveContainer>
       </div>
 
       <div className="mt-2 flex flex-col items-center gap-1">
-        {clickable && (
-          <p className="text-center text-xs text-fg-subtle">
-            Clique numa coluna para ver as tarefas que compõem o tempo.
-          </p>
-        )}
+        <p className="text-center text-xs text-fg-subtle">
+          Clique numa coluna para ver as tarefas que compõem o tempo.
+        </p>
         {overflow && (
           <button
             type="button"
@@ -491,11 +587,11 @@ export default function TimeByCompanyChart({
         )}
       </div>
 
-      {selected && drilldownPeriod && (
+      {selected && (
         <BreakdownPanel
           selected={selected}
-          period={drilldownPeriod}
-          collaboratorId={drilldownCollaboratorId}
+          period={period}
+          collaboratorId={collaboratorId}
           onClose={() => setSelected(null)}
         />
       )}

@@ -1422,6 +1422,7 @@ export type Database = {
         Row: {
           active: boolean
           active_source: string
+          category: Database["public"]["Enums"]["task_category"] | null
           collaborator_id: string
           company_id: string
           created_at: string
@@ -1444,6 +1445,7 @@ export type Database = {
         Insert: {
           active?: boolean
           active_source?: string
+          category?: Database["public"]["Enums"]["task_category"] | null
           collaborator_id: string
           company_id: string
           created_at?: string
@@ -1466,6 +1468,7 @@ export type Database = {
         Update: {
           active?: boolean
           active_source?: string
+          category?: Database["public"]["Enums"]["task_category"] | null
           collaborator_id?: string
           company_id?: string
           created_at?: string
@@ -2131,6 +2134,14 @@ export type Database = {
     Enums: {
       listing_marketplace: "mercado_livre" | "shopee" | "amazon"
       note_area: "ml" | "amz" | "shp" | "erp" | "site" | "trafego" | "outros" | "cs" | "comercial" | "diagnostico"
+      task_category:
+        | "cadastro"
+        | "precificacao"
+        | "anuncio"
+        | "estudo"
+        | "listagem"
+        | "integracao"
+        | "criar_conta"
       task_kind: "unica" | "diaria"
       task_status: "a_fazer" | "iniciada" | "finalizada" | "cancelada"
       template_type: "padrao" | "listagem"
@@ -2279,6 +2290,15 @@ export const Constants = {
     Enums: {
       listing_marketplace: ["mercado_livre", "shopee", "amazon"],
       note_area: ["ml", "amz", "shp", "erp", "site", "trafego", "outros", "cs", "comercial", "diagnostico"],
+      task_category: [
+        "cadastro",
+        "precificacao",
+        "anuncio",
+        "estudo",
+        "listagem",
+        "integracao",
+        "criar_conta",
+      ],
       task_kind: ["unica", "diaria"],
       task_status: ["a_fazer", "iniciada", "finalizada", "cancelada"],
       template_type: ["padrao", "listagem"],
@@ -2312,6 +2332,7 @@ export const Constants = {
 
 export type Role = Database["public"]["Enums"]["user_role"]
 export type TaskKind = Database["public"]["Enums"]["task_kind"]
+export type TaskCategory = Database["public"]["Enums"]["task_category"]
 export type TaskStatus = Database["public"]["Enums"]["task_status"]
 export type TemplateType = Database["public"]["Enums"]["template_type"]
 export type ListingMarketplace = Database["public"]["Enums"]["listing_marketplace"]

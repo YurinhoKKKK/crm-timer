@@ -5,14 +5,41 @@ import { createClient } from "@/lib/supabase-server";
 import type {
   Role,
   TaskKind,
+  TaskCategory,
   TemplateType,
   ListingMarketplace,
   TablesInsert,
 } from "@/lib/types";
+import { CATEGORY_LABEL } from "@/lib/task-category";
 import {
   applyCompanyStandards,
   type CompanyStandardAssignment,
 } from "@/lib/standard-link";
+
+const VALID_CATEGORIES: TaskCategory[] = [
+  "cadastro",
+  "precificacao",
+  "anuncio",
+  "estudo",
+  "listagem",
+  "integracao",
+  "criar_conta",
+];
+
+// Cargo do usuário atual — a regra de negócio "consultor só cria tarefa única"
+// é aplicada NO SERVIDOR (não só escondendo o campo). A RLS já autoriza a
+// escrita; isto decide o TIPO permitido.
+async function currentRole(
+  supabase: MaybeClient,
+  userId: string
+): Promise<Role | null> {
+  const { data } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .maybeSingle();
+  return (data as { role: Role } | null)?.role ?? null;
+}
 
 const VALID_ROLES: Role[] = ["pending", "colaborador", "consultor", "admin"];
 
@@ -323,7 +350,13 @@ export async function deleteCompany(
 // ---------------------------------------------------------------------------
 
 type TaskTemplateInput = {
-  title: string;
+  // O TÍTULO deixou de ser texto livre: nas tarefas novas ele é DERIVADO da
+  // categoria (padronização do cadastro). Mantido no input por compat, mas
+  // ignorado — o servidor define o título a partir da categoria.
+  title?: string;
+  // Categoria (obrigatória em toda tarefa NOVA). 'listagem' aciona o layout
+  // próprio (template_type='listagem'); as demais usam 'padrao'.
+  category?: string;
   description: string;
   instructions: string;
   companyId: string;
@@ -334,8 +367,8 @@ type TaskTemplateInput = {
   weekdays: number[]; // 0-6 (usado em "diaria")
   endDate: string; // YYYY-MM-DD (opcional, "diaria")
   active?: boolean; // só aplicado na edição
-  // Passo 22 — "Listagem de marcas". Quando templateType='listagem', a tarefa é
-  // sempre pontual (kind='unica' por baixo) e carrega os campos abaixo.
+  // Listagem de marcas (passo 22): campos próprios. templateType é DERIVADO da
+  // categoria; mantido opcional por compat.
   templateType?: TemplateType;
   brands?: string[];
   marketplaces?: ListingMarketplace[];
@@ -345,6 +378,7 @@ type TaskTemplateInput = {
 
 type TemplateFields = {
   title: string;
+  category: TaskCategory | null;
   description: string | null;
   instructions: string | null;
   company_id: string;
@@ -360,28 +394,74 @@ type TemplateFields = {
   listing_marketplaces: ListingMarketplace[];
 };
 
+// Contexto que a validação precisa além do input: o cargo (define o tipo
+// permitido) e, na EDIÇÃO, os campos preservados do molde existente (categoria,
+// título, template_type e kind NÃO são recategorizados/trocados na edição).
+type ValidateCtx = {
+  isAdmin: boolean;
+  existing?: {
+    category: TaskCategory | null;
+    title: string;
+    template_type: TemplateType;
+    kind: TaskKind;
+  };
+};
+
 const VALID_MARKETPLACES: ListingMarketplace[] = [
   "mercado_livre",
   "shopee",
   "amazon",
 ];
 
-// Valida e normaliza a entrada do formulário de tarefa, compartilhado por
-// criar e editar. Retorna os campos prontos para gravar (mais as marcas, que
-// vão numa tabela filha) ou uma mensagem de erro.
+// Valida e normaliza a entrada do formulário de tarefa, compartilhada por criar
+// e editar. Decisões travadas desta reforma:
+//   - TÍTULO é derivado da CATEGORIA (não é mais texto livre).
+//   - CATEGORIA é obrigatória em toda tarefa NOVA; na EDIÇÃO ela NÃO é
+//     recategorizada (preserva a existente — inclusive nula, das tarefas antigas).
+//   - TIPO (única/diária): só o admin escolhe. Consultor cria sempre 'unica' e,
+//     ao editar, o tipo permanece o que já era.
+//   - Categoria 'listagem' ⇒ template_type='listagem' (layout próprio) e a
+//     tarefa é sempre pontual (kind='unica').
 function validateTemplateInput(
-  input: TaskTemplateInput
+  input: TaskTemplateInput,
+  ctx: ValidateCtx
 ): { error: string } | { fields: TemplateFields; brands: string[] } {
-  const title = input.title.trim();
-  if (!title) return { error: "Informe o título da tarefa." };
   if (!input.companyId) return { error: "Selecione a empresa." };
   if (!input.collaboratorId) return { error: "Selecione o colaborador." };
 
-  const templateType: TemplateType =
-    input.templateType === "listagem" ? "listagem" : "padrao";
+  const isUpdate = !!ctx.existing;
+
+  // Categoria efetiva: na edição preserva a do molde; na criação vem do input
+  // e é obrigatória.
+  let category: TaskCategory | null;
+  if (isUpdate) {
+    category = ctx.existing!.category;
+  } else {
+    const raw = (input.category ?? "").trim();
+    if (!raw) return { error: "Selecione a categoria da tarefa." };
+    if (!VALID_CATEGORIES.includes(raw as TaskCategory)) {
+      return { error: "Categoria de tarefa inválida." };
+    }
+    category = raw as TaskCategory;
+  }
+
+  // template_type deriva da categoria na criação; na edição é preservado.
+  const templateType: TemplateType = isUpdate
+    ? ctx.existing!.template_type
+    : category === "listagem"
+      ? "listagem"
+      : "padrao";
+  const isListing = templateType === "listagem";
+
+  // Título derivado (novas) ou preservado (edição). Para listagem, rótulo fixo.
+  const title = isUpdate
+    ? ctx.existing!.title
+    : isListing
+      ? "Listagem"
+      : CATEGORY_LABEL[category as string] ?? (category as string);
 
   // ---- Listagem de marcas (sempre pontual) -------------------------------
-  if (templateType === "listagem") {
+  if (isListing) {
     if (!input.startDate) {
       return { error: "Informe a data da listagem." };
     }
@@ -411,6 +491,7 @@ function validateTemplateInput(
 
     const fields: TemplateFields = {
       title,
+      category,
       description: normalize(input.description),
       instructions: normalize(input.instructions),
       company_id: input.companyId,
@@ -429,16 +510,24 @@ function validateTemplateInput(
   }
 
   // ---- Tarefa comum (única/diária) ---------------------------------------
-  if (input.kind !== "unica" && input.kind !== "diaria") {
-    return { error: "Tipo de tarefa inválido." };
+  // TIPO: só o admin escolhe. Consultor cria 'unica'; ao editar, preserva o que
+  // já era. Aplicado NO SERVIDOR — não há caminho para consultor gerar diária.
+  let kind: TaskKind;
+  if (ctx.isAdmin) {
+    if (input.kind !== "unica" && input.kind !== "diaria") {
+      return { error: "Tipo de tarefa inválido." };
+    }
+    kind = input.kind;
+  } else {
+    kind = isUpdate ? ctx.existing!.kind : "unica";
   }
 
   const weekdays = Array.from(new Set(input.weekdays)).sort((a, b) => a - b);
 
-  if (input.kind === "unica" && !input.startDate) {
+  if (kind === "unica" && !input.startDate) {
     return { error: "Informe a data da tarefa única." };
   }
-  if (input.kind === "diaria" && weekdays.length === 0) {
+  if (kind === "diaria" && weekdays.length === 0) {
     return { error: "Selecione ao menos um dia da semana." };
   }
   if (weekdays.some((d) => d < 0 || d > 6)) {
@@ -447,20 +536,21 @@ function validateTemplateInput(
 
   const fields: TemplateFields = {
     title,
+    category,
     description: normalize(input.description),
     instructions: normalize(input.instructions),
     company_id: input.companyId,
     collaborator_id: input.collaboratorId,
-    kind: input.kind,
+    kind,
     due_time: normalize(input.dueTime),
-    weekdays: input.kind === "unica" ? null : weekdays,
-    end_date: input.kind === "unica" ? null : normalize(input.endDate),
+    weekdays: kind === "unica" ? null : weekdays,
+    end_date: kind === "unica" ? null : normalize(input.endDate),
     template_type: "padrao",
     listing_needs_margin: false,
     listing_tax_rate: null,
     listing_marketplaces: [],
   };
-  if (input.kind === "unica" || input.startDate) {
+  if (kind === "unica" || input.startDate) {
     fields.start_date = input.startDate;
   }
 
@@ -473,11 +563,6 @@ function validateTemplateInput(
 export async function createTaskTemplate(
   input: TaskTemplateInput
 ): Promise<{ error: string | null; id?: string }> {
-  const result = validateTemplateInput(input);
-  if ("error" in result) {
-    return { error: result.error };
-  }
-
   const supabase = await createClient();
 
   const {
@@ -485,6 +570,14 @@ export async function createTaskTemplate(
   } = await supabase.auth.getUser();
   if (!user) {
     return { error: "Sessão expirada. Faça login novamente." };
+  }
+
+  // O cargo decide o TIPO permitido (consultor só cria 'unica'). Fronteira no
+  // servidor — o formulário só esconde o campo.
+  const isAdmin = (await currentRole(supabase, user.id)) === "admin";
+  const result = validateTemplateInput(input, { isAdmin });
+  if ("error" in result) {
+    return { error: result.error };
   }
 
   const row: TablesInsert<"task_templates"> = {
@@ -540,11 +633,6 @@ export async function updateTaskTemplate(
   templateId: string,
   input: TaskTemplateInput
 ): Promise<{ error: string | null; todayStatus?: TodayGenStatus | null }> {
-  const result = validateTemplateInput(input);
-  if ("error" in result) {
-    return { error: result.error };
-  }
-
   const supabase = await createClient();
 
   const {
@@ -552,6 +640,29 @@ export async function updateTaskTemplate(
   } = await supabase.auth.getUser();
   if (!user) {
     return { error: "Sessão expirada. Faça login novamente." };
+  }
+
+  // Na edição NÃO recategorizamos nem trocamos o título/template_type; e o TIPO
+  // só o admin muda (consultor preserva o existente). Lemos o molde atual para
+  // preservar esses campos. A RLS (tt_update) é a fronteira de autorização.
+  const { data: existingData, error: readError } = await supabase
+    .from("task_templates")
+    .select("category, title, template_type, kind")
+    .eq("id", templateId)
+    .maybeSingle();
+  if (readError) return { error: readError.message };
+  if (!existingData) return { error: "Tarefa não encontrada." };
+  const existing = existingData as {
+    category: TaskCategory | null;
+    title: string;
+    template_type: TemplateType;
+    kind: TaskKind;
+  };
+
+  const isAdmin = (await currentRole(supabase, user.id)) === "admin";
+  const result = validateTemplateInput(input, { isAdmin, existing });
+  if ("error" in result) {
+    return { error: result.error };
   }
 
   const { error } = await supabase
@@ -600,7 +711,7 @@ export async function updateTaskTemplate(
   // tarefa pode nascer atrasada) — o cron e o trigger de INSERT seguem intactos.
   // Autorização já veio da RLS do UPDATE acima; não duplica (on conflict no banco).
   let todayStatus: TodayGenStatus | null = null;
-  if (input.kind === "diaria") {
+  if (result.fields.kind === "diaria") {
     const { data, error: genError } = await supabase.rpc(
       "generate_template_today_edit",
       { p_template: templateId }

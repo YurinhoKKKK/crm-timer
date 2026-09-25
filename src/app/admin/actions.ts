@@ -41,6 +41,27 @@ async function currentRole(
   return (data as { role: Role } | null)?.role ?? null;
 }
 
+// O colaborador escolhido é RESPONSÁVEL (vínculo declarado) pela empresa?
+// Mudança de âncora (0090): tarefa só pode ser atribuída a quem é responsável
+// pela empresa. Fronteira NO SERVIDOR — não basta filtrar a lista na tela. A
+// RLS (ccol_select) deixa admin/consultor da empresa lerem o vínculo.
+async function collaboratorInPortfolio(
+  supabase: MaybeClient,
+  companyId: string,
+  collaboratorId: string
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("company_collaborators")
+    .select("collaborator_id")
+    .eq("company_id", companyId)
+    .eq("collaborator_id", collaboratorId)
+    .maybeSingle();
+  return !!data;
+}
+
+const NOT_RESPONSIBLE_MSG =
+  "Este colaborador não é responsável por esta empresa. Vincule-o em Editar empresa antes de atribuir a tarefa.";
+
 const VALID_ROLES: Role[] = ["pending", "colaborador", "consultor", "admin"];
 
 // Altera o cargo de um usuário. A RLS (policy profiles_update_self → with check
@@ -274,6 +295,129 @@ export async function setCompanyConsultants(
   }
 
   revalidatePath("/admin/empresas");
+  return { error: null };
+}
+
+// Colaborador RESPONSÁVEL pela empresa (vínculo DECLARADO — mudança de âncora,
+// migration 0090). Só ADMIN gerencia (a RLS ccol_admin_all é a fronteira real; a
+// UI só esconde para os demais). Mesmo desenho de setCompanyConsultants: grava a
+// DIFERENÇA (remove quem saiu, insere quem entrou).
+//
+// PROTEÇÃO ao remover: se o colaborador removido ainda tem tarefas EM ABERTO na
+// empresa, elas ficarão SEM VÍNCULO (não somem, continuam com ele — nada é
+// apagado). O admin é AVISADO e precisa confirmar. Sem `confirmRemovals`, a ação
+// NÃO aplica nada e devolve `needsConfirm` com a contagem por pessoa; a UI mostra
+// o aviso e chama de novo com confirmRemovals=true.
+export type CollaboratorRemovalWarning = {
+  collaboratorId: string;
+  name: string;
+  openTasks: number;
+};
+
+export async function setCompanyCollaborators(
+  companyId: string,
+  collaboratorIds: string[],
+  confirmRemovals = false
+): Promise<{
+  error: string | null;
+  needsConfirm?: CollaboratorRemovalWarning[];
+}> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Sessão expirada. Faça login novamente." };
+  }
+
+  const desired = new Set(collaboratorIds);
+
+  const { data: current, error: readError } = await supabase
+    .from("company_collaborators")
+    .select("collaborator_id")
+    .eq("company_id", companyId);
+  if (readError) {
+    return { error: readError.message };
+  }
+
+  const currentIds = new Set(
+    (current ?? []).map((r) => (r as { collaborator_id: string }).collaborator_id)
+  );
+
+  const toRemove = Array.from(currentIds).filter((id) => !desired.has(id));
+  const toAdd = Array.from(desired).filter((id) => !currentIds.has(id));
+
+  // Nada mudou.
+  if (toRemove.length === 0 && toAdd.length === 0) {
+    return { error: null };
+  }
+
+  // Antes de remover, conta as tarefas em aberto de cada pessoa que sai. Se
+  // houver alguma e o admin ainda não confirmou, devolve o aviso sem aplicar.
+  if (toRemove.length > 0 && !confirmRemovals) {
+    const warnings: CollaboratorRemovalWarning[] = [];
+    for (const collaboratorId of toRemove) {
+      const { data: countData } = await supabase.rpc(
+        "collaborator_open_task_count",
+        { p_company: companyId, p_collaborator: collaboratorId }
+      );
+      const openTasks = Number(countData ?? 0);
+      if (openTasks > 0) {
+        warnings.push({ collaboratorId, name: "", openTasks });
+      }
+    }
+    if (warnings.length > 0) {
+      // Resolve os nomes para a mensagem de confirmação.
+      const { data: names } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in(
+          "id",
+          warnings.map((w) => w.collaboratorId)
+        );
+      const nameById = new Map(
+        ((names as { id: string; full_name: string; email: string }[]) ?? []).map(
+          (p) => [p.id, p.full_name || p.email]
+        )
+      );
+      return {
+        error: null,
+        needsConfirm: warnings.map((w) => ({
+          ...w,
+          name: nameById.get(w.collaboratorId) ?? "(colaborador)",
+        })),
+      };
+    }
+  }
+
+  if (toRemove.length > 0) {
+    const { error: deleteError } = await supabase
+      .from("company_collaborators")
+      .delete()
+      .eq("company_id", companyId)
+      .in("collaborator_id", toRemove);
+    if (deleteError) {
+      return { error: deleteError.message };
+    }
+  }
+
+  if (toAdd.length > 0) {
+    const { error: insertError } = await supabase
+      .from("company_collaborators")
+      .insert(
+        toAdd.map((collaboratorId) => ({
+          company_id: companyId,
+          collaborator_id: collaboratorId,
+        }))
+      );
+    if (insertError) {
+      return { error: insertError.message };
+    }
+  }
+
+  revalidatePath("/admin/empresas");
+  revalidatePath(`/admin/empresas/${companyId}/editar`);
   return { error: null };
 }
 
@@ -580,6 +724,11 @@ export async function createTaskTemplate(
     return { error: result.error };
   }
 
+  // Âncora (0090): só se atribui tarefa a quem é responsável pela empresa.
+  if (!(await collaboratorInPortfolio(supabase, input.companyId, input.collaboratorId))) {
+    return { error: NOT_RESPONSIBLE_MSG };
+  }
+
   const row: TablesInsert<"task_templates"> = {
     ...result.fields,
     created_by: user.id,
@@ -647,7 +796,7 @@ export async function updateTaskTemplate(
   // preservar esses campos. A RLS (tt_update) é a fronteira de autorização.
   const { data: existingData, error: readError } = await supabase
     .from("task_templates")
-    .select("category, title, template_type, kind")
+    .select("category, title, template_type, kind, collaborator_id")
     .eq("id", templateId)
     .maybeSingle();
   if (readError) return { error: readError.message };
@@ -657,12 +806,23 @@ export async function updateTaskTemplate(
     title: string;
     template_type: TemplateType;
     kind: TaskKind;
+    collaborator_id: string;
   };
 
   const isAdmin = (await currentRole(supabase, user.id)) === "admin";
   const result = validateTemplateInput(input, { isAdmin, existing });
   if ("error" in result) {
     return { error: result.error };
+  }
+
+  // Âncora (0090): ao TROCAR o responsável, o novo tem de ser responsável pela
+  // empresa. Só valida quando muda — preserva a edição de tarefas legadas cujo
+  // responsável não foi para o backfill (só tarefas padrão ativas entraram).
+  if (
+    input.collaboratorId !== existing.collaborator_id &&
+    !(await collaboratorInPortfolio(supabase, input.companyId, input.collaboratorId))
+  ) {
+    return { error: NOT_RESPONSIBLE_MSG };
   }
 
   const { error } = await supabase

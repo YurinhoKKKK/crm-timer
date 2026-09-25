@@ -3,6 +3,7 @@ import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import type { Company } from "@/lib/types";
 import CompanyConsultants from "../../CompanyConsultants";
+import CompanyCollaborators from "../../CompanyCollaborators";
 import CompanyLabels from "../../CompanyLabels";
 import CompanyEditor from "../CompanyEditor";
 import DeleteCompanyButton from "../DeleteCompanyButton";
@@ -12,6 +13,9 @@ import { loadLabelCatalog, loadCompanyLabels } from "@/lib/labels";
 type ConsultantOption = { id: string; full_name: string; email: string };
 type CompanyLink = {
   consultant: ConsultantOption | ConsultantOption[] | null;
+};
+type CompanyCollaboratorLink = {
+  collaborator: ConsultantOption | ConsultantOption[] | null;
 };
 
 function first<T>(value: T | T[] | null): T | null {
@@ -32,7 +36,9 @@ export default async function EmpresaEditarPage({
   const [
     { data: companyData },
     { data: linksData },
+    { data: collaboratorLinksData },
     { data: consultoresData },
+    { data: colaboradoresData },
     labelCatalog,
     companyLabels,
   ] = await Promise.all([
@@ -49,11 +55,25 @@ export default async function EmpresaEditarPage({
         "consultant:profiles!company_consultants_consultant_id_fkey(id, full_name, email)"
       )
       .eq("company_id", id),
+    // Vínculos de colaborador responsável (âncora — migration 0090).
+    supabase
+      .from("company_collaborators")
+      .select(
+        "collaborator:profiles!company_collaborators_collaborator_id_fkey(id, full_name, email)"
+      )
+      .eq("company_id", id),
     supabase
       .from("profiles")
       .select("id, full_name, email")
       // Admins também podem ser responsáveis (consultores) de uma empresa.
       .in("role", ["consultor", "admin"])
+      .order("full_name", { ascending: true }),
+    // Candidatos a colaborador responsável — qualquer cargo pode ser vinculado
+    // (há consultores/admins que executam).
+    supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("role", ["colaborador", "consultor", "admin"])
       .order("full_name", { ascending: true }),
     loadLabelCatalog(supabase),
     loadCompanyLabels(supabase, id),
@@ -67,6 +87,16 @@ export default async function EmpresaEditarPage({
   for (const link of (linksData as CompanyLink[]) ?? []) {
     const c = first(link.consultant);
     if (c) selectedIds.push(c.id);
+  }
+
+  const colaboradores = withSelf(
+    (colaboradoresData as ConsultantOption[]) ?? [],
+    profile
+  );
+  const selectedCollaboratorIds: string[] = [];
+  for (const link of (collaboratorLinksData as CompanyCollaboratorLink[]) ?? []) {
+    const c = first(link.collaborator);
+    if (c) selectedCollaboratorIds.push(c.id);
   }
 
   return (
@@ -86,6 +116,14 @@ export default async function EmpresaEditarPage({
             companyId={company.id}
             consultores={consultores}
             selectedIds={selectedIds}
+          />
+        </section>
+
+        <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
+          <CompanyCollaborators
+            companyId={company.id}
+            collaborators={colaboradores}
+            selectedIds={selectedCollaboratorIds}
           />
         </section>
 

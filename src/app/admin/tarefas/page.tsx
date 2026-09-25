@@ -7,7 +7,7 @@ import TaskTemplateList, { type TemplateItem } from "./TaskTemplateList";
 import TarefasTabs from "./TarefasTabs";
 import NewStandardTaskForm from "./NewStandardTaskForm";
 import StandardTaskList, { type StandardItem } from "./StandardTaskList";
-import { withSelf } from "@/lib/people";
+import { withSelf, loadResponsiblesByCompany } from "@/lib/people";
 import { loadAllLabelsByCompany, type Label } from "@/lib/labels";
 import { avatarUrl } from "@/lib/avatar";
 import { perfRoute } from "@/lib/perf";
@@ -50,6 +50,7 @@ export default async function TarefasPage() {
     { data: standardData, error: standardError },
     { data: usageData },
     labelsMap,
+    responsiblesByCompany,
   ] = await Promise.all([
     perf.timed(
       "companies",
@@ -94,6 +95,11 @@ export default async function TarefasPage() {
     // Etiquetas herdadas por empresa (exibidas em cada tarefa da lista). Sem
     // filtro por id, entra nesta mesma onda em vez de esperar os templates.
     perf.timed("company_labels (paralela)", loadAllLabelsByCompany(supabase)),
+    // Âncora (0090): responsáveis por empresa, p/ filtrar o seletor do cadastro.
+    perf.timed(
+      "company_collaborators (responsáveis por empresa)",
+      loadResponsiblesByCompany(supabase)
+    ),
   ]);
 
   const companies = (companiesData as Option[]) ?? [];
@@ -226,6 +232,7 @@ export default async function TarefasPage() {
               <NewTaskForm
                 companies={companies}
                 collaborators={collaborators}
+                responsiblesByCompany={responsiblesByCompany}
                 isAdmin
               />
             )}

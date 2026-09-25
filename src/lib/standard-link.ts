@@ -127,6 +127,58 @@ async function createLink(
   return error?.message ?? null;
 }
 
+// Âncora (0090): a tarefa padrão só pode ser atribuída a quem é RESPONSÁVEL pela
+// empresa (vínculo declarado). Vale para os dois sentidos do fluxo. Validamos NO
+// SERVIDOR e ANTES de qualquer escrita, para nada ser aplicado pela metade.
+// Recebe os pares (empresa, colaborador) que vão ser CRIADOS ou TROCADOS e
+// devolve uma mensagem de erro (nomeando o primeiro caso) se algum não for
+// responsável; null se todos estiverem ok.
+async function assertResponsibles(
+  supabase: ServerClient,
+  pairs: { companyId: string; collaboratorId: string }[]
+): Promise<string | null> {
+  if (pairs.length === 0) return null;
+
+  const companyIds = Array.from(new Set(pairs.map((p) => p.companyId)));
+  const { data, error } = await supabase
+    .from("company_collaborators")
+    .select("company_id, collaborator_id")
+    .in("company_id", companyIds);
+  if (error) return error.message;
+
+  const byCompany = new Map<string, Set<string>>();
+  for (const r of (data as { company_id: string; collaborator_id: string }[]) ?? []) {
+    (byCompany.get(r.company_id) ?? byCompany.set(r.company_id, new Set()).get(r.company_id)!).add(
+      r.collaborator_id
+    );
+  }
+
+  const offender = pairs.find(
+    (p) => !(byCompany.get(p.companyId)?.has(p.collaboratorId) ?? false)
+  );
+  if (!offender) return null;
+
+  // Nomeia o primeiro caso para a mensagem ser acionável.
+  const [{ data: person }, { data: company }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("full_name, email")
+      .eq("id", offender.collaboratorId)
+      .maybeSingle(),
+    supabase
+      .from("companies")
+      .select("name")
+      .eq("id", offender.companyId)
+      .maybeSingle(),
+  ]);
+  const who =
+    (person as { full_name: string; email: string } | null)?.full_name ||
+    (person as { email: string } | null)?.email ||
+    "O colaborador";
+  const where = (company as { name: string } | null)?.name ?? "esta empresa";
+  return `${who} não é responsável por ${where}. Vincule a pessoa à empresa (Editar empresa) antes de atribuir a tarefa padrão.`;
+}
+
 export type CompanyStandardAssignment = {
   standardId: string;
   collaboratorId: string;
@@ -178,6 +230,20 @@ export async function applyCompanyStandards(
   const desired = new Map<string, CompanyStandardAssignment>();
   for (const a of assignments) {
     if (a.standardId && a.collaboratorId) desired.set(a.standardId, a);
+  }
+
+  // Âncora (0090): valida os responsáveis ANTES de mexer em nada. Só precisa
+  // checar os que vão ser CRIADOS ou ter o responsável TROCADO.
+  {
+    const toCheck: { companyId: string; collaboratorId: string }[] = [];
+    for (const [standardId, a] of Array.from(desired.entries())) {
+      const active = activeByStandard.get(standardId);
+      if (!active || active.collaborator_id !== a.collaboratorId) {
+        toCheck.push({ companyId, collaboratorId: a.collaboratorId });
+      }
+    }
+    const invalid = await assertResponsibles(supabase, toCheck);
+    if (invalid) return invalid;
   }
 
   // (a) Desativar os que saíram da seleção — exceto os de molde INATIVO (blindados).
@@ -259,6 +325,20 @@ export async function applyStandardCompanies(
   const desired = new Map<string, StandardCompanyAssignment>();
   for (const a of assignments) {
     if (a.companyId && a.collaboratorId) desired.set(a.companyId, a);
+  }
+
+  // Âncora (0090): valida os responsáveis ANTES de qualquer escrita. Só os que
+  // vão ser CRIADOS ou ter o responsável TROCADO.
+  {
+    const toCheck: { companyId: string; collaboratorId: string }[] = [];
+    for (const [companyId, a] of Array.from(desired.entries())) {
+      const active = activeByCompany.get(companyId);
+      if (!active || active.collaborator_id !== a.collaboratorId) {
+        toCheck.push({ companyId, collaboratorId: a.collaboratorId });
+      }
+    }
+    const invalid = await assertResponsibles(supabase, toCheck);
+    if (invalid) return invalid;
   }
 
   // (a) Desativar as empresas que saíram da seleção.

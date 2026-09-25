@@ -43,6 +43,34 @@ export function clampCapacityPeriod(
 
 export type CapacityGroupSlice = { name: string; count: number };
 
+// ------------------------------------------------------- RECORTES DO DRILL-DOWN
+// Vivem aqui (módulo neutro) e não no arquivo de server actions: um arquivo
+// "use server" só pode exportar funções async — nada de const/type/guard.
+//
+// Recortes que abrem uma lista de EMPRESAS (o painel padrão).
+export type DrilldownScope =
+  | "ativos"
+  | "exclusivos"
+  | "compartilhados"
+  | "alerta"
+  | "parados"
+  | "sem_registro"
+  | "empresas"
+  | "fora_da_carteira"
+  | "colab_ativos";
+
+// Recortes que abrem uma lista de TAREFAS (colunas de atividade — contam
+// tarefa/tempo, não empresa; a lista de tarefas casa exata com a célula).
+export const TASK_DRILLDOWN_SCOPES = ["horas", "pontuais", "atrasadas"] as const;
+export type TaskDrilldownScope = (typeof TASK_DRILLDOWN_SCOPES)[number];
+
+// União usada pelos handlers de clique da tela (empresa OU tarefa).
+export type AnyDrilldownScope = DrilldownScope | TaskDrilldownScope;
+
+export function isTaskScope(s: AnyDrilldownScope): s is TaskDrilldownScope {
+  return (TASK_DRILLDOWN_SCOPES as readonly string[]).includes(s);
+}
+
 export type CapacityRow = {
   personId: string;
   name: string | null;
@@ -57,6 +85,14 @@ export type CapacityRow = {
   carteiraNoRecord: number; // SEM REGISTRO de contato nenhum (informativo, não é abandono)
   hasCarteira: boolean; // tem carteira → entra na tabela de consultores
   isExecutor: boolean; // tem execução (qualquer tempo) → tabela de colaboradores
+  // CARTEIRA DO COLABORADOR (vínculo declarado — company_collaborators, 0090).
+  // A tabela de colaboradores passa a mostrar clientes ativos + composição.
+  colabCarteiraActive: number;
+  colabCarteiraByGroup: CapacityGroupSlice[];
+  hasColabCarteira: boolean; // tem vínculo declarado → aparece na tabela mesmo sem execução
+  // FORA DA CARTEIRA (foto do agora): empresas com tarefa EM ABERTO onde a pessoa
+  // NÃO é responsável — a exceção indevida que a mudança de âncora quer expor.
+  colabOutOfPortfolio: number;
   // ATIVIDADE — no período selecionado
   actSeconds: number;
   actSecondsPontual: number;
@@ -101,10 +137,17 @@ export async function loadCapacity(
   period: CapacityPeriod
 ): Promise<CapacityRow[]> {
   const { start, end } = periodRange(period);
-  const { data } = await supabase.rpc("team_capacity", {
+  const { data, error } = await supabase.rpc("team_capacity", {
     p_start: start,
     p_end: end,
   });
+
+  // Não engolir a falha em silêncio: uma RPC que erra (ex.: PGRST202 logo após
+  // um drop+recreate, com o cache de schema do PostgREST ainda velho) apareceria
+  // como "nenhum dado" sem pista nenhuma. Logamos no servidor para o diagnóstico.
+  if (error) {
+    console.error("[capacidade] team_capacity falhou:", error);
+  }
 
   const rows =
     (data as
@@ -127,6 +170,10 @@ export async function loadCapacity(
           act_overdue: number;
           act_companies: number;
           act_has_activity: boolean;
+          colab_active: number;
+          colab_by_group: CapacityGroupSlice[] | null;
+          has_colab_carteira: boolean;
+          colab_out_of_portfolio: number;
         }[]
       | null) ?? [];
 
@@ -150,6 +197,10 @@ export async function loadCapacity(
     actOverdue: r.act_overdue,
     actCompanies: r.act_companies,
     actHasActivity: r.act_has_activity,
+    colabCarteiraActive: r.colab_active,
+    colabCarteiraByGroup: r.colab_by_group ?? [],
+    hasColabCarteira: r.has_colab_carteira,
+    colabOutOfPortfolio: r.colab_out_of_portfolio,
   }));
 }
 

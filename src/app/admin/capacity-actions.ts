@@ -4,22 +4,18 @@ import { createClient } from "@/lib/supabase-server";
 import {
   periodRange,
   type CapacityPeriod,
+  type DrilldownScope,
+  type TaskDrilldownScope,
 } from "@/lib/capacity";
+
+// Os tipos/const/guard de recorte moram em "@/lib/capacity" (módulo neutro):
+// este arquivo é "use server" e só pode exportar funções async.
 
 // Drill-down da tela de Capacidade: a LISTA por trás de um número. Sai do BANCO
 // (RPC team_capacity_drilldown), que repete o MESMO critério de ativo e de
 // vermelho do cálculo (fonte única em capacity_excluded_groups / client_followup)
 // — se divergisse, a tela mostraria 25 e listaria 24. É só leitura; o is_admin()
 // é checado dentro da RPC. Nada é filtrado no cliente a partir de base grande.
-
-export type DrilldownScope =
-  | "ativos"
-  | "exclusivos"
-  | "compartilhados"
-  | "alerta"
-  | "parados"
-  | "sem_registro"
-  | "empresas";
 
 export type DrilldownLabel = {
   name: string;
@@ -101,4 +97,64 @@ export async function getCapacityDrilldown(
   }));
 
   return { error: null, companies };
+}
+
+// -------------------------------------------------------------- TAREFAS
+// As colunas de atividade (Horas, Pontuais, Atrasadas) contam tarefa/tempo, não
+// empresa — a lista por trás é de TAREFAS. Sai da RPC team_capacity_task_drilldown,
+// que repete os MESMOS filtros de team_capacity (o conjunto de linhas casa
+// exatamente com o número da célula). Cada tarefa é clicável no painel (abre o
+// TaskDetailSheet). Só leitura; is_admin() é checado dentro da RPC.
+
+export type DrilldownTask = {
+  id: string;
+  title: string;
+  companyName: string;
+  status: string;
+  refAt: string | null; // pontuais: conclusão; atrasadas: prazo; horas: último apontamento
+  seconds: number | null; // só em "horas" (tempo somado no período para a tarefa)
+};
+
+export async function getCapacityTaskDrilldown(
+  personId: string,
+  scope: TaskDrilldownScope,
+  period: CapacityPeriod
+): Promise<{ error: string | null; tasks?: DrilldownTask[] }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Sessão expirada. Faça login novamente." };
+
+  const { start, end } = periodRange(period);
+  const { data, error } = await supabase.rpc("team_capacity_task_drilldown", {
+    p_person: personId,
+    p_scope: scope,
+    p_start: start,
+    p_end: end,
+  });
+  if (error) return { error: error.message };
+
+  const rows =
+    (data as
+      | {
+          task_id: string;
+          title: string;
+          company_name: string;
+          status: string;
+          ref_at: string | null;
+          seconds: number | string | null;
+        }[]
+      | null) ?? [];
+
+  const tasks: DrilldownTask[] = rows.map((r) => ({
+    id: r.task_id,
+    title: r.title,
+    companyName: r.company_name,
+    status: r.status,
+    refAt: r.ref_at,
+    seconds: r.seconds === null ? null : Number(r.seconds),
+  }));
+
+  return { error: null, tasks };
 }

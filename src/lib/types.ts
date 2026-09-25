@@ -288,6 +288,39 @@ export type Database = {
           },
         ]
       }
+      company_collaborators: {
+        Row: {
+          assigned_at: string
+          collaborator_id: string
+          company_id: string
+        }
+        Insert: {
+          assigned_at?: string
+          collaborator_id: string
+          company_id: string
+        }
+        Update: {
+          assigned_at?: string
+          collaborator_id?: string
+          company_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_collaborators_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "company_collaborators_collaborator_id_fkey"
+            columns: ["collaborator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       company_groups: {
         Row: {
           color: string

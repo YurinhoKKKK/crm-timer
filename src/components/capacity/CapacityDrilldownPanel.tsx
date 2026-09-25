@@ -4,19 +4,28 @@ import { useEffect, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Avatar from "@/components/Avatar";
+import TaskDetailLink from "@/components/TaskDetailLink";
 import { avatarUrl } from "@/lib/avatar";
-import { PERIOD_LABEL, type CapacityPeriod } from "@/lib/capacity";
+import {
+  PERIOD_LABEL,
+  toHours,
+  isTaskScope,
+  type CapacityPeriod,
+  type DrilldownScope,
+  type AnyDrilldownScope,
+} from "@/lib/capacity";
 import {
   getCapacityDrilldown,
+  getCapacityTaskDrilldown,
   type DrilldownCompany,
-  type DrilldownScope,
+  type DrilldownTask,
 } from "@/app/admin/capacity-actions";
 
 export type DrilldownTarget = {
   personId: string;
   personName: string;
-  scope: DrilldownScope;
-  count: number;
+  scope: AnyDrilldownScope;
+  count: number; // nº de itens; em "horas" é o total de SEGUNDOS (vira horas no título)
   period: CapacityPeriod;
 };
 
@@ -29,11 +38,13 @@ export type DrilldownFetcher = (
 ) => Promise<{ error: string | null; companies?: DrilldownCompany[] }>;
 
 // Substantivo do recorte, concordando com a contagem. É o que vai no título:
-// "Theo Garcia · 25 clientes ativos".
-function scopeNoun(scope: DrilldownScope, n: number): string {
+// "Theo Garcia · 25 clientes ativos". Em "horas" o título é tratado à parte
+// (o número é tempo, não contagem).
+function scopeNoun(scope: AnyDrilldownScope, n: number): string {
   const plural = n !== 1;
   switch (scope) {
     case "ativos":
+    case "colab_ativos":
       return plural ? "clientes ativos" : "cliente ativo";
     case "exclusivos":
       return plural ? "clientes exclusivos" : "cliente exclusivo";
@@ -47,11 +58,67 @@ function scopeNoun(scope: DrilldownScope, n: number): string {
       return plural ? "clientes sem registro" : "cliente sem registro";
     case "empresas":
       return plural ? "empresas atendidas" : "empresa atendida";
+    case "fora_da_carteira":
+      return plural ? "empresas fora da carteira" : "empresa fora da carteira";
+    case "pontuais":
+      return plural ? "tarefas pontuais concluídas" : "tarefa pontual concluída";
+    case "atrasadas":
+      return plural ? "tarefas atrasadas" : "tarefa atrasada";
+    case "horas":
+      return "de trabalho"; // usado só como sufixo; o título formata as horas
   }
 }
 
-// O período só entra no título quando o recorte depende dele (empresas).
-const PERIOD_SCOPED: DrilldownScope[] = ["empresas"];
+// Linha-título sob o nome. "horas" mostra o tempo (o número é segundos); os
+// demais mostram "N substantivo".
+function subtitleText(scope: AnyDrilldownScope, count: number): string {
+  if (scope === "horas") {
+    const h = toHours(count).toLocaleString("pt-BR", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    });
+    return `${h} h de trabalho`;
+  }
+  return `${count} ${scopeNoun(scope, count)}`;
+}
+
+// O período entra no título quando o recorte depende dele: empresas atendidas e
+// as três colunas de atividade (horas/pontuais/atrasadas). "colab_ativos" é foto
+// do agora, então NÃO leva período.
+const PERIOD_SCOPED: AnyDrilldownScope[] = [
+  "empresas",
+  "horas",
+  "pontuais",
+  "atrasadas",
+];
+
+function fmtHoursShort(seconds: number): string {
+  return toHours(seconds).toLocaleString("pt-BR", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+}
+
+// Data de referência da tarefa, no fuso de Brasília (como o resto do sistema).
+function fmtRefDate(iso: string | null): string | null {
+  if (!iso) return null;
+  return new Date(iso).toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+  });
+}
+
+// Texto contextual sob cada tarefa, conforme o recorte.
+function taskRefText(scope: AnyDrilldownScope, task: DrilldownTask): string | null {
+  const d = fmtRefDate(task.refAt);
+  if (!d) return null;
+  if (scope === "pontuais") return `Concluída em ${d}`;
+  if (scope === "atrasadas") return `Venceu em ${d}`;
+  if (scope === "horas") return `Último apontamento ${d}`;
+  return null;
+}
 
 export default function CapacityDrilldownPanel({
   target,
@@ -66,25 +133,36 @@ export default function CapacityDrilldownPanel({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [companies, setCompanies] = useState<DrilldownCompany[]>([]);
+  const [tasks, setTasks] = useState<DrilldownTask[]>([]);
   const [pending, startTransition] = useTransition();
   const [navId, setNavId] = useState<string | null>(null);
 
   const { personId, personName, scope, count, period } = target;
+  const taskScope = isTaskScope(scope);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
     setError(null);
-    fetcher(personId, scope, period).then((res) => {
-      if (!active) return;
-      if (res.error) setError(res.error);
-      else setCompanies(res.companies ?? []);
-      setLoading(false);
+    // Recortes de ATIVIDADE abrem TAREFAS (RPC própria); os demais, EMPRESAS.
+    const load = isTaskScope(scope)
+      ? getCapacityTaskDrilldown(personId, scope, period).then((res) => {
+          if (!active) return;
+          if (res.error) setError(res.error);
+          else setTasks(res.tasks ?? []);
+        })
+      : fetcher(personId, scope, period).then((res) => {
+          if (!active) return;
+          if (res.error) setError(res.error);
+          else setCompanies(res.companies ?? []);
+        });
+    load.finally(() => {
+      if (active) setLoading(false);
     });
     return () => {
       active = false;
     };
-  }, [personId, scope, period]);
+  }, [personId, scope, period, fetcher]);
 
   // Fechar por Esc (clique fora é o backdrop abaixo).
   useEffect(() => {
@@ -102,7 +180,8 @@ export default function CapacityDrilldownPanel({
     startTransition(() => router.push(`/admin/empresas/${id}`));
   }
 
-  const title = `${personName} · ${count} ${scopeNoun(scope, count)}`;
+  const subtitle = subtitleText(scope, count);
+  const title = `${personName} · ${subtitle}`;
   const periodScoped = PERIOD_SCOPED.includes(scope);
 
   return createPortal(
@@ -121,9 +200,7 @@ export default function CapacityDrilldownPanel({
               {periodScoped ? `Detalhe · ${PERIOD_LABEL[period]}` : "Detalhe · situação atual"}
             </p>
             <h2 className="truncate text-lg font-semibold text-fg">{personName}</h2>
-            <p className="mt-1 text-sm text-risd">
-              {count} {scopeNoun(scope, count)}
-            </p>
+            <p className="mt-1 text-sm text-risd">{subtitle}</p>
           </div>
           <button
             type="button"
@@ -145,6 +222,53 @@ export default function CapacityDrilldownPanel({
               </p>
               <p className="mt-1 text-xs text-fg-subtle">{error}</p>
             </div>
+          ) : taskScope ? (
+            tasks.length === 0 ? (
+              <p className="py-8 text-center text-sm text-fg-subtle">
+                Nenhuma tarefa neste recorte.
+              </p>
+            ) : (
+              // Lista de TAREFAS (colunas de atividade). Cada linha abre o
+              // TaskDetailSheet unificado (z-sheet 60, por cima deste painel).
+              <ul className="space-y-2">
+                {tasks.map((t) => {
+                  const ref = taskRefText(scope, t);
+                  return (
+                    <li key={t.id}>
+                      <TaskDetailLink
+                        taskId={t.id}
+                        className="block w-full rounded-xl border border-line bg-surface p-3 text-left transition hover:border-risd/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="min-w-0 font-medium text-fg">{t.title}</span>
+                          {t.seconds !== null && (
+                            <span className="shrink-0 text-sm font-semibold tabular-nums text-fg">
+                              {fmtHoursShort(t.seconds)} h
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-fg-muted">
+                          <span className="inline-flex items-center rounded-full border border-line bg-surface-2/60 px-2 py-0.5">
+                            {t.companyName}
+                          </span>
+                          {ref && (
+                            <span
+                              className={
+                                scope === "atrasadas"
+                                  ? "text-amber-700 dark:text-amber-300"
+                                  : "text-fg-subtle"
+                              }
+                            >
+                              {ref}
+                            </span>
+                          )}
+                        </div>
+                      </TaskDetailLink>
+                    </li>
+                  );
+                })}
+              </ul>
+            )
           ) : companies.length === 0 ? (
             <p className="py-8 text-center text-sm text-fg-subtle">
               Nenhuma empresa neste recorte.
@@ -214,6 +338,17 @@ export default function CapacityDrilldownPanel({
                       <p className="mt-2 text-xs text-fg-muted">
                         <span className="font-medium text-fg">Sem registro de contato</span>{" "}
                         no sistema (pode ter havido contato pela Digisac)
+                      </p>
+                    )}
+
+                    {/* Fora da carteira: tem tarefa aberta aqui, mas não é o
+                        responsável declarado — a exceção a corrigir. */}
+                    {scope === "fora_da_carteira" && (
+                      <p className="mt-2 text-xs text-fg-muted">
+                        <span className="font-medium text-amber-700 dark:text-amber-300">
+                          Tarefa em aberto
+                        </span>{" "}
+                        sem ser responsável por esta empresa
                       </p>
                     )}
                   </button>

@@ -11,12 +11,12 @@ import {
   toHours,
   type CapacityPeriod,
   type CapacityRow,
+  type AnyDrilldownScope,
 } from "@/lib/capacity";
 import CapacityDrilldownPanel, {
   type DrilldownTarget,
   type DrilldownFetcher,
 } from "@/components/capacity/CapacityDrilldownPanel";
-import type { DrilldownScope } from "@/app/admin/capacity-actions";
 
 // DUAS populações, DUAS tabelas empilhadas — juntar consultores (carteira, zero
 // hora) e colaboradores (hora, zero carteira) numa tabela só deixava metade das
@@ -55,9 +55,10 @@ export default function CapacityView({
   const [drill, setDrill] = useState<DrilldownTarget | null>(null);
 
   // Abre o painel de drill-down. Valor zero não abre (célula não é clicável).
+  // Em "horas" o count é o total de SEGUNDOS (o painel formata como horas).
   const openDrill = (
     r: CapacityRow,
-    scope: DrilldownScope,
+    scope: AnyDrilldownScope,
     count: number
   ) => {
     if (count <= 0) return;
@@ -74,8 +75,11 @@ export default function CapacityView({
     () => filtered.filter((r) => r.hasCarteira),
     [filtered]
   );
+  // Colaborador entra na tabela se EXECUTA (tempo no período) OU tem CARTEIRA
+  // declarada (vínculo — âncora 0090), para o vinculado sem execução ainda
+  // aparecer com sua carteira.
   const colaboradores = useMemo(
-    () => filtered.filter((r) => r.isExecutor),
+    () => filtered.filter((r) => r.isExecutor || r.hasColabCarteira),
     [filtered]
   );
 
@@ -155,7 +159,7 @@ type ConsultKey =
   | "stalled"
   | "noRecord";
 
-type OpenDrill = (r: CapacityRow, scope: DrilldownScope, count: number) => void;
+type OpenDrill = (r: CapacityRow, scope: AnyDrilldownScope, count: number) => void;
 
 function ConsultoresTable({
   rows,
@@ -291,7 +295,7 @@ function ConsultoresTable({
 
 // ----------------------------------------------------------------- COLABORADORES
 
-type ColabKey = "name" | "hours" | "done" | "overdue" | "companies";
+type ColabKey = "name" | "active" | "outside" | "hours" | "done" | "overdue";
 
 function ColaboradoresTable({
   rows,
@@ -325,14 +329,16 @@ function ColaboradoresTable({
       switch (sort.key) {
         case "name":
           return norm(r.name ?? "");
+        case "active":
+          return r.colabCarteiraActive;
+        case "outside":
+          return r.colabOutOfPortfolio;
         case "hours":
           return r.actSeconds;
         case "done":
           return r.actPontualDone;
         case "overdue":
           return r.actOverdue;
-        case "companies":
-          return r.actCompanies;
       }
     };
     return [...rows].sort((a, b) => {
@@ -354,7 +360,7 @@ function ColaboradoresTable({
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h2 className="text-base font-semibold text-fg">Colaboradores</h2>
         <p className="text-xs text-fg-subtle">
-          Execução no período — quem cronometra tarefas.
+          Carteira (foto do agora) + execução no período.
         </p>
       </div>
 
@@ -375,16 +381,55 @@ function ColaboradoresTable({
 
       {sorted.length === 0 ? (
         <EmptyCard>
-          {empty ? "Ninguém com execução neste recorte." : "Ninguém com execução ainda."}
+          {empty ? "Ninguém neste recorte." : "Ninguém com carteira ou execução ainda."}
         </EmptyCard>
       ) : (
-        <TableShell minWidth="42rem">
+        <TableShell minWidth="44rem">
+          {/* Duas FAIXAS de cabeçalho: a CARTEIRA (foto do agora) não muda com o
+              período; a ATIVIDADE muda. A faixa carrega o período ao lado das
+              colunas que ele afeta, para não parecer que o filtro "não pegou". */}
           <thead>
+            <tr className="border-b border-line/50 text-fg-subtle">
+              <th
+                rowSpan={2}
+                className="sticky left-0 z-10 bg-surface px-3 py-2 text-left align-bottom font-medium"
+              >
+                <button
+                  type="button"
+                  onClick={() => toggle("name")}
+                  className={`inline-flex items-center gap-1 rounded transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd ${
+                    sort.key === "name" ? "text-fg" : "text-fg-muted hover:text-fg"
+                  }`}
+                >
+                  <span className="whitespace-nowrap">Pessoa</span>
+                  <span className={`text-[10px] ${sort.key === "name" ? "opacity-100" : "opacity-0"}`}>
+                    {sort.desc ? "▼" : "▲"}
+                  </span>
+                </button>
+              </th>
+              <th
+                colSpan={2}
+                className="px-3 pt-2 pb-0.5 text-center text-[11px] font-semibold uppercase tracking-wide text-fg-subtle"
+                title="Situação atual — não muda com o período."
+              >
+                Carteira · agora
+              </th>
+              <th
+                colSpan={3}
+                className="border-l border-line/60 px-3 pt-2 pb-0.5 text-center text-[11px] font-semibold uppercase tracking-wide text-fg-subtle"
+                title={`Execução no período: ${PERIOD_LABEL[period]}.`}
+              >
+                Atividade · {PERIOD_LABEL[period]}
+              </th>
+            </tr>
             <tr className="border-b border-line text-fg-muted">
-              <Th align="left" sticky active={sort.key === "name"} desc={sort.desc} onClick={() => toggle("name")}>
-                Pessoa
+              <Th align="right" active={sort.key === "active"} desc={sort.desc} onClick={() => toggle("active")} title="Clientes ATIVOS na carteira do colaborador (vínculo declarado; por exclusão de Cancelados, Pausados e Projetos Finalizados). Foto do agora — não muda com o período.">
+                Ativos
               </Th>
-              <Th align="right" active={sort.key === "hours"} desc={sort.desc} onClick={() => toggle("hours")} title="Horas trabalhadas no período (pela data real do trabalho), separando pontuais de diárias">
+              <Th align="right" active={sort.key === "outside"} desc={sort.desc} onClick={() => toggle("outside")} title="Empresas em que a pessoa tem tarefa EM ABERTO mas NÃO é responsável (não está na carteira declarada). Foto do agora — não muda com o período. Zero é o esperado.">
+                Fora da carteira
+              </Th>
+              <Th align="right" divider active={sort.key === "hours"} desc={sort.desc} onClick={() => toggle("hours")} title="Horas trabalhadas no período (pela data real do trabalho), separando pontuais de diárias">
                 Horas (P/D)
               </Th>
               <Th align="right" active={sort.key === "done"} desc={sort.desc} onClick={() => toggle("done")} title="Tarefas pontuais concluídas no período">
@@ -393,9 +438,6 @@ function ColaboradoresTable({
               <Th align="right" active={sort.key === "overdue"} desc={sort.desc} onClick={() => toggle("overdue")} title="Tarefas atrasadas (em aberto e vencidas) no período">
                 Atrasadas
               </Th>
-              <Th align="right" active={sort.key === "companies"} desc={sort.desc} onClick={() => toggle("companies")} title="Empresas distintas com qualquer atividade no período: apontamento de tempo OU tarefa pontual concluída">
-                Empresas
-              </Th>
             </tr>
           </thead>
           <tbody>
@@ -403,37 +445,62 @@ function ColaboradoresTable({
               const noReg = !r.actHasActivity;
               return (
                 <tr key={r.personId} className="border-b border-line/60 align-top last:border-0 hover:bg-surface-2/40">
-                  <PersonCell r={r} />
+                  <PersonCell r={r} withGroup groupSlices={r.colabCarteiraByGroup} />
+                  {/* CARTEIRA — sempre número real (foto do agora), nunca traço. */}
                   <td className="px-3 py-2.5 text-right tabular-nums">
-                    {noReg ? (
-                      <Dash />
-                    ) : (
-                      <div className="leading-tight">
-                        <div className="font-semibold text-fg">{fmtHours(r.actSeconds)} h</div>
-                        <div className="text-[11px] text-fg-subtle">
-                          {fmtHours(r.actSecondsPontual)}P · {fmtHours(r.actSecondsDiaria)}D
-                        </div>
-                      </div>
-                    )}
+                    <Clickable value={r.colabCarteiraActive} onOpen={() => onOpen(r, "colab_ativos", r.colabCarteiraActive)}>
+                      <span className={r.colabCarteiraActive === 0 ? "text-fg-subtle" : "font-semibold text-fg"}>
+                        {r.colabCarteiraActive}
+                      </span>
+                    </Clickable>
                   </td>
                   <td className="px-3 py-2.5 text-right tabular-nums">
-                    {noReg ? <Dash /> : <span className={r.actPontualDone === 0 ? "text-fg-subtle" : "text-fg"}>{r.actPontualDone}</span>}
-                  </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">
-                    {noReg ? (
-                      <Dash />
-                    ) : r.actOverdue > 0 ? (
-                      <span className="font-medium text-amber-700 dark:text-amber-300">{r.actOverdue}</span>
-                    ) : (
+                    {r.colabOutOfPortfolio === 0 ? (
+                      // Zero é o esperado — sem destaque.
                       <span className="text-fg-subtle">0</span>
+                    ) : (
+                      <Clickable value={r.colabOutOfPortfolio} onOpen={() => onOpen(r, "fora_da_carteira", r.colabOutOfPortfolio)}>
+                        <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                          {r.colabOutOfPortfolio}
+                        </span>
+                      </Clickable>
+                    )}
+                  </td>
+                  {/* ATIVIDADE — traço quando não houve NENHUM registro no período.
+                      Clicáveis abrem a lista das TAREFAS contadas (número bate). */}
+                  <td className="border-l border-line/40 px-3 py-2.5 text-right tabular-nums">
+                    {noReg ? (
+                      <Dash />
+                    ) : (
+                      <Clickable value={r.actSeconds} onOpen={() => onOpen(r, "horas", r.actSeconds)}>
+                        <div className="leading-tight">
+                          <div className="font-semibold text-fg">{fmtHours(r.actSeconds)} h</div>
+                          <div className="text-[11px] text-fg-subtle">
+                            {fmtHours(r.actSecondsPontual)}P · {fmtHours(r.actSecondsDiaria)}D
+                          </div>
+                        </div>
+                      </Clickable>
                     )}
                   </td>
                   <td className="px-3 py-2.5 text-right tabular-nums">
                     {noReg ? (
                       <Dash />
                     ) : (
-                      <Clickable value={r.actCompanies} onOpen={() => onOpen(r, "empresas", r.actCompanies)}>
-                        <span className={r.actCompanies === 0 ? "text-fg-subtle" : "text-fg"}>{r.actCompanies}</span>
+                      <Clickable value={r.actPontualDone} onOpen={() => onOpen(r, "pontuais", r.actPontualDone)}>
+                        <span className={r.actPontualDone === 0 ? "text-fg-subtle" : "text-fg"}>{r.actPontualDone}</span>
+                      </Clickable>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">
+                    {noReg ? (
+                      <Dash />
+                    ) : (
+                      <Clickable value={r.actOverdue} onOpen={() => onOpen(r, "atrasadas", r.actOverdue)}>
+                        {r.actOverdue > 0 ? (
+                          <span className="font-medium text-amber-700 dark:text-amber-300">{r.actOverdue}</span>
+                        ) : (
+                          <span className="text-fg-subtle">0</span>
+                        )}
                       </Clickable>
                     )}
                   </td>
@@ -444,8 +511,9 @@ function ColaboradoresTable({
         </TableShell>
       )}
       <p className="text-xs text-fg-subtle">
-        “—” = sem nenhum registro no período. “0,0 h” = trabalho medido igual a
-        zero.
+        <strong>Carteira</strong> (Ativos, Fora da carteira) é foto do agora — não
+        muda com o período. “—” = sem nenhum registro de atividade no período.
+        “0,0 h” = trabalho medido igual a zero.
       </p>
     </section>
   );
@@ -454,8 +522,9 @@ function ColaboradoresTable({
 // ---------------------------------------------------------------------- SHARED
 
 // Torna o número clicável (abre o drill-down) quando o valor > 0. Zero não é
-// clicável — não abre painel vazio. Sublinhado pontilhado sinaliza "tem lista
-// por trás"; é um button (ação dentro de painel/tela, nunca <a> — passo 32.2).
+// clicável — não abre painel vazio. Sem sublinhado (pedido do Mauricio): a
+// pista de "tem lista por trás" fica no cursor/hover; é um button (ação dentro
+// de painel/tela, nunca <a> — passo 32.2).
 function Clickable({
   value,
   onOpen,
@@ -471,7 +540,7 @@ function Clickable({
       type="button"
       onClick={onOpen}
       title="Ver a lista"
-      className="rounded underline decoration-dotted decoration-fg-subtle/60 underline-offset-4 transition hover:decoration-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
+      className="rounded transition hover:text-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
     >
       {children}
     </button>
@@ -494,8 +563,18 @@ function TableShell({
   );
 }
 
-function PersonCell({ r, withGroup }: { r: CapacityRow; withGroup?: boolean }) {
-  const breakdown = groupBreakdown(r.carteiraByGroup);
+function PersonCell({
+  r,
+  withGroup,
+  groupSlices,
+}: {
+  r: CapacityRow;
+  withGroup?: boolean;
+  // Composição por grupo a exibir sob o nome; por padrão a carteira de
+  // consultor. A tabela de colaboradores passa a carteira do colaborador.
+  groupSlices?: CapacityRow["carteiraByGroup"];
+}) {
+  const breakdown = groupBreakdown(groupSlices ?? r.carteiraByGroup);
   return (
     <td className="sticky left-0 z-10 max-w-[17rem] bg-surface px-3 py-2.5">
       <div className="flex items-start gap-2">
@@ -552,6 +631,7 @@ function Th({
   children,
   align,
   sticky,
+  divider,
   active,
   desc,
   onClick,
@@ -560,6 +640,7 @@ function Th({
   children: React.ReactNode;
   align: "left" | "right";
   sticky?: boolean;
+  divider?: boolean; // borda à esquerda — separa o bloco de atividade da carteira
   active?: boolean;
   desc?: boolean;
   onClick: () => void;
@@ -568,7 +649,7 @@ function Th({
   return (
     <th
       title={title}
-      className={`${sticky ? "sticky left-0 z-10 bg-surface" : ""} px-3 py-2 font-medium`}
+      className={`${sticky ? "sticky left-0 z-10 bg-surface" : ""} ${divider ? "border-l border-line/40" : ""} px-3 py-2 font-medium`}
     >
       <button
         type="button"

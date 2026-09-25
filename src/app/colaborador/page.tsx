@@ -11,6 +11,7 @@ import { perfRoute } from "@/lib/perf";
 type CompanyCountRow = {
   company_id: string;
   company_name: string | null;
+  in_portfolio: boolean;
   total: number;
   done: number;
   pending: number;
@@ -26,17 +27,16 @@ export default async function ColaboradorPage() {
   ]);
 
   const perf = perfRoute("/colaborador (Meu Trabalho)");
-  // As duas leituras rodam juntas. As contagens por empresa são AGREGADAS NO
-  // BANCO (não contando linhas em JS, que trunca em 1000 do PostgREST): a RPC,
-  // escopada ao próprio usuário, já devolve uma linha por empresa onde ele tem
-  // tarefa — o mesmo conjunto de antes. As etiquetas vêm de todas as empresas
-  // que a RLS (cl_select) permite (mesmo conjunto).
+  // Mudança de âncora (0090): o painel lista as empresas em que a pessoa é
+  // RESPONSÁVEL (carteira declarada), não mais toda empresa em que tem tarefa.
+  // Exceção para não sumir trabalho: empresa com tarefa EM ABERTO continua
+  // aparecendo mesmo sem vínculo, marcada como "fora da carteira". A RPC agrega
+  // NO BANCO (não conta linhas em JS, que trunca em 1000) e devolve in_portfolio.
   const [{ data: countData, error }, labelsByCompany, noteCounts, startedOnByCompany] =
     await Promise.all([
       perf.timed(
-        "rpc company_task_counts (do usuário)",
-        supabase.rpc("company_task_counts", {
-          p_start: null,
+        "rpc collaborator_portfolio (do usuário)",
+        supabase.rpc("collaborator_portfolio", {
           p_collaborator: profile.id,
         })
       ),
@@ -54,6 +54,7 @@ export default async function ColaboradorPage() {
     .map((r) => ({
       id: r.company_id,
       name: r.company_name ?? "(empresa)",
+      inPortfolio: r.in_portfolio,
       total: Number(r.total),
       done: Number(r.done),
       pending: Number(r.pending),
@@ -78,7 +79,7 @@ export default async function ColaboradorPage() {
         </div>
       ) : companies.length === 0 ? (
         <div className="rounded-2xl border border-line bg-surface p-12 text-center text-fg-subtle shadow-card">
-          Você ainda não tem tarefas atribuídas.
+          Você ainda não é responsável por nenhuma empresa.
         </div>
       ) : (
         <CompanySummaryGrid
@@ -98,6 +99,7 @@ export default async function ColaboradorPage() {
               labels: labelsByCompany.get(c.id) ?? [],
               noteCount: noteCounts.get(c.id) ?? 0,
               startedOn: startedOnByCompany.get(c.id) ?? null,
+              outOfPortfolio: !c.inPortfolio,
             })
           )}
         />

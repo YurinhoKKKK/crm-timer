@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createTaskTemplate } from "../actions";
 import type { TaskCategory } from "@/lib/types";
@@ -48,11 +48,16 @@ function todayISO(): string {
 export default function NewTaskForm({
   companies,
   collaborators,
+  responsiblesByCompany = {},
   lockedCompany,
   isAdmin = false,
 }: {
   companies: Option[];
   collaborators: PersonOption[];
+  // Âncora (0090): mapa empresa → ids dos responsáveis. O seletor de colaborador
+  // só oferece quem é responsável pela empresa escolhida; o servidor também
+  // valida. Ausente/vazio ⇒ nenhuma opção até vincular alguém à empresa.
+  responsiblesByCompany?: Record<string, string[]>;
   // Quando definido, a empresa vem pré-selecionada e travada (uso dentro da
   // tela de detalhe da empresa). O usuário não escolhe a empresa.
   lockedCompany?: Option;
@@ -76,6 +81,21 @@ export default function NewTaskForm({
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  // Âncora (0090): as opções de colaborador dependem da empresa escolhida —
+  // só os responsáveis por ela. Sem empresa, sem opções.
+  const allowedCollaborators = useMemo(() => {
+    if (!companyId) return [];
+    const allowed = new Set(responsiblesByCompany[companyId] ?? []);
+    return collaborators.filter((c) => allowed.has(c.id));
+  }, [companyId, collaborators, responsiblesByCompany]);
+
+  // Se a empresa muda e o colaborador escolhido deixa de ser responsável, limpa.
+  useEffect(() => {
+    if (collaboratorId && !allowedCollaborators.some((c) => c.id === collaboratorId)) {
+      setCollaboratorId("");
+    }
+  }, [allowedCollaborators, collaboratorId]);
 
   // A categoria é a PRIMEIRA decisão e muda o resto do formulário.
   const isListing = category === "listagem";
@@ -282,17 +302,26 @@ export default function NewTaskForm({
               <label htmlFor="task-collaborator" className={labelClass}>
                 Colaborador
               </label>
-              <Combobox
-                id="task-collaborator"
-                value={collaboratorId}
-                onChange={setCollaboratorId}
-                options={collaborators.map((p) => ({
-                  value: p.id,
-                  label: p.full_name || p.email,
-                }))}
-                ariaLabel="Colaborador"
-                searchPlaceholder="Buscar colaborador…"
-              />
+              {!companyId ? (
+                <p className={`${hintClass} mt-1`}>Selecione a empresa primeiro.</p>
+              ) : allowedCollaborators.length === 0 ? (
+                <p className={`${hintClass} mt-1`}>
+                  Nenhum responsável vinculado a esta empresa. Vincule alguém em
+                  Editar empresa antes de criar a tarefa.
+                </p>
+              ) : (
+                <Combobox
+                  id="task-collaborator"
+                  value={collaboratorId}
+                  onChange={setCollaboratorId}
+                  options={allowedCollaborators.map((p) => ({
+                    value: p.id,
+                    label: p.full_name || p.email,
+                  }))}
+                  ariaLabel="Colaborador"
+                  searchPlaceholder="Buscar colaborador…"
+                />
+              )}
             </div>
           </div>
 

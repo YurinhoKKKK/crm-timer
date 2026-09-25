@@ -4,7 +4,7 @@ import NewTaskForm from "@/app/admin/tarefas/NewTaskForm";
 import CompanySummaryGrid, {
   type CompanyCardItem,
 } from "@/components/CompanySummaryGrid";
-import { withSelf } from "@/lib/people";
+import { withSelf, loadResponsiblesByCompany } from "@/lib/people";
 import { loadCompanyNoteCounts } from "@/lib/notes";
 import { loadStartedOnByCompany } from "@/lib/company-details";
 import { perfRoute } from "@/lib/perf";
@@ -45,6 +45,7 @@ export default async function ConsultorPage() {
     { data: followupData },
     noteCounts,
     startedOnByCompany,
+    responsiblesByCompany,
   ] = await Promise.all([
     // RLS (companies_select) limita às empresas atribuídas a este consultor.
     perf.timed(
@@ -77,6 +78,11 @@ export default async function ConsultorPage() {
     // Início do contrato por empresa (etiqueta derivada "Cliente Novo"), numa
     // consulta só. RLS cd_select limita à carteira do consultor — mesmo conjunto.
     perf.timed("company_details started_on", loadStartedOnByCompany(supabase)),
+    // Âncora (0090): responsáveis por empresa (RLS limita à carteira do consultor).
+    perf.timed(
+      "company_collaborators (responsáveis por empresa)",
+      loadResponsiblesByCompany(supabase)
+    ),
   ]);
   perf.done();
 
@@ -140,7 +146,11 @@ export default async function ConsultorPage() {
           )}
 
           {canCreate && (
-            <NewTaskForm companies={companies} collaborators={collaborators} />
+            <NewTaskForm
+              companies={companies}
+              collaborators={collaborators}
+              responsiblesByCompany={responsiblesByCompany}
+            />
           )}
 
           <h2 className="mb-3 mt-2 text-sm font-medium text-fg-muted">

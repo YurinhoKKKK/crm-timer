@@ -128,6 +128,9 @@ export type CentralData = {
   standards: StandardOption[];
   currentStandardTasks: { standardId: string; collaboratorId: string }[];
   collaborators: PersonOption[];
+  // Ids dos colaboradores RESPONSÁVEIS por esta empresa (âncora 0090). O seletor
+  // de "Nova tarefa" só oferece estes; o servidor também valida.
+  responsibleIds: string[];
   // Acesso do cliente (passo 30): o que vem aqui depende do CARGO — admin
   // recebe credencial + histórico; consultor recebe apenas se existe/está
   // ativo. Ver ClientAccessView.
@@ -161,6 +164,7 @@ export async function loadCompanyCentral(
     { data: standardData },
     { data: assignedData },
     { data: collaboratorsData },
+    { data: responsibleData },
     companyLabels,
     { data: clientAccessData },
   ] = await Promise.all([
@@ -268,6 +272,15 @@ export async function loadCompanyCentral(
         .select("id, full_name, email")
         .in("role", ["colaborador", "admin"])
         .order("full_name", { ascending: true })
+    ),
+    // Âncora (0090): responsáveis DECLARADOS desta empresa, p/ filtrar o seletor
+    // do cadastro de tarefa (só quem é responsável pode receber tarefa aqui).
+    perf.timed(
+      "company_collaborators (responsáveis)",
+      supabase
+        .from("company_collaborators")
+        .select("collaborator_id")
+        .eq("company_id", companyId)
     ),
     perf.timed("company_labels", loadCompanyLabels(supabase, companyId)),
     // Acesso do cliente (passo 30): a consulta MUDA por cargo. Admin recebe
@@ -458,6 +471,9 @@ export async function loadCompanyCentral(
     (collaboratorsData as PersonOption[]) ?? [],
     self
   );
+  const responsibleIds = (
+    (responsibleData as { collaborator_id: string }[]) ?? []
+  ).map((r) => r.collaborator_id);
 
   // --- Acesso do cliente (passo 30) ---
   const clientAccess: ClientAccessView = isAdmin
@@ -509,6 +525,7 @@ export async function loadCompanyCentral(
       standards,
       currentStandardTasks,
       collaborators,
+      responsibleIds,
       clientAccess,
     },
   };

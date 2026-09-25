@@ -31,6 +31,10 @@ export type CompanyCardItem = {
   // Contagem de anotações (balão de atalho). Presente só no painel do consultor;
   // ausente no colaborador (que não tem o balão). Quando ausente, sem balão.
   noteCount?: number;
+  // FORA DA CARTEIRA: a pessoa não é responsável declarada por esta empresa, mas
+  // ainda tem tarefa em aberto aqui (não pode sumir da vista). Marca discreta.
+  // Só o painel do colaborador usa; ausente/false → sem marca. Ver âncora 0090.
+  outOfPortfolio?: boolean;
 };
 
 // Grade de cards "Minhas empresas" dos painéis do consultor e do colaborador,
@@ -147,6 +151,14 @@ export default function CompanySummaryGrid({
                   {/* Etiquetas comuns + selo derivado "Cliente Novo". empty:hidden
                       recolhe a margem quando não há nem etiqueta nem selo. */}
                   <div className="mt-2 flex flex-wrap items-center gap-1.5 empty:hidden">
+                    {c.outOfPortfolio && (
+                      <span
+                        className="inline-flex items-center rounded-full border border-line bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-fg-subtle"
+                        title="Você não é responsável por esta empresa, mas tem tarefa em aberto aqui."
+                      >
+                        fora da carteira
+                      </span>
+                    )}
                     {c.labels && c.labels.length > 0 && (
                       <LabelChips labels={c.labels} />
                     )}

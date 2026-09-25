@@ -183,6 +183,7 @@ export default function CompanyCentral({
         <NewTaskForm
           companies={[{ id: company.id, name: company.name }]}
           collaborators={data.collaborators}
+          responsiblesByCompany={{ [company.id]: data.responsibleIds }}
           lockedCompany={{ id: company.id, name: company.name }}
           isAdmin={data.clientAccess.role === "admin"}
         />

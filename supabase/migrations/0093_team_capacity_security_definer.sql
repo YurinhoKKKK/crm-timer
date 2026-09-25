@@ -1,0 +1,28 @@
+-- =====================================================================
+-- Capacidade — team_capacity vira SECURITY DEFINER (correção de TIMEOUT).
+--
+-- SINTOMA: a aba /admin/capacidade vinha VAZIA (as duas tabelas). A chamada
+-- REST devolvia 500 "canceling statement due to statement timeout": a função
+-- estourava o statement_timeout de 8s do papel `authenticated`.
+--
+-- CAUSA: team_capacity era SECURITY INVOKER, então RODAVA COM RLS em cada
+-- varredura das tabelas internas (task_instances, companies, company_*,
+-- time_entries…). Depois da 0090, o helper de RLS my_collaborator_companies()
+-- passou a unir company_collaborators + task_instances — mais caro — e esse
+-- custo passou a ser pago POR LINHA, em TODAS as CTEs da função. Resultado:
+-- ~2,3s quente e >8s frio (timeout). Medido: 2262ms (invoker) → 86ms (definer).
+--
+-- CORREÇÃO: a função JÁ é admin-only e checa `is_admin()` na primeira linha
+-- (barra qualquer não-admin, inclusive por chamada REST direta). Como o gate é
+-- explícito, ela pode rodar como o DONO (postgres) e DISPENSAR a RLS interna —
+-- que aqui só encarecia sem proteger nada (o gate já protege). is_admin() lê o
+-- auth.uid() do CHAMADOR (é SECURITY DEFINER e lê o GUC do JWT), então o gate
+-- continua valendo sob DEFINER — verificado: não-admin segue recebendo 42501.
+-- Nenhuma tabela usada tem FORCE ROW LEVEL SECURITY, e postgres é dono delas,
+-- então o DEFINER realmente ignora a RLS.
+--
+-- O drilldown recebe o MESMO tratamento (mesmo gate is_admin(), some o custo de
+-- RLS por clique). Só muda o atributo de segurança — corpo idêntico ao de 0092.
+-- =====================================================================
+alter function team_capacity(date, date) security definer;
+alter function team_capacity_drilldown(uuid, text, date, date) security definer;

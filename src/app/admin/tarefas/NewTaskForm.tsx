@@ -83,19 +83,31 @@ export default function NewTaskForm({
   const [isPending, startTransition] = useTransition();
 
   // Âncora (0090): as opções de colaborador dependem da empresa escolhida —
-  // só os responsáveis por ela. Sem empresa, sem opções.
+  // só os responsáveis por ela. Sem empresa, sem opções. EXCEÇÃO: o admin pode
+  // designar QUALQUER colaborador (mesmo fora da carteira); nesse caso a empresa
+  // aparece temporária no painel da pessoa e conta como "fora da carteira" na
+  // Capacidade. O servidor aplica a mesma regra.
   const allowedCollaborators = useMemo(() => {
     if (!companyId) return [];
+    if (isAdmin) return collaborators;
     const allowed = new Set(responsiblesByCompany[companyId] ?? []);
     return collaborators.filter((c) => allowed.has(c.id));
-  }, [companyId, collaborators, responsiblesByCompany]);
+  }, [companyId, collaborators, responsiblesByCompany, isAdmin]);
 
-  // Se a empresa muda e o colaborador escolhido deixa de ser responsável, limpa.
+  // Se a empresa muda e o colaborador escolhido deixa de ser oferecido, limpa.
   useEffect(() => {
     if (collaboratorId && !allowedCollaborators.some((c) => c.id === collaboratorId)) {
       setCollaboratorId("");
     }
   }, [allowedCollaborators, collaboratorId]);
+
+  // Admin designou alguém que NÃO é responsável pela empresa? Avisa que a
+  // atribuição é "fora da carteira" (comportamento intencional, não erro).
+  const selectedOutOfPortfolio = useMemo(() => {
+    if (!isAdmin || !companyId || !collaboratorId) return false;
+    const responsibles = new Set(responsiblesByCompany[companyId] ?? []);
+    return !responsibles.has(collaboratorId);
+  }, [isAdmin, companyId, collaboratorId, responsiblesByCompany]);
 
   // A categoria é a PRIMEIRA decisão e muda o resto do formulário.
   const isListing = category === "listagem";
@@ -310,17 +322,26 @@ export default function NewTaskForm({
                   Editar empresa antes de criar a tarefa.
                 </p>
               ) : (
-                <Combobox
-                  id="task-collaborator"
-                  value={collaboratorId}
-                  onChange={setCollaboratorId}
-                  options={allowedCollaborators.map((p) => ({
-                    value: p.id,
-                    label: p.full_name || p.email,
-                  }))}
-                  ariaLabel="Colaborador"
-                  searchPlaceholder="Buscar colaborador…"
-                />
+                <>
+                  <Combobox
+                    id="task-collaborator"
+                    value={collaboratorId}
+                    onChange={setCollaboratorId}
+                    options={allowedCollaborators.map((p) => ({
+                      value: p.id,
+                      label: p.full_name || p.email,
+                    }))}
+                    ariaLabel="Colaborador"
+                    searchPlaceholder="Buscar colaborador…"
+                  />
+                  {selectedOutOfPortfolio && (
+                    <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                      Fora da carteira: a empresa aparecerá no painel desta pessoa
+                      enquanto a tarefa estiver aberta e some ao finalizar; conta
+                      na Capacidade como “fora da carteira”.
+                    </p>
+                  )}
+                </>
               )}
             </div>
           </div>

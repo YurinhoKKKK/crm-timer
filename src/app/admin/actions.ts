@@ -724,8 +724,15 @@ export async function createTaskTemplate(
     return { error: result.error };
   }
 
-  // Âncora (0090): só se atribui tarefa a quem é responsável pela empresa.
-  if (!(await collaboratorInPortfolio(supabase, input.companyId, input.collaboratorId))) {
+  // Âncora (0090): só se atribui tarefa a quem é responsável pela empresa —
+  // EXCETO o admin, que pode designar qualquer colaborador mesmo fora da
+  // carteira. Nesse caso a empresa aparece temporária no painel da pessoa
+  // (collaborator_portfolio: união com tarefas em aberto) e some quando a tarefa
+  // é finalizada; enquanto isso conta na Capacidade como "fora da carteira".
+  if (
+    !isAdmin &&
+    !(await collaboratorInPortfolio(supabase, input.companyId, input.collaboratorId))
+  ) {
     return { error: NOT_RESPONSIBLE_MSG };
   }
 
@@ -817,8 +824,11 @@ export async function updateTaskTemplate(
 
   // Âncora (0090): ao TROCAR o responsável, o novo tem de ser responsável pela
   // empresa. Só valida quando muda — preserva a edição de tarefas legadas cujo
-  // responsável não foi para o backfill (só tarefas padrão ativas entraram).
+  // responsável não foi para o backfill (só tarefas padrão ativas entraram). O
+  // admin fica isento (pode reatribuir a qualquer colaborador, mesmo fora da
+  // carteira — mesma regra da criação).
   if (
+    !isAdmin &&
     input.collaboratorId !== existing.collaborator_id &&
     !(await collaboratorInPortfolio(supabase, input.companyId, input.collaboratorId))
   ) {

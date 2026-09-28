@@ -44,7 +44,12 @@ function todayISO(): string {
 }
 
 // Status que MERECEM uma nota (ver createTaskTemplate/generate_template_today_edit).
-type NotedStatus = "gerada" | "nao_e_dia" | "inativa" | "fora_do_periodo";
+type NotedStatus =
+  | "gerada"
+  | "nao_e_dia"
+  | "inativa"
+  | "fora_do_periodo"
+  | "pausada_grupo";
 
 const TODAY_NOTE: Record<NotedStatus, { tone: "ok" | "warn"; text: string }> = {
   gerada: {
@@ -63,6 +68,10 @@ const TODAY_NOTE: Record<NotedStatus, { tone: "ok" | "warn"; text: string }> = {
     tone: "warn",
     text: "Hoje está fora do período de vigência (início/fim), então nenhuma tarefa foi gerada para hoje.",
   },
+  pausada_grupo: {
+    tone: "warn",
+    text: "A empresa está num grupo pausado, então a geração está suspensa e nenhuma ocorrência de hoje foi gerada. Ao voltar para um grupo ativo, a geração é retomada.",
+  },
 };
 
 const TODAY_NOTE_CLASS: Record<"ok" | "warn", string> = {
@@ -71,7 +80,13 @@ const TODAY_NOTE_CLASS: Record<"ok" | "warn", string> = {
 };
 
 function isNotedStatus(s: TodayGenStatus): s is NotedStatus {
-  return s === "gerada" || s === "nao_e_dia" || s === "inativa" || s === "fora_do_periodo";
+  return (
+    s === "gerada" ||
+    s === "nao_e_dia" ||
+    s === "inativa" ||
+    s === "fora_do_periodo" ||
+    s === "pausada_grupo"
+  );
 }
 
 export default function TaskEditor({

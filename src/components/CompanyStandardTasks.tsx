@@ -17,20 +17,28 @@ type PersonOption = { id: string; full_name: string; email: string };
 type Assignment = { standardId: string; collaboratorId: string };
 type Status = "idle" | "saving" | "saved" | "error";
 
-// Seção "Tarefas padrão desta empresa": o admin/consultor escolhe quais padrões
-// a empresa usa e o responsável de cada uma. Reutilizada na edição de empresa
-// (admin) e na tela da empresa (consultor). A UI da seleção (checkbox, busca,
-// "selecionar todas") vem do AssignmentPicker; a action valida no banco.
+// Seção "Tarefas padrão desta empresa" (fica na tela Editar empresa): o admin
+// escolhe quais padrões a empresa usa e o responsável de cada uma. O seletor de
+// responsável lista SÓ os colaboradores responsáveis da empresa (company_
+// collaborators). Regras: 0 responsáveis ⇒ bloqueia e avisa; 1 ⇒ preenche
+// sozinho e esconde o seletor; >1 ⇒ caixa de seleção só com eles. O servidor
+// (assertResponsibles) recusa quem não é responsável — a UI só acompanha. A
+// checagem só vale para vínculos CRIADOS/TROCADOS, então um responsável antigo
+// que saiu da lista é PRESERVADO (mostrado como "fora da lista" para corrigir).
 export default function CompanyStandardTasks({
   companyId,
   standards,
   collaborators,
   current,
+  staleResponsibles = [],
 }: {
   companyId: string;
   standards: StandardOption[];
+  // SÓ os responsáveis atuais da empresa (opções válidas).
   collaborators: PersonOption[];
   current: Assignment[];
+  // Responsáveis antigos, fora da lista atual, ainda gravados em alguma tarefa.
+  staleResponsibles?: PersonOption[];
 }) {
   const router = useRouter();
 
@@ -98,13 +106,26 @@ export default function CompanyStandardTasks({
     );
   }
 
+  // Sem responsável da empresa: não dá para atribuir tarefa padrão (o servidor
+  // recusaria, e a regra de entrada em Ativos/Ema também exige colaborador).
   if (collaborators.length === 0) {
     return (
-      <p className="text-sm text-fg-subtle">
-        Cadastre ao menos um colaborador para atribuir tarefas padrão.
-      </p>
+      <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-300">
+        Defina ao menos um{" "}
+        <span className="font-medium">colaborador responsável</span> desta empresa
+        (bloco acima) antes de atribuir tarefas padrão. Os responsáveis das tarefas
+        padrão saem dessa lista.
+      </div>
     );
   }
+
+  // Exatamente um responsável: preenche sozinho e esconde o seletor por linha.
+  const soleResponsibleId =
+    collaborators.length === 1 ? collaborators[0].id : undefined;
+  const staleOptions = staleResponsibles.map((p) => ({
+    value: p.id,
+    label: `${p.full_name || p.email} (fora da lista)`,
+  }));
 
   return (
     <div>
@@ -115,6 +136,8 @@ export default function CompanyStandardTasks({
         onChange={handleChange}
         searchPlaceholder="Buscar tarefa padrão…"
         idPrefix={`co-std-${companyId}`}
+        soleResponsibleId={soleResponsibleId}
+        staleOptions={staleOptions}
       />
 
       <div className="mt-4 flex items-center gap-3">

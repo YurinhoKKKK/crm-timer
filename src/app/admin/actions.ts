@@ -783,6 +783,7 @@ export type TodayGenStatus =
   | "nao_e_dia"
   | "inativa"
   | "fora_do_periodo"
+  | "pausada_grupo"
   | "nao_aplica";
 
 export async function updateTaskTemplate(

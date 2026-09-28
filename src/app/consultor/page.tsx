@@ -46,6 +46,7 @@ export default async function ConsultorPage() {
     noteCounts,
     startedOnByCompany,
     responsiblesByCompany,
+    { data: pauseStateData },
   ] = await Promise.all([
     // RLS (companies_select) limita às empresas atribuídas a este consultor.
     perf.timed(
@@ -83,8 +84,23 @@ export default async function ConsultorPage() {
       "company_collaborators (responsáveis por empresa)",
       loadResponsiblesByCompany(supabase)
     ),
+    // Fluxo de grupos (0095): empresas em grupo PARADO somem do painel, MENOS as
+    // que ainda têm tarefa EM ABERTO deste usuário (aí ficam com aviso discreto).
+    // A RPC (SECURITY DEFINER) devolve id + has_open só das empresas paradas.
+    perf.timed(
+      "rpc my_company_pause_state",
+      supabase.rpc("my_company_pause_state")
+    ),
   ]);
   perf.done();
+
+  // Estado de pausa por empresa: paused = em grupo parado; hasOpen = tem tarefa
+  // em aberto do usuário. Hide quando pausada e sem tarefa em aberto.
+  const pauseState = new Map<string, boolean>(
+    ((pauseStateData as { company_id: string; has_open: boolean }[]) ?? []).map(
+      (r) => [r.company_id, r.has_open]
+    )
+  );
 
   const companies = (companiesData as Option[]) ?? [];
 
@@ -122,7 +138,12 @@ export default async function ConsultorPage() {
     s.overdue = Number(r.overdue);
   }
 
-  const companyList = Array.from(summaries.values());
+  // Some do painel a empresa pausada sem tarefa em aberto do usuário; a que tem
+  // fica visível marcada como "cliente pausado". As demais seguem normais.
+  const companyList = Array.from(summaries.values()).filter((c) => {
+    if (!pauseState.has(c.id)) return true; // não está em grupo parado
+    return pauseState.get(c.id) === true; // pausada: só fica se tem tarefa em aberto
+  });
   const canCreate = companies.length > 0 && collaborators.length > 0;
 
   return (
@@ -176,6 +197,7 @@ export default async function ConsultorPage() {
                   contact: { days: contactDays.get(c.id) ?? null },
                   noteCount: noteCounts.get(c.id) ?? 0,
                   startedOn: startedOnByCompany.get(c.id) ?? null,
+                  paused: pauseState.has(c.id),
                 })
               )}
             />

@@ -32,8 +32,13 @@ export default async function ColaboradorPage() {
   // Exceção para não sumir trabalho: empresa com tarefa EM ABERTO continua
   // aparecendo mesmo sem vínculo, marcada como "fora da carteira". A RPC agrega
   // NO BANCO (não conta linhas em JS, que trunca em 1000) e devolve in_portfolio.
-  const [{ data: countData, error }, labelsByCompany, noteCounts, startedOnByCompany] =
-    await Promise.all([
+  const [
+    { data: countData, error },
+    labelsByCompany,
+    noteCounts,
+    startedOnByCompany,
+    { data: pauseStateData },
+  ] = await Promise.all([
       perf.timed(
         "rpc collaborator_portfolio (do usuário)",
         supabase.rpc("collaborator_portfolio", {
@@ -47,8 +52,19 @@ export default async function ColaboradorPage() {
       // Início do contrato por empresa (etiqueta derivada "Cliente Novo"), numa
       // consulta só. RLS cd_select = as empresas onde o colaborador tem tarefa.
       perf.timed("company_details started_on", loadStartedOnByCompany(supabase)),
+      // Fluxo de grupos (0095): empresas em grupo PARADO somem do painel, MENOS
+      // as que ainda têm tarefa EM ABERTO deste usuário (aí ficam com aviso).
+      perf.timed("rpc my_company_pause_state", supabase.rpc("my_company_pause_state")),
     ]);
   perf.done();
+
+  // Estado de pausa por empresa (só as paradas). has_open = tem tarefa em aberto
+  // do usuário: se sim, a empresa fica visível marcada; se não, some do painel.
+  const pauseState = new Map<string, boolean>(
+    ((pauseStateData as { company_id: string; has_open: boolean }[]) ?? []).map(
+      (r) => [r.company_id, r.has_open]
+    )
+  );
 
   const companies = ((countData as CompanyCountRow[]) ?? [])
     .map((r) => ({
@@ -61,6 +77,7 @@ export default async function ColaboradorPage() {
       overdue: Number(r.overdue),
       dueSoon: Number(r.due_soon),
     }))
+    .filter((c) => (pauseState.has(c.id) ? pauseState.get(c.id) === true : true))
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
   return (
@@ -100,6 +117,7 @@ export default async function ColaboradorPage() {
               noteCount: noteCounts.get(c.id) ?? 0,
               startedOn: startedOnByCompany.get(c.id) ?? null,
               outOfPortfolio: !c.inPortfolio,
+              paused: pauseState.has(c.id),
             })
           )}
         />

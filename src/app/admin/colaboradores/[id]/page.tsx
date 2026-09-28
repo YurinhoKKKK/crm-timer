@@ -17,6 +17,7 @@ import CategoryTimeByCompanyChart, {
 } from "../../CategoryTimeByCompanyChart";
 import PeriodFilter, { type Period } from "../../PeriodFilter";
 import { periodStart } from "@/lib/period";
+import { STANDARD_KEY } from "@/lib/task-category";
 
 type Joined<T> = T | T[] | null;
 
@@ -150,6 +151,7 @@ export default async function CollaboratorDetailPage({
     { data: timeByCompanyData },
     { data: countData },
     { data: companyCategoryData },
+    { data: companyStandardData },
   ] = await Promise.all([
     instancesQuery,
     activityQuery,
@@ -165,6 +167,11 @@ export default async function CollaboratorDetailPage({
     // "Tempo por empresa" (reforma do cadastro). Só tarefas categorizadas
     // (+ listagem); o resto fica de fora.
     supabase.rpc("time_by_company_category", {
+      p_start: start,
+      p_collaborator: params.id,
+    }),
+    // Tempo das tarefas padrão (diárias) deste responsável — a faixa opcional.
+    supabase.rpc("time_by_company_standard", {
       p_start: start,
       p_collaborator: params.id,
     }),
@@ -267,17 +274,40 @@ export default async function CollaboratorDetailPage({
     list.push({ category: r.category, seconds: s });
     catByCompany.set(r.company_id, list);
   }
-  const categoryChartData: CompanyCategoryTime[] = Array.from(
-    catByCompany.entries()
-  )
-    .map(([id, byCategory]) => ({
-      id,
-      name: companyNames.get(id) ?? "(empresa)",
-      total: byCategory.reduce((sum, c) => sum + c.seconds, 0),
-      byCategory,
-    }))
-    .filter((d) => d.total > 0)
-    .sort((a, b) => b.total - a.total);
+  const toChartData = (
+    byCompany: Map<string, { category: string; seconds: number }[]>
+  ): CompanyCategoryTime[] =>
+    Array.from(byCompany.entries())
+      .map(([id, byCategory]) => ({
+        id,
+        name: companyNames.get(id) ?? "(empresa)",
+        total: byCategory.reduce((sum, c) => sum + c.seconds, 0),
+        byCategory,
+      }))
+      .filter((d) => d.total > 0)
+      .sort((a, b) => b.total - a.total);
+
+  const categoryChartData = toChartData(catByCompany);
+
+  // Faixa opcional das tarefas padrão (diárias), escopada a este responsável.
+  const standardByCompany = new Map<string, number>(
+    ((companyStandardData as { company_id: string; seconds: number }[]) ?? [])
+      .map((r) => [r.company_id, Number(r.seconds)])
+  );
+  const catWithStandard = new Map<
+    string,
+    { category: string; seconds: number }[]
+  >();
+  for (const [id, list] of Array.from(catByCompany.entries())) {
+    catWithStandard.set(id, [...list]);
+  }
+  for (const [id, secs] of Array.from(standardByCompany.entries())) {
+    if (secs <= 0) continue;
+    const list = catWithStandard.get(id) ?? [];
+    list.push({ category: STANDARD_KEY, seconds: secs });
+    catWithStandard.set(id, list);
+  }
+  const categoryChartDataWithStandard = toChartData(catWithStandard);
 
   // --- Itens para a lista com busca/filtros + ajuste de tempo ---
   const items: AdjustItem[] = instances.map((r) => ({
@@ -451,6 +481,7 @@ export default async function CollaboratorDetailPage({
             </h3>
             <CategoryTimeByCompanyChart
               data={categoryChartData}
+              dataWithStandard={categoryChartDataWithStandard}
               period={period}
               collaboratorId={person.id}
             />

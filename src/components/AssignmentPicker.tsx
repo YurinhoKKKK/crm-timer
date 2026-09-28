@@ -33,6 +33,8 @@ export default function AssignmentPicker({
   responsibleLabel = "Responsável",
   showDefaultResponsible = false,
   idPrefix,
+  soleResponsibleId,
+  staleOptions = [],
 }: {
   items: PickerItem[];
   collaborators: PersonOption[];
@@ -42,6 +44,15 @@ export default function AssignmentPicker({
   responsibleLabel?: string;
   showDefaultResponsible?: boolean;
   idPrefix: string;
+  // Fix 3: quando existe EXATAMENTE UM responsável válido, o pai passa o id dele
+  // aqui. As linhas marcadas herdam esse responsável automaticamente e o seletor
+  // some (vira leitura "Responsável: X") — só reaparece se a linha estiver com um
+  // valor DIFERENTE (ex.: responsável antigo, hoje fora da lista) para corrigir.
+  soleResponsibleId?: string;
+  // Responsáveis que NÃO são mais da empresa mas ainda constam em alguma tarefa
+  // existente ("fora da lista"). Entram no seletor SÓ da linha que os usa, para o
+  // valor atual continuar visível e poder ser corrigido — nunca trocado sozinho.
+  staleOptions?: { value: string; label: string }[];
 }) {
   const [query, setQuery] = useState("");
   const [defaultResp, setDefaultResp] = useState("");
@@ -50,6 +61,10 @@ export default function AssignmentPicker({
     value: p.id,
     label: p.full_name || p.email,
   }));
+  const validIds = new Set(collabOptions.map((o) => o.value));
+  const staleById = new Map(staleOptions.map((o) => [o.value, o.label]));
+  // Valor preenchido ao marcar uma linha: o responsável único, senão o padrão.
+  const autoFill = soleResponsibleId ?? defaultResp;
 
   const q = norm(query.trim());
   const filtered = q ? items.filter((it) => norm(it.label).includes(q)) : items;
@@ -64,13 +79,13 @@ export default function AssignmentPicker({
     onChange(next);
   }
 
-  // Ao marcar um item, herda o responsável padrão se ainda não tiver um.
+  // Ao marcar um item, herda o responsável (único ou padrão) se ainda não tiver.
   function toggleOne(id: string, enabled: boolean) {
     const cur = getRow(id);
     mutate(id, {
       enabled,
       collaboratorId:
-        enabled && !cur.collaboratorId ? defaultResp : cur.collaboratorId,
+        enabled && !cur.collaboratorId ? autoFill : cur.collaboratorId,
     });
   }
 
@@ -86,7 +101,7 @@ export default function AssignmentPicker({
       next.set(it.id, {
         enabled,
         collaboratorId:
-          enabled && !cur.collaboratorId ? defaultResp : cur.collaboratorId,
+          enabled && !cur.collaboratorId ? autoFill : cur.collaboratorId,
       });
     }
     onChange(next);
@@ -193,25 +208,60 @@ export default function AssignmentPicker({
                   </span>
                 </label>
 
-                {row.enabled && (
-                  <div className="mt-3 pl-7">
-                    <label
-                      htmlFor={`${idPrefix}-collab-${it.id}`}
-                      className="mb-1 block text-xs font-medium text-fg-muted"
-                    >
-                      {responsibleLabel}
-                    </label>
-                    <Combobox
-                      id={`${idPrefix}-collab-${it.id}`}
-                      value={row.collaboratorId}
-                      onChange={(v) => mutate(it.id, { collaboratorId: v })}
-                      options={collabOptions}
-                      ariaLabel={responsibleLabel}
-                      searchPlaceholder="Buscar responsável…"
-                    />
+                {row.enabled &&
+                  (() => {
+                    const value = row.collaboratorId;
+                    // Valor fora da lista de responsáveis atuais (responsável
+                    // antigo, ainda gravado nesta tarefa). Aparece SÓ nesta linha,
+                    // para não sumir e poder ser corrigido.
+                    const isStale =
+                      !!value && !validIds.has(value) && staleById.has(value);
+                    const optsForRow = isStale
+                      ? [...collabOptions, { value, label: staleById.get(value)! }]
+                      : collabOptions;
+                    // Responsável único e a linha já com ele: mostra só leitura.
+                    const readOnlySole =
+                      !!soleResponsibleId && value === soleResponsibleId;
+                    const soleLabel = collabOptions.find(
+                      (o) => o.value === soleResponsibleId
+                    )?.label;
 
-                  </div>
-                )}
+                    if (readOnlySole) {
+                      return (
+                        <div className="mt-3 pl-7 text-xs text-fg-muted">
+                          {responsibleLabel}:{" "}
+                          <span className="font-medium text-fg">
+                            {soleLabel}
+                          </span>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="mt-3 pl-7">
+                        <label
+                          htmlFor={`${idPrefix}-collab-${it.id}`}
+                          className="mb-1 block text-xs font-medium text-fg-muted"
+                        >
+                          {responsibleLabel}
+                        </label>
+                        <Combobox
+                          id={`${idPrefix}-collab-${it.id}`}
+                          value={value}
+                          onChange={(v) => mutate(it.id, { collaboratorId: v })}
+                          options={optsForRow}
+                          ariaLabel={responsibleLabel}
+                          searchPlaceholder="Buscar responsável…"
+                        />
+                        {isStale && (
+                          <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                            Este responsável não está mais entre os colaboradores
+                            da empresa. Escolha outro para corrigir.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
               </li>
             );
           })}

@@ -16,9 +16,17 @@ export const TASK_CATEGORIES: { value: TaskCategory; label: string }[] = [
   { value: "criar_conta", label: "Criar conta (Plataforma)" },
 ];
 
-export const CATEGORY_LABEL: Record<string, string> = Object.fromEntries(
-  TASK_CATEGORIES.map((c) => [c.value, c.label])
-);
+// Bucket sintético das TAREFAS PADRÃO (diárias sem categoria) no gráfico "Tempo
+// por empresa". Não é uma categoria do enum: é a faixa opcional que o botão
+// "Mostrar tarefas padrão" liga. O mesmo valor é a chave passada às RPCs
+// (time_by_task_category entende '__diaria__') e à cor/rótulo abaixo.
+export const STANDARD_KEY = "__diaria__";
+export const STANDARD_LABEL = "Tarefas padrão";
+
+export const CATEGORY_LABEL: Record<string, string> = {
+  ...Object.fromEntries(TASK_CATEGORIES.map((c) => [c.value, c.label])),
+  [STANDARD_KEY]: STANDARD_LABEL,
+};
 
 // Rótulo tolerante: aceita qualquer string (ex.: o bucket 'listagem' que vem da
 // RPC para listagens antigas sem category) e cai no próprio valor se desconhecido.
@@ -45,7 +53,12 @@ const CATEGORY_COLORS: Record<TaskCategory, { light: string; dark: string }> = {
 
 const FALLBACK_COLOR = { light: "#6B7280", dark: "#9AA2AC" };
 
+// Cor própria (fora da paleta das 7 categorias) para a faixa das tarefas padrão —
+// ardósia/azul-acinzentado, distinta de todas as categorias nos dois temas.
+const STANDARD_COLOR = { light: "#475569", dark: "#94A3B8" };
+
 export function categoryColor(value: string, dark: boolean): string {
+  if (value === STANDARD_KEY) return dark ? STANDARD_COLOR.dark : STANDARD_COLOR.light;
   const c = CATEGORY_COLORS[value as TaskCategory] ?? FALLBACK_COLOR;
   return dark ? c.dark : c.light;
 }

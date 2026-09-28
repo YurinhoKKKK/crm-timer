@@ -9,7 +9,11 @@ export type NotificationType =
   | "tarefa_recorrente_atribuida"
   | "listagem_ajuste_solicitado"
   | "reuniao_convite"
-  | "reuniao_cancelada";
+  | "reuniao_cancelada"
+  // Fluxo de grupos (admin): empresa entrou em On Boarding / foi para Aguardando
+  // Renovação por vencimento de contrato. Ambas levam à empresa.
+  | "empresa_onboarding"
+  | "empresa_renovacao";
 
 export type ShellRole = "admin" | "consultor" | "colaborador";
 
@@ -52,6 +56,10 @@ export function notificationHref(
         : role === "consultor"
           ? "/consultor/tarefas"
           : "/colaborador/tarefas";
+    case "empresa_onboarding":
+    case "empresa_renovacao":
+      // Vão para os administradores; a notificação leva à empresa.
+      return n.companyId ? `/admin/empresas/${n.companyId}` : null;
     default: {
       // mencionado / resposta_recebida / listagem
       const isChamado =

@@ -35,6 +35,10 @@ export type CompanyCardItem = {
   // ainda tem tarefa em aberto aqui (não pode sumir da vista). Marca discreta.
   // Só o painel do colaborador usa; ausente/false → sem marca. Ver âncora 0090.
   outOfPortfolio?: boolean;
+  // CLIENTE PAUSADO: a empresa está num grupo PARADO (Pausados, Cancelados, …).
+  // Ela some do painel, MENOS enquanto o usuário tiver tarefa em aberto aqui —
+  // aí continua visível com este aviso discreto. Ver fluxo de grupos (0095).
+  paused?: boolean;
 };
 
 // Grade de cards "Minhas empresas" dos painéis do consultor e do colaborador,
@@ -151,6 +155,15 @@ export default function CompanySummaryGrid({
                   {/* Etiquetas comuns + selo derivado "Cliente Novo". empty:hidden
                       recolhe a margem quando não há nem etiqueta nem selo. */}
                   <div className="mt-2 flex flex-wrap items-center gap-1.5 empty:hidden">
+                    {c.paused && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300"
+                        title="Cliente pausado (grupo parado). Continua aqui porque você tem tarefa em aberto."
+                      >
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden="true" />
+                        cliente pausado
+                      </span>
+                    )}
                     {c.outOfPortfolio && (
                       <span
                         className="inline-flex items-center rounded-full border border-line bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-fg-subtle"

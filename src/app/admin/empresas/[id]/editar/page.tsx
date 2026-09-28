@@ -5,12 +5,16 @@ import type { Company } from "@/lib/types";
 import CompanyConsultants from "../../CompanyConsultants";
 import CompanyCollaborators from "../../CompanyCollaborators";
 import CompanyLabels from "../../CompanyLabels";
+import CompanyStandardTasks from "@/components/CompanyStandardTasks";
 import CompanyEditor from "../CompanyEditor";
 import DeleteCompanyButton from "../DeleteCompanyButton";
 import { withSelf } from "@/lib/people";
 import { loadLabelCatalog, loadCompanyLabels } from "@/lib/labels";
+import type { TaskKind } from "@/lib/types";
 
 type ConsultantOption = { id: string; full_name: string; email: string };
+type StandardOption = { id: string; title: string; kind: TaskKind };
+type AssignedRow = { standard_task_id: string | null; collaborator_id: string };
 type CompanyLink = {
   consultant: ConsultantOption | ConsultantOption[] | null;
 };
@@ -41,6 +45,8 @@ export default async function EmpresaEditarPage({
     { data: colaboradoresData },
     labelCatalog,
     companyLabels,
+    { data: standardData },
+    { data: assignedData },
   ] = await Promise.all([
     supabase
       .from("companies")
@@ -77,6 +83,19 @@ export default async function EmpresaEditarPage({
       .order("full_name", { ascending: true }),
     loadLabelCatalog(supabase),
     loadCompanyLabels(supabase, id),
+    // Catálogo de tarefas padrão ATIVAS (para escolher). Molde inativo não aparece.
+    supabase
+      .from("standard_tasks")
+      .select("id, title, kind")
+      .eq("active", true)
+      .order("title", { ascending: true }),
+    // Tarefas padrão JÁ atribuídas nesta empresa (molde vivo por standard_task_id).
+    supabase
+      .from("task_templates")
+      .select("standard_task_id, collaborator_id")
+      .eq("company_id", id)
+      .eq("active", true)
+      .not("standard_task_id", "is", null),
   ]);
 
   const company = companyData as Company | null;
@@ -98,6 +117,33 @@ export default async function EmpresaEditarPage({
     const c = first(link.collaborator);
     if (c) selectedCollaboratorIds.push(c.id);
   }
+
+  // Tarefas padrão desta empresa: catálogo + atribuições atuais (padrão → responsável).
+  const standards = (standardData as StandardOption[]) ?? [];
+  const currentStandardTasks = ((assignedData as AssignedRow[]) ?? [])
+    .filter((a) => a.standard_task_id)
+    .map((a) => ({
+      standardId: a.standard_task_id as string,
+      collaboratorId: a.collaborator_id,
+    }));
+
+  // Responsável da tarefa padrão = SÓ os colaboradores responsáveis da empresa
+  // (company_collaborators). Monta a lista válida a partir dos vínculos.
+  const responsibles: ConsultantOption[] = [];
+  for (const link of (collaboratorLinksData as CompanyCollaboratorLink[]) ?? []) {
+    const c = first(link.collaborator);
+    if (c) responsibles.push(c);
+  }
+  // Responsáveis antigos (ainda gravados em alguma tarefa) que saíram da lista —
+  // preservados e mostrados como "fora da lista" para poderem ser corrigidos.
+  const responsibleIdSet = new Set(responsibles.map((r) => r.id));
+  const byId = new Map(colaboradores.map((p) => [p.id, p]));
+  const staleResponsibles = Array.from(
+    new Set(currentStandardTasks.map((a) => a.collaboratorId))
+  )
+    .filter((id) => !responsibleIdSet.has(id))
+    .map((id) => byId.get(id))
+    .filter((p): p is ConsultantOption => !!p);
 
   return (
     <AppShell
@@ -126,6 +172,28 @@ export default async function EmpresaEditarPage({
             selectedIds={selectedCollaboratorIds}
           />
         </section>
+
+        {/* Tarefas padrão desta empresa (movido da central da empresa para cá,
+            abaixo dos colaboradores responsáveis). Mesmo componente/permissões. */}
+        {standards.length > 0 && (
+          <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
+            <h2 className="mb-1 font-semibold text-fg">
+              Tarefas padrão desta empresa
+            </h2>
+            <p className="mb-4 text-sm text-fg-muted">
+              Selecione as tarefas do catálogo que esta empresa usa e o
+              responsável de cada uma. Editar a padrão no catálogo atualiza as
+              tarefas em aberto aqui.
+            </p>
+            <CompanyStandardTasks
+              companyId={company.id}
+              standards={standards}
+              collaborators={responsibles}
+              current={currentStandardTasks}
+              staleResponsibles={staleResponsibles}
+            />
+          </section>
+        )}
 
         <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
           <CompanyLabels

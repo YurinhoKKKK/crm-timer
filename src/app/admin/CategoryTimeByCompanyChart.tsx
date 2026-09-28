@@ -19,9 +19,13 @@ import {
   categoryColor,
   categoryLabel,
   CATEGORY_ORDER,
+  STANDARD_KEY,
 } from "@/lib/task-category";
 import type { Period } from "./PeriodFilter";
-import { getCompanyTimeBreakdown, type BreakdownTask } from "./chart-actions";
+import {
+  getCompanyTimeBreakdown,
+  type BreakdownTaskGroup,
+} from "./chart-actions";
 
 // Tempo de UMA empresa quebrado por categoria (reforma do cadastro). `total` é a
 // soma das categorias — só entram tarefas categorizadas (+ listagem, agrupada
@@ -44,6 +48,15 @@ function formatSmart(seconds: number): string {
 function truncate(value: string, max: number): string {
   if (value.length <= max) return value;
   return `${value.slice(0, Math.max(1, max - 1)).trimEnd()}…`;
+}
+
+// Data pura da ocorrência (task_date "AAAA-MM-DD") em "DD/MM/AAAA", SEM Date
+// (que aplicaria fuso e poderia recuar um dia). Ver [[timezone-brasilia]].
+function formatOccurrenceDate(value: string | null): string {
+  if (!value) return "sem data";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!m) return value;
+  return `${m[3]}/${m[2]}/${m[1]}`;
 }
 
 // Largura real do contêiner (via ResizeObserver), para dosar os rótulos do eixo.
@@ -99,13 +112,16 @@ function BreakdownPanel({
 }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tasks, setTasks] = useState<BreakdownTask[]>([]);
+  const [groups, setGroups] = useState<BreakdownTaskGroup[]>([]);
   const [total, setTotal] = useState(0);
+  // Quais tarefas estão com as ocorrências abertas (segundo nível).
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let active = true;
     setLoading(true);
     setError(null);
+    setExpanded(new Set());
     getCompanyTimeBreakdown(
       selected.companyId,
       period,
@@ -115,7 +131,7 @@ function BreakdownPanel({
       if (!active) return;
       if (res.error) setError(res.error);
       else {
-        setTasks(res.tasks ?? []);
+        setGroups(res.groups ?? []);
         setTotal(res.totalSeconds ?? 0);
       }
       setLoading(false);
@@ -124,6 +140,15 @@ function BreakdownPanel({
       active = false;
     };
   }, [selected.companyId, selected.category, period, collaboratorId]);
+
+  function toggle(key: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -179,45 +204,57 @@ function BreakdownPanel({
             <p className="py-8 text-center text-sm text-red-600 dark:text-red-400">
               {error}
             </p>
-          ) : tasks.length === 0 ? (
+          ) : groups.length === 0 ? (
             <p className="py-8 text-center text-sm text-fg-subtle">
               Nenhuma tarefa com tempo registrado no período.
             </p>
           ) : (
             <ul className="space-y-2">
-              {tasks.map((t) => {
-                const meta = STATUS_META[t.status];
+              {groups.map((g) => {
                 const share =
-                  total > 0 ? Math.round((t.seconds / total) * 100) : 0;
+                  total > 0 ? Math.round((g.totalSeconds / total) * 100) : 0;
+                const isOpen = expanded.has(g.key);
                 return (
-                  <li key={t.id}>
-                    <TaskDetailLink
-                      taskId={t.id}
-                      className="block w-full rounded-xl border border-line bg-surface p-3 text-left transition hover:border-risd/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
+                  <li
+                    key={g.key}
+                    className="overflow-hidden rounded-xl border border-line bg-surface"
+                  >
+                    {/* Nível 1: a TAREFA — tempo total somado + nº de ocorrências.
+                        Clicar expande as ocorrências. */}
+                    <button
+                      type="button"
+                      onClick={() => toggle(g.key)}
+                      aria-expanded={isOpen}
+                      className="block w-full p-3 text-left transition hover:bg-surface-2/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-risd"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="truncate font-medium text-fg">
-                            {t.title}
+                            {g.title}
                           </p>
-                          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-fg-muted">
-                            <span
-                              className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-medium ${meta.badge}`}
+                          <div className="mt-1 flex items-center gap-1.5 text-xs text-fg-muted">
+                            <svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden="true"
+                              className={`shrink-0 transition-transform ${
+                                isOpen ? "" : "-rotate-90"
+                              }`}
                             >
-                              <span
-                                className={`h-1.5 w-1.5 rounded-full ${meta.dot}`}
-                              />
-                              {meta.label}
-                            </span>
-                            <Person
-                              name={t.collaboratorName}
-                              avatarUrl={t.collaboratorAvatarUrl}
-                              size={16}
-                            />
+                              <path d="m6 9 6 6 6-6" />
+                            </svg>
+                            {g.count}{" "}
+                            {g.count === 1 ? "ocorrência" : "ocorrências"}
                           </div>
                         </div>
                         <span className="shrink-0 font-mono text-sm tabular-nums text-fg">
-                          {formatDuration(t.seconds)}
+                          {formatDuration(g.totalSeconds)}
                         </span>
                       </div>
                       <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
@@ -226,7 +263,47 @@ function BreakdownPanel({
                           style={{ width: `${share}%` }}
                         />
                       </div>
-                    </TaskDetailLink>
+                    </button>
+
+                    {/* Nível 2: as OCORRÊNCIAS (data, status, responsável, tempo).
+                        Cada uma abre o detalhe da tarefa. */}
+                    {isOpen && (
+                      <ul className="divide-y divide-line border-t border-line bg-surface-2/30">
+                        {g.occurrences.map((o) => {
+                          const meta = STATUS_META[o.status];
+                          return (
+                            <li key={o.id}>
+                              <TaskDetailLink
+                                taskId={o.id}
+                                className="flex items-center justify-between gap-3 px-3 py-2.5 pl-6 text-left transition hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-risd"
+                              >
+                                <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-fg-muted">
+                                  <span className="font-medium tabular-nums text-fg">
+                                    {formatOccurrenceDate(o.taskDate)}
+                                  </span>
+                                  <span
+                                    className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-medium ${meta.badge}`}
+                                  >
+                                    <span
+                                      className={`h-1.5 w-1.5 rounded-full ${meta.dot}`}
+                                    />
+                                    {meta.label}
+                                  </span>
+                                  <Person
+                                    name={o.collaboratorName}
+                                    avatarUrl={o.collaboratorAvatarUrl}
+                                    size={16}
+                                  />
+                                </div>
+                                <span className="shrink-0 font-mono text-sm tabular-nums text-fg">
+                                  {formatDuration(o.seconds)}
+                                </span>
+                              </TaskDetailLink>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
                   </li>
                 );
               })}
@@ -250,11 +327,15 @@ type Row = {
 
 export default function CategoryTimeByCompanyChart({
   data,
+  dataWithStandard,
   period,
   collaboratorId,
   topN = 8,
 }: {
   data: CompanyCategoryTime[];
+  // Mesmo dado, INCLUINDO a faixa das tarefas padrão (diárias). Presente só onde
+  // o servidor calculou; o botão alterna entre `data` (padrão, OCULTAS) e este.
+  dataWithStandard?: CompanyCategoryTime[];
   period: Period;
   collaboratorId?: string;
   topN?: number;
@@ -263,18 +344,21 @@ export default function CategoryTimeByCompanyChart({
   const [wrapRef, width] = useWidth<HTMLDivElement>();
   const [selected, setSelected] = useState<Selected | null>(null);
   const [showAll, setShowAll] = useState(false);
+  // Botão exibir/ocultar tarefas padrão — por padrão OCULTAS (comportamento atual).
+  const [showStandard, setShowStandard] = useState(false);
+  const canToggleStandard = !!dataWithStandard;
+  const activeData =
+    showStandard && dataWithStandard ? dataWithStandard : data;
   // Guarda para não abrir DUAS vezes ao clicar numa faixa: o onClick da faixa
   // (categoria) roda antes do onClick da coluna; marcamos aqui para o da coluna
   // se abster.
   const segmentClicked = useRef(false);
 
-  if (data.length === 0) {
-    return (
-      <div className="flex h-64 items-center justify-center text-sm text-fg-subtle">
-        Nenhum tempo registrado no período.
-      </div>
-    );
-  }
+  // Estado vazio NÃO faz early-return: o botão exibir/ocultar tarefas padrão é
+  // controle do gráfico e precisa continuar visível mesmo sem dado (senão, ao
+  // ocultar num recorte sem categorias — ex.: "Hoje" — a pessoa perde o botão e
+  // fica presa). Renderizamos sempre a legenda + botão; o corpo é que troca.
+  const isEmpty = activeData.length === 0;
 
   const grid = dark ? "#2A313A" : "#E4E2DF";
   const axis = dark ? "#9AA2AC" : "#5B636C";
@@ -284,12 +368,12 @@ export default function CategoryTimeByCompanyChart({
   // Categorias presentes, na ordem canônica — definem as séries empilhadas e a
   // legenda.
   const present = Array.from(
-    new Set(data.flatMap((d) => d.byCategory.map((c) => c.category)))
+    new Set(activeData.flatMap((d) => d.byCategory.map((c) => c.category)))
   ).sort((a, b) => (CATEGORY_ORDER[a] ?? 99) - (CATEGORY_ORDER[b] ?? 99));
 
   // Ordena por tempo (desc) e, com muitas empresas, agrupa a cauda numa barra
   // "Outras" (sem quebra por categoria — clicar nela reexpande).
-  const sorted = [...data].sort((a, b) => b.total - a.total);
+  const sorted = [...activeData].sort((a, b) => b.total - a.total);
   const overflow = sorted.length > topN;
   const head = overflow && !showAll ? sorted.slice(0, topN) : sorted;
   const tail = overflow && !showAll ? sorted.slice(topN) : [];
@@ -476,23 +560,59 @@ export default function CategoryTimeByCompanyChart({
 
   return (
     <>
-      {/* Legenda das categorias (nome escrito). */}
-      <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1.5">
-        {present.map((cat) => (
-          <span
-            key={cat}
-            className="inline-flex items-center gap-1.5 text-xs text-fg-muted"
+      {/* Legenda das categorias (nome escrito) + botão de tarefas padrão. */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+          {present.map((cat) => (
+            <span
+              key={cat}
+              className="inline-flex items-center gap-1.5 text-xs text-fg-muted"
+            >
+              <span
+                aria-hidden="true"
+                className="h-2.5 w-2.5 rounded-sm"
+                style={{ background: categoryColor(cat, dark) }}
+              />
+              {categoryLabel(cat)}
+            </span>
+          ))}
+        </div>
+        {canToggleStandard && (
+          <button
+            type="button"
+            onClick={() => setShowStandard((v) => !v)}
+            aria-pressed={showStandard}
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${
+              showStandard
+                ? "border-risd/50 bg-brand-tint text-fg"
+                : "border-line bg-surface text-fg-muted hover:text-fg"
+            }`}
           >
             <span
               aria-hidden="true"
               className="h-2.5 w-2.5 rounded-sm"
-              style={{ background: categoryColor(cat, dark) }}
+              style={{ background: categoryColor(STANDARD_KEY, dark) }}
             />
-            {categoryLabel(cat)}
-          </span>
-        ))}
+            {showStandard ? "Ocultar tarefas padrão" : "Mostrar tarefas padrão"}
+          </button>
+        )}
       </div>
 
+      {isEmpty ? (
+        <div className="flex h-64 flex-col items-center justify-center gap-1 text-center text-sm text-fg-subtle">
+          <p>Nenhum tempo registrado no período.</p>
+          {canToggleStandard && !showStandard && (
+            <p className="max-w-sm text-xs">
+              As tarefas padrão estão ocultas — pode haver tempo nelas. Clique em{" "}
+              <span className="font-medium text-fg-muted">
+                “Mostrar tarefas padrão”
+              </span>{" "}
+              acima.
+            </p>
+          )}
+        </div>
+      ) : (
+        <>
       <div
         ref={wrapRef}
         style={{ height: 220 + axisHeight }}
@@ -586,6 +706,8 @@ export default function CategoryTimeByCompanyChart({
           </button>
         )}
       </div>
+        </>
+      )}
 
       {selected && (
         <BreakdownPanel

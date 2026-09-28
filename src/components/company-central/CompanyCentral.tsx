@@ -3,7 +3,6 @@ import Avatar from "@/components/Avatar";
 import CompanyPeriodFilter from "@/components/company-central/CompanyPeriodFilter";
 import { periodQuery, type ResolvedPeriod } from "@/lib/period";
 import NewTaskForm from "@/app/admin/tarefas/NewTaskForm";
-import CompanyStandardTasks from "@/components/CompanyStandardTasks";
 import CompanyTaskList from "./CompanyTaskList";
 import ClientAccessManager from "./ClientAccessManager";
 import CompanyActivityFeed from "./CompanyActivityFeed";
@@ -423,25 +422,9 @@ export default function CompanyCentral({
         </div>
       )}
 
-      {/* 9. Tarefas padrão desta empresa */}
-      {data.standards.length > 0 && (
-        <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
-          <h3 className="mb-1 font-semibold text-fg">
-            Tarefas padrão desta empresa
-          </h3>
-          <p className="mb-4 text-sm text-fg-muted">
-            Selecione as tarefas do catálogo que esta empresa usa e o responsável
-            de cada uma. Editar a padrão no catálogo atualiza as tarefas em aberto
-            aqui.
-          </p>
-          <CompanyStandardTasks
-            companyId={company.id}
-            standards={data.standards}
-            collaborators={data.collaborators}
-            current={data.currentStandardTasks}
-          />
-        </section>
-      )}
+      {/* As "Tarefas padrão desta empresa" saíram daqui para a tela de Editar
+          empresa (abaixo de "Colaboradores responsáveis"), admin-only. Sem cópia
+          nos dois lugares. Ver empresas/[id]/editar/page.tsx. */}
     </>
   );
 }

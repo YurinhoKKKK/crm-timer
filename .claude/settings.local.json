@@ -206,7 +206,24 @@
       "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:3000/login\" -TimeoutSec 4 -UseBasicParsing; \"3000 -> $\\($r.StatusCode\\)\" } catch { \"3000 down: $\\($_.Exception.Message\\)\" })",
       "PowerShell($env:PORT=3100; npx next start -p 3100)",
       "PowerShell(Start-Sleep -Seconds 6; try { $r = Invoke-WebRequest -Uri \"http://localhost:3100/login\" -TimeoutSec 6 -UseBasicParsing; \"3100 -> $\\($r.StatusCode\\)\" } catch { \"3100 not ready: $\\($_.Exception.Message\\)\" })",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/login)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/login)",
+      "Bash(curl -s -o /dev/null -w \"3001 login: %{http_code}\\\\n\" http://localhost:3001/login)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" --retry-connrefused --retry 40 --retry-delay 1 --retry-all-errors http://localhost:3000/login)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/login)",
+      "Bash(curl -s -w '\\\\n[HTTP %{http_code}]\\\\n' -X POST http://localhost:3001/api/crm/companies -H 'Content-Type: application/json' -H 'x-crm-secret: errado' -d '{\"number\":1,\"razao_social\":\"x\"}')",
+      "Bash(curl -s -w '\\\\n[HTTP %{http_code}]\\\\n' -X POST http://localhost:3001/api/crm/companies -H 'Content-Type: application/json' -d '{}')",
+      "Bash(curl -s -w '\\\\n[HTTP %{http_code}]\\\\n' -X POST http://localhost:3001/api/crm/companies -H 'Content-Type: application/json' -H 'x-crm-secret: test-secret-xyz789' -d '{nao eh json')",
+      "Bash(curl -s -w '\\\\n[HTTP %{http_code}]\\\\n' -X POST http://localhost:3001/api/crm/companies -H 'Content-Type: application/json' -H 'x-crm-secret: test-secret-xyz789' -d [1,2,3])",
+      "Bash(curl -s -w '\\\\n[HTTP %{http_code}]\\\\n' -X POST http://localhost:3001/api/crm/companies/check-duplicate -H 'Content-Type: application/json' -H 'x-crm-secret: test-secret-xyz789' -d '{}')",
+      "Bash(curl -s -w '\\\\n[HTTP %{http_code}]\\\\n' -X POST http://localhost:3001/api/crm/companies -H 'Content-Type: application/json' -H 'x-crm-secret: test-secret-xyz789' -d '{\"number\":9001,\"razao_social\":\"Teste Intake XYZ\"}')",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" --retry-connrefused --retry 40 --retry-delay 1 --retry-all-errors http://localhost:3005/login)",
+      "PowerShell($c = Get-NetTCPConnection -LocalPort 3005 -State Listen -ErrorAction SilentlyContinue; if \\($c\\) { $c.OwningProcess | Select-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue; \"killed PID $_\" } } else { \"no listener on 3005\" })",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" --retry-connrefused --retry 40 --retry-delay 1 --retry-all-errors http://localhost:3006/login)",
+      "PowerShell($c = Get-NetTCPConnection -LocalPort 3006 -State Listen -ErrorAction SilentlyContinue; if \\($c\\) { $c.OwningProcess | Select-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue; \"killed $_\" } } else { \"none\" })",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" --retry-connrefused --retry 40 --retry-delay 1 --retry-all-errors http://localhost:3007/login)",
+      "Bash(curl -s -o /dev/null -w \"3000 login: %{http_code}\\\\n\" http://localhost:3000/login)",
+      "mcp__claude_ai_Supabase__query_logs",
+      "Bash(python -c 'import json;d=json.load\\(open\\(r'\\\\''C:\\\\Users\\\\renat\\\\.claude\\\\projects\\\\C--Users-renat-OneDrive-Desktop-crm-timer\\\\49bd88d1-27dc-4888-852c-3186ecd1dd19\\\\tool-results\\\\mcp-claude_ai_Supabase-get_advisors-1790606476114.txt'\\\\'',encoding='\\\\''utf-8'\\\\''\\)\\); *)"
     ]
   }
 }

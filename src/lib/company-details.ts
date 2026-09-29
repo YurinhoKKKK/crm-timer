@@ -77,6 +77,8 @@ export type CompanyDetails = {
   systemUsed: string | null;
   mainPain: string | null;
   about: string | null;
+  // Closer (vendedor) — RÉPLICA do CRM comercial. Somente leitura; nem admin edita.
+  closerName: string | null;
   updatedAtISO: string | null;
   updatedByName: string | null;
   // Serviços CONTRATADOS (o que foi vendido), na ordem do enum.
@@ -102,7 +104,7 @@ export async function loadCompanyDetails(
     supabase
       .from("company_details")
       .select(
-        "project_model, started_on, ends_on, cadence, system_used, main_pain, about, updated_at, updated_by"
+        "project_model, started_on, ends_on, cadence, system_used, main_pain, about, closer_name, updated_at, updated_by"
       )
       .eq("company_id", companyId)
       .maybeSingle(),
@@ -126,6 +128,7 @@ export async function loadCompanyDetails(
         system_used: string | null;
         main_pain: string | null;
         about: string | null;
+        closer_name: string | null;
         updated_at: string | null;
         updated_by: string | null;
       }
@@ -155,6 +158,7 @@ export async function loadCompanyDetails(
     systemUsed: d?.system_used ?? null,
     mainPain: d?.main_pain ?? null,
     about: d?.about ?? null,
+    closerName: d?.closer_name ?? null,
     updatedAtISO: d?.updated_at ?? null,
     updatedByName,
     contractedServices: contracted,

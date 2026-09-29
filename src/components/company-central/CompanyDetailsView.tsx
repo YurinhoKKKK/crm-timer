@@ -192,6 +192,13 @@ function ReadView({ data }: { data: CompanyDetails }) {
           )}
         </Field>
 
+        <Field
+          label="Closer"
+          hint="Somente leitura — vem do CRM comercial e não é editável aqui."
+        >
+          {data.closerName ? data.closerName : <Empty />}
+        </Field>
+
         <div className="sm:col-span-2">
           <Field label="Período do contrato">
             <PeriodDisplay info={info} />
@@ -392,6 +399,20 @@ function EditView({
               não tiver.
             </p>
           )}
+        </div>
+
+        <div>
+          <label className={labelClass}>Closer</label>
+          <div className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-fg">
+            {data.closerName ? (
+              data.closerName
+            ) : (
+              <span className="text-fg-subtle">não informado</span>
+            )}
+          </div>
+          <p className="mt-1 text-xs text-fg-subtle">
+            Somente leitura — vem do CRM comercial e não é editável aqui.
+          </p>
         </div>
 
         <div className="sm:col-span-2">

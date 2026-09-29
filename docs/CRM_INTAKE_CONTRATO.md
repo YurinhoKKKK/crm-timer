@@ -63,6 +63,20 @@ nada.
 | `main_pain` | string | não | Texto livre, até 5000 chars. |
 | `about` | string | não | Texto livre, até 5000 chars. |
 | `contracted_services` | array de string | não | Cada item ∈ `mercado_livre`, `shopee`, `amazon`, `trafego`, `gestao_site`, `desenvolvimento_site`. |
+| `project_value` | número decimal (ou string numérica) | não | **Valor total do projeto** (o que o cliente PAGA à Monvatti). **Não negativo** (`>= 0`), até 12 dígitos inteiros e 2 decimais (`numeric(14,2)`). Guardado em tabela **restrita a admin**. |
+| `installments` | inteiro | não | **Parcelas** do projeto. **Maior que zero** (`> 0`). Guardado na mesma tabela restrita. |
+| `closer_name` | string | não | **Nome do closer** (vendedor do time comercial). Máx. 200 chars. É **réplica** do CRM — exibido, mas **somente leitura** neste sistema (nem admin edita). |
+
+> 💰 **Valores do contrato são RESTRITOS a admin.** `project_value` e `installments`
+> vão para uma tabela própria (`company_contract_values`) com RLS **admin-only** —
+> consultor e colaborador **não** os leem, nem por API nem por tela. São diferentes
+> do faturamento: faturamento é quanto o cliente **vende**; isto é quanto o cliente
+> **paga** à Monvatti (informação comercial interna). Dinheiro em `numeric(14,2)`.
+>
+> 🚫 **NÃO envie valor mensal.** O valor mensal é **calculado** (`project_value / installments`,
+> só na exibição, e nunca quando as parcelas são nulas/zero) — **não** é aceito no
+> envio. Se vier (`monthly_value`, `valor_mensal` ou `monthly_amount`), é **ignorado**
+> e um aviso é registrado no servidor.
 
 > ⚠️ **`contracted_services` usa o enum `contracted_service` — NÃO é o `sales_channel` do faturamento.** São **taxonomias diferentes, não confundir**:
 > - `contracted_service` (**este campo** — o que foi VENDIDO no contrato): `mercado_livre`, `shopee`, `amazon`, `trafego`, `gestao_site`, `desenvolvimento_site`. **Não** tem `site_proprio`; tem tráfego e os dois tipos de site.
@@ -97,7 +111,10 @@ curl -X POST https://SEU-DOMINIO/api/crm/companies \
     "system_used": "Bling",
     "main_pain": "Sem processo de anúncios",
     "about": "Loja de autopeças",
-    "contracted_services": ["mercado_livre", "trafego", "gestao_site"]
+    "contracted_services": ["mercado_livre", "trafego", "gestao_site"],
+    "project_value": 18000.00,
+    "installments": 12,
+    "closer_name": "Ana Vendas"
   }'
 ```
 
@@ -119,7 +136,7 @@ Formato: `{ "ok": false, "error": "<código>", "message": "<texto>", "collision"
 |---|---|---|---|
 | 401 | `unauthorized` | Segredo ausente/errado. | |
 | 400 | `bad_json` | Corpo não é objeto JSON válido. | |
-| 422 | `validation` | Campo faltando/ inválido (número, razão, **CNPJ ausente ou inválido**, enum, data, tamanho, serviço). | |
+| 422 | `validation` | Campo faltando/ inválido (número, razão, **CNPJ ausente ou inválido**, enum, data, tamanho, serviço, **`project_value` negativo, `installments` ≤ 0, `closer_name` > 200**). | |
 | 409 | `cnpj_in_use` | O `cnpj` já está cadastrado em outra empresa (**único critério de duplicidade**, bloqueio direto). | `collision: { id, name }` |
 | 409 | `number_in_use` | O `number` já é usado por outra empresa. | `collision: { id, name }` |
 | 409 | `duplicate` | Colisão do **índice único** do banco (nome/CNPJ já existente) — rede de segurança rara, não é mais por semelhança de nome. | |
@@ -251,6 +268,11 @@ curl -X POST https://SEU-DOMINIO/api/crm/companies/check-duplicate \
   depois por um admin, dentro do sistema.
 - Só cria — **não** atualiza, **não** apaga, **não** toca em tarefa, faturamento
   ou usuário.
+- **Dados comerciais do fechamento:** `project_value` e `installments` são gravados
+  na tabela **restrita** `company_contract_values` (RLS admin-only, `numeric(14,2)`);
+  `closer_name` vai para `company_details` (exibido, somente leitura). O **valor
+  mensal** é derivado na exibição (`project_value / installments`) e **não** é aceito
+  no envio. Os valores do contrato **não** entram no evento de histórico da empresa.
 - Cada chamada é **auditada** (tabela `crm_intake_log`: quando, origem, IP
   hasheado, resultado, payload) e a empresa criada ganha um **evento de
   histórico** "Empresa criada (CRM comercial)".

@@ -2051,6 +2051,190 @@
 
   ---
 
+  ## Integração com o CRM comercial — recebe o cliente fechado (Feito · no ar)
+
+  Ponta que **RECEBE** clientes já fechados do CRM comercial (outro projeto Supabase)
+  e cria a empresa **em On Boarding, sem consultor/colaborador** (a distribuição vem
+  depois, pelo admin). Porta ESTREITA: só CRIA — não atualiza, não apaga, não toca em
+  tarefa/faturamento/usuário. Documentada em detalhe em **docs/CRM_INTAKE_CONTRATO.md**.
+
+  - **Decisões travadas (não reabrir):** o número NÃO vira coluna (segue no TEXTO do
+    nome, ex.: "376. RAZÃO (Contato)"); este sistema NÃO gera número (vem pronto do
+    CRM); empresa sem número não é criada.
+  - **Duas rotas** (Next, runtime nodejs, POST, autenticadas por **segredo
+    compartilhado** no cabeçalho `x-crm-secret`, comparado timing-safe):
+    `POST /api/crm/companies` (cria) e `POST /api/crm/companies/check-duplicate`
+    (lista parecidas, só consultivo).
+  - **RPCs SECURITY DEFINER concedidas SÓ a `service_role`** (migration `0084_crm_intake`):
+    `crm_intake_create` e `crm_intake_check_duplicate`. A chave anon é pública, então a
+    ÚNICA porta é a rota do servidor atrás do segredo. 1º uso de service role no projeto
+    (`src/lib/supabase-admin.ts`, nunca no navegador).
+  - **Validação toda no banco:** número inteiro positivo obrigatório, razão obrigatória,
+    **CNPJ obrigatório e validado** (ver seção do modelo/CNPJ), datas AAAA-MM-DD, enums,
+    serviços. Criação ATÔMICA (empresa + evento `empresa_criada_crm` + company_details +
+    canais contratados).
+  - **Dedup = SÓ POR CNPJ (migration `0087`, decisão do Mauricio):** o bloqueio por
+    semelhança de NOME foi REMOVIDO de `crm_intake_create`; duplicidade = CNPJ igual
+    (`cnpj_in_use`) ou número igual (`number_in_use`). As funções de similaridade de nome
+    foram PRESERVADAS (consultivas no check-duplicate). Limitação consciente: cliente
+    antigo sem CNPJ não é detectado até preencherem os antigos.
+  - **Segurança:** auditoria append-only `crm_intake_log` (quem/IP **hasheado**/quando/
+    resultado/payload); rate limit no banco (60 criações/min, 120 conferências/min);
+    `/api/crm/` liberado no `src/middleware.ts` (server-to-server, sem sessão — a proteção
+    é o segredo).
+  - **Env vars:** `CRM_INTAKE_SECRET` + `SUPABASE_SERVICE_ROLE_KEY` (sem elas → 500
+    server_misconfig). **PRODUÇÃO CONFIRMADA 18/09** (smoke test HTTP passou). Commits
+    `bb5aec6` + `a8d2e66`.
+
+  ---
+
+  ## Modelo "ema" + CNPJ + etiqueta automática pelo modelo (Feito · no ar)
+
+  Três mudanças em Informações do cliente + contrato do intake (migrations `0085` e `0086`).
+
+  - **Modelo "ema":** o enum `project_model` ganhou `ema` (além de bpo/consultoria). É
+    campo PRÓPRIO — **NÃO** é o grupo "Ema" nem a etiqueta "Ema" (três coisas distintas,
+    não sincronizam). Aceito no intake.
+  - **CNPJ (antes não existia):** `companies.cnpj` guarda SÓ os 14 dígitos (máscara é de
+    exibição), ÚNICO quando não nulo (índice parcial), CHECK com `is_valid_cnpj()` (dígitos
+    verificadores). CNPJ inválido é RECUSADO, nunca corrigido. SEM backfill. Na tela, só o
+    admin edita; no intake é OBRIGATÓRIO (422 se inválido/ausente, 409 `cnpj_in_use` se já
+    existe). **CNPJ = critério FORTE de duplicidade** (ver seção do intake).
+  - **Etiqueta automática (migration `0086`):** definir/trocar o modelo atribui a etiqueta
+    correspondente (consultoria→CONSULTORIA, bpo→BPO, ema→Ema; nomes resolvidos em runtime,
+    nunca id fixo), nos dois caminhos (tela `company_details_save` e intake `crm_intake_create`).
+    **Só age quando o modelo REALMENTE MUDA** (`is distinct from`) — editar outros campos não
+    re-sincroniza, preservando divergência manual; troca faz swap limpo só dentro de
+    {CONSULTORIA,BPO,Ema}; modelo→null não remove nada; etiqueta ausente não falha.
+
+  Testado por RPC no banco (begin/rollback). Commit `ca82423` (teste visual no navegador
+  não foi feito — extensão offline; Mauricio autorizou commitar sem ele).
+
+  ---
+
+  ## Reforma do cadastro de tarefas — categoria, tipo admin-only, gráfico por categoria (Feito)
+
+  Reforma em 4 partes (decisões travadas; migrations `0088` + `0089`). Commit `e4b9531`.
+
+  - **Parte 1 — Título vira SELEÇÃO por categoria.** Enum `task_category` (cadastro,
+    precificacao, anuncio, estudo, listagem, integracao, criar_conta; rótulos + cores em
+    `src/lib/task-category.ts`). Coluna `task_templates.category` NULA nos ~1.195 modelos
+    antigos — SEM backfill, SEM adivinhar do título. `title` CONTINUA existindo (histórico);
+    nas tarefas NOVAS o título é DERIVADO da categoria. Categoria 'listagem' ⇒
+    template_type='listagem' (reusa o layout de marcas/marketplaces).
+  - **Parte 2 — Tipo (única/diária) só ADMIN.** Consultor: o campo some e toda tarefa nasce
+    ÚNICA; não transforma tarefa em diária. Três camadas: UI esconde, action força/preserva o
+    kind pelo cargo, e TRAVA no banco (trigger `trg_task_kind_admin_only`, SECURITY DEFINER —
+    contextos de serviço com `auth.uid()` nulo passam direto, p/ o cron).
+  - **Parte 3 — Gráfico "Tempo por empresa" quebrado por CATEGORIA** (dashboards `/admin` e
+    `/admin/colaboradores/[id]`). RPCs `time_by_company_category` e `time_by_task_category`
+    (migration `0088`, tempo por `time_entries` em BRT, agregado no banco). O gráfico vertical
+    vira coluna EMPILHADA por categoria (cor + legenda); clicar numa FAIXA abre as tarefas da
+    categoria, clicar no resto da coluna abre a empresa inteira. O gráfico antigo foi removido.
+  - **Parte 4 — Organização visual do cadastro** (`NewTaskForm`): categoria em destaque,
+    grupos "Tarefa" e "Execução", campos que não se aplicam somem (não desabilitados).
+
+  ---
+
+  ## Âncora: colaborador responsável = vínculo declarado + reforma da Capacidade (Feito)
+
+  Mudança de âncora (decisões travadas). O colaborador deixava de ganhar acesso a uma empresa
+  só por TER tarefa lá; agora é **VÍNCULO DECLARADO** gerido pelo admin. Migrations `0090`→`0094`.
+  Commits `357f73a` (+ `d2c5512`). Capacidade testada no navegador pelo Mauricio.
+
+  - **Tabela + backfill (`0090`):** `company_collaborators` (company_id, collaborator_id, PK
+    composta, cascade; aceita >1 por empresa). RLS: leitura p/ quem alcança; escrita SÓ admin.
+    Backfill = colaboradores de TAREFA PADRÃO ATIVA (119 vínculos, conferido).
+  - **Âncora RLS:** `my_collaborator_companies()` passou a ser `company_collaborators ∪
+    task_instances` (superconjunto do antigo — nenhuma leitura perdida; ganha a empresa
+    vinculada mesmo sem tarefa). Usada em dezenas de policies.
+  - **Painel do colaborador:** RPC `collaborator_portfolio` = carteira declarada ∪ empresas
+    com tarefa EM ABERTO, com flag `in_portfolio` e chip "fora da carteira".
+  - **Criação de tarefa:** o seletor de colaborador oferece SÓ os responsáveis da empresa,
+    validado NO SERVIDOR (`collaboratorInPortfolio`). **Exceção (commit `d2c5512`): SÓ o admin
+    fura a trava** e pode atribuir a um não-responsável (com aviso âmbar "fora da carteira");
+    consultor segue barrado. A regra também cobre tarefa PADRÃO (`assertResponsibles`).
+  - **Editar empresa:** componente `CompanyCollaborators` abaixo dos consultores; ao REMOVER
+    quem tem tarefa em aberto, o servidor pede confirmação (nada é apagado — só o vínculo).
+  - **Capacidade (`0091`→`0094`):** `team_capacity` ganhou carteira do colaborador, "fora da
+    carteira" (foto do agora), colunas clicáveis (abrem empresas/tarefas que contam) e virou
+    **SECURITY DEFINER** com gate `is_admin()` após um timeout de 8s (o helper de RLS ficou
+    caro depois da `0090`): medido 2262ms→86ms. Padrão a lembrar: RPC agregada admin-only e
+    lenta → DEFINER + gate, nunca INVOKER pagando RLS à toa.
+
+  ---
+
+  ## Fluxo automático entre grupos — o grupo DIRIGE a operação (Feito)
+
+  Três frentes juntas (migrations `0095` + `0096`). Commit `5172e7c`. Os grupos deixam de ser
+  só visuais e passam a DIRIGIR a operação, pela nova coluna `company_groups.kind`
+  (active/paused/onboarding/neutral; backfill por nome — **todo o fluxo lê `kind`, nunca o
+  nome**).
+
+  - **Item 1 — diárias no gráfico:** botão "Mostrar tarefas padrão" (default OCULTO = atual);
+    faixa própria (bucket `__diaria__`, cor ardósia). RPC `time_by_company_standard` (`0096`).
+  - **Item 2 — tarefas padrão movidas:** o bloco "Tarefas padrão desta empresa" saiu da central
+    (aparecia p/ admin E consultor) e foi p/ `empresas/[id]/editar` (admin-only). Consultor não
+    gerencia mais padrão pela central.
+  - **Item 3 — fluxo automático (`0095`):**
+    - `task_templates.paused_by_group` (decisão do GRUPO) ≠ `active` (decisão humana). A geração
+      diária exige `active AND NOT paused_by_group`. **Nunca mexer em `active`.**
+    - Trigger `companies_group_flow_trg`: entrar num grupo PARADO pausa todas as tarefas; entrar
+      num ATIVO despausa; entrar em ONBOARDING notifica os admins. Eventos no histórico.
+    - **Bloqueio ao entrar em Ativos** (`set_companies_group`, no servidor): exige
+      consultor + colaborador + tarefa ativa; a tela reverte o cartão e mostra o que falta.
+    - Cron `move-expired-to-renewal` (00:15 BRT): move Ativos/Ema com contrato vencido
+      (`company_details.ends_on`) p/ Aguardando Renovação; idempotente; notifica admins.
+    - Notificações novas `empresa_onboarding`/`empresa_renovacao`. Painéis de consultor/
+      colaborador escondem empresa parada, MENOS se o próprio usuário tem tarefa em aberto
+      (chip "cliente pausado").
+
+  ---
+
+  ## Valores do contrato (restritos) + Closer (exibido) (Feito · aguardando teste no navegador)
+
+  Quatro campos novos vindos do CRM comercial no fechamento (migration `0097`). Commit `f1cbedf`.
+
+  - **Valores do contrato (RESTRITOS a admin):** tabela NOVA `company_contract_values`
+    (project_value `numeric(14,2)`, installments), **separada de company_details de propósito**
+    — company_details é legível por consultor/colaborador, então "oculto na tela" vazaria na API.
+    RLS admin-only + `revoke all from anon`. É o que o cliente PAGA à Monvatti (diferente do
+    faturamento, que é o que ele VENDE). **Não aparece em nenhuma tela por ora** (guardado p/ o
+    futuro quadro de Sucesso do Cliente). Conferido no banco: consultor/colaborador veem 0.
+  - **Valor mensal:** NUNCA guardado. Derivado `project_value/installments` só na exibição; se
+    vier no envio, é ignorado.
+  - **Closer (exibido):** `company_details.closer_name` (texto, nome do vendedor; não é vínculo
+    com profiles). Réplica do CRM — **somente leitura, nem admin edita**. Aparece em Informações
+    do cliente com aviso "vem do CRM comercial".
+  - **Intake:** 3 campos OPCIONAIS (project_value, installments, closer_name) na mesma RPC; os
+    valores NÃO entram no `company_events`. Contrato em `docs/CRM_INTAKE_CONTRATO.md` atualizado.
+
+  ---
+
+  ## Exportar o quadro de empresas em Excel (Em construção · aguardando teste no navegador + commit)
+
+  Botão **"Exportar Excel"** em `/admin/empresas` (acima do quadro) que baixa um **`.xlsx`
+  real** (biblioteca `exceljs`) do quadro inteiro — admin-only. Sem migration (só leitura).
+
+  - **Organização:** uma aba, **agrupada igual à tela** — grupos na ordem de `position`, balde
+    "Sem grupo" por último; empresas ordenadas por nome dentro de cada grupo.
+  - **Colunas:** `Empresa` · **uma coluna por consultor responsável** (Consultor 1..N) · **uma
+    coluna por colaborador responsável** (Colaborador 1..M). O nº de colunas = máximo de
+    responsáveis entre todas as empresas, de modo que cada pessoa fica estritamente em sua
+    própria coluna (requisito do Mauricio).
+  - **Visual:** faixa colorida de cabeçalho por grupo (tom claro da cor do grupo, p/ o texto
+    ficar legível) + coluna-indicadora à esquerda em cor cheia; cabeçalho congelado, filtro
+    automático, bordas, larguras, título e data/hora da exportação (BRT). Mesmo princípio de uso
+    da cor dos grupos (tinge faixa/indicador, nunca o texto).
+  - **Arquivos:** `src/lib/empresas-export.ts` (carga agregada — 1 query por tabela, sem N+1 —
+    + builder puro do workbook), `src/app/api/admin/empresas/export/route.ts` (GET admin-only,
+    403 se não for admin) e `src/app/admin/empresas/ExportEmpresasButton.tsx` (fetch+blob, com
+    estado de carregamento/erro). Dependência nova: `exceljs`.
+  - **Status:** build verde e rota registrada. Segue o fluxo "commit só após teste": falta o
+    teste no navegador e o commit.
+
+  ---
+
   # ITENS ARQUIVADOS E DECISÕES EM ABERTO
 
   Registro do que foi CONSCIENTEMENTE deixado de lado, para não parecer

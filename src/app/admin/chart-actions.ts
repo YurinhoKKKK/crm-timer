@@ -3,8 +3,6 @@
 import { createClient } from "@/lib/supabase-server";
 import type { TaskStatus } from "@/lib/types";
 import { avatarUrl } from "@/lib/avatar";
-import { periodStart } from "@/lib/period";
-import type { Period } from "./PeriodFilter";
 
 // Uma OCORRÊNCIA (instância) que compôs o tempo — o segundo nível do painel.
 export type BreakdownOccurrence = {
@@ -57,7 +55,10 @@ type Row = {
 // tarefas padrão). A RLS (ti_select / te_select) protege o acesso.
 export async function getCompanyTimeBreakdown(
   companyId: string,
-  period: Period,
+  // Intervalo RESOLVIDO (datas puras BRT). start null = sem início; end null =
+  // aberto até hoje. Mesmo intervalo das barras do gráfico, para a soma bater.
+  start: string | null,
+  end: string | null,
   collaboratorId?: string,
   category?: string
 ): Promise<{
@@ -71,8 +72,6 @@ export async function getCompanyTimeBreakdown(
   } = await supabase.auth.getUser();
   if (!user) return { error: "Sessão expirada. Faça login novamente." };
 
-  const start = periodStart(period);
-
   // 1) Tempo por OCORRÊNCIA no período (fonte de verdade: time_entries). Com
   // categoria, restringe às tarefas daquela categoria (o bucket '__diaria__'
   // cobre as tarefas padrão sem categoria).
@@ -82,11 +81,13 @@ export async function getCompanyTimeBreakdown(
         p_category: category,
         p_start: start,
         p_collaborator: collaboratorId ?? null,
+        p_end: end,
       })
     : await supabase.rpc("time_by_task", {
         p_company: companyId,
         p_start: start,
         p_collaborator: collaboratorId ?? null,
+        p_end: end,
       });
   if (timeError) return { error: timeError.message };
 

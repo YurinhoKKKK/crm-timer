@@ -143,3 +143,85 @@ export async function loadStatusInstances(
     labelsByCompany: Object.fromEntries(labelsMap) as Record<string, Label[]>,
   };
 }
+
+// --- Lista por PERÍODO (critério por prazo) ---------------------------------
+// Variante do drill-down do DASHBOARD e das listas da tela do colaborador: a
+// lista usa EXATAMENTE o mesmo critério das contagens (RPC `tasks_in_period` /
+// helper `task_in_period`), nunca filtro montado no JS. Entra a tarefa com prazo
+// (due_at em BRT, como data) no período OU a aberta atrasada carregada de antes.
+//
+// Observação de escopo: a central da empresa continua em `loadStatusInstances`
+// (por task_date) — intocada de propósito.
+type PeriodRow = {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  due_at: string | null;
+  task_date: string;
+  template_id: string | null;
+  total_seconds: number;
+  company_id: string;
+  company_name: string | null;
+  collaborator_full_name: string | null;
+  collaborator_email: string | null;
+  collaborator_avatar_path: string | null;
+};
+
+export async function loadPeriodInstances(
+  supabase: SupabaseServer,
+  opts: {
+    filter: StatusFilter | null;
+    start: string | null;
+    end: string | null;
+    collaboratorId?: string;
+    companyId?: string;
+  }
+): Promise<{
+  error: string | null;
+  items: InstanceItem[];
+  truncated: boolean;
+  labelsByCompany: Record<string, Label[]>;
+}> {
+  const { data, error } = await supabase.rpc("tasks_in_period", {
+    p_filter: opts.filter ?? null,
+    p_start: opts.start,
+    p_end: opts.end ?? null,
+    p_collaborator: opts.collaboratorId ?? null,
+    p_company: opts.companyId ?? null,
+    p_limit: CAP + 1,
+  });
+  if (error) {
+    return { error: error.message, items: [], truncated: false, labelsByCompany: {} };
+  }
+
+  const allRows = (data as PeriodRow[]) ?? [];
+  const truncated = allRows.length > CAP;
+  const rows = truncated ? allRows.slice(0, CAP) : allRows;
+
+  const items: InstanceItem[] = rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    status: r.status,
+    due_at: r.due_at,
+    task_date: r.task_date,
+    templateId: r.template_id,
+    total_seconds: r.total_seconds,
+    companyId: r.company_id,
+    companyName: r.company_name ?? "(empresa removida)",
+    collaboratorName:
+      r.collaborator_full_name || r.collaborator_email || "(colaborador removido)",
+    collaboratorAvatarUrl: avatarUrl(r.collaborator_avatar_path),
+  }));
+
+  const labelsMap = await loadLabelsByCompany(
+    supabase,
+    items.map((i) => i.companyId)
+  );
+
+  return {
+    error: null,
+    items,
+    truncated,
+    labelsByCompany: Object.fromEntries(labelsMap) as Record<string, Label[]>,
+  };
+}

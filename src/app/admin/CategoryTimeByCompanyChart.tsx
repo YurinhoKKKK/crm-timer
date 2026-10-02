@@ -21,7 +21,6 @@ import {
   CATEGORY_ORDER,
   STANDARD_KEY,
 } from "@/lib/task-category";
-import type { Period } from "./PeriodFilter";
 import {
   getCompanyTimeBreakdown,
   type BreakdownTaskGroup,
@@ -101,12 +100,14 @@ type Selected = {
 // detalhe da tarefa (TaskDetailLink) abre por cima em z-sheet (60).
 function BreakdownPanel({
   selected,
-  period,
+  start,
+  end,
   collaboratorId,
   onClose,
 }: {
   selected: Selected;
-  period: Period;
+  start: string | null;
+  end: string | null;
   collaboratorId?: string;
   onClose: () => void;
 }) {
@@ -124,7 +125,8 @@ function BreakdownPanel({
     setExpanded(new Set());
     getCompanyTimeBreakdown(
       selected.companyId,
-      period,
+      start,
+      end,
       collaboratorId,
       selected.category
     ).then((res) => {
@@ -139,7 +141,7 @@ function BreakdownPanel({
     return () => {
       active = false;
     };
-  }, [selected.companyId, selected.category, period, collaboratorId]);
+  }, [selected.companyId, selected.category, start, end, collaboratorId]);
 
   function toggle(key: string) {
     setExpanded((prev) => {
@@ -328,7 +330,8 @@ type Row = {
 export default function CategoryTimeByCompanyChart({
   data,
   dataWithStandard,
-  period,
+  start,
+  end,
   collaboratorId,
   topN = 8,
 }: {
@@ -336,7 +339,9 @@ export default function CategoryTimeByCompanyChart({
   // Mesmo dado, INCLUINDO a faixa das tarefas padrão (diárias). Presente só onde
   // o servidor calculou; o botão alterna entre `data` (padrão, OCULTAS) e este.
   dataWithStandard?: CompanyCategoryTime[];
-  period: Period;
+  // Intervalo resolvido (datas puras BRT) — repassado ao detalhamento por clique.
+  start: string | null;
+  end: string | null;
   collaboratorId?: string;
   topN?: number;
 }) {
@@ -712,7 +717,8 @@ export default function CategoryTimeByCompanyChart({
       {selected && (
         <BreakdownPanel
           selected={selected}
-          period={period}
+          start={start}
+          end={end}
           collaboratorId={collaboratorId}
           onClose={() => setSelected(null)}
         />

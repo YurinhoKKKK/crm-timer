@@ -1,39 +1,31 @@
 import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import {
-  loadStatusInstances,
+  loadPeriodInstances,
   normalizeStatusFilter,
   statusListTitle,
 } from "@/lib/instance-status";
-import { periodStart, type PeriodKey } from "@/lib/period";
+import { resolveDashboardPeriod, dashboardQuery } from "@/lib/period";
 import InstanceStatusList from "./InstanceStatusList";
 
-type Period = PeriodKey;
-
-const PERIODS: Period[] = ["hoje", "7d", "30d", "tudo"];
-
-function normalizePeriod(value: string | string[] | undefined): Period {
-  const v = Array.isArray(value) ? value[0] : value;
-  return PERIODS.includes(v as Period) ? (v as Period) : "30d";
-}
-
 // Drill-down do dashboard (admin): lista de tarefas por status/atrasadas no
-// período. A leitura vem do núcleo compartilhado (lib/instance-status), o
-// mesmo das listas por status das centrais de empresa.
+// período. Usa EXATAMENTE o mesmo critério das contagens dos cards (RPC
+// tasks_in_period / task_in_period): prazo no período + atrasada em aberto.
 export default async function InstanciasPage({
   searchParams,
 }: {
-  searchParams: { status?: string; periodo?: string };
+  searchParams: { status?: string; periodo?: string; de?: string; ate?: string };
 }) {
   const { supabase, profile } = await guardRole(["admin"]);
 
   const filter = normalizeStatusFilter(searchParams?.status);
-  const period = normalizePeriod(searchParams?.periodo);
+  const period = resolveDashboardPeriod(searchParams ?? {});
 
   const { error, items, truncated, labelsByCompany } = filter
-    ? await loadStatusInstances(supabase, {
+    ? await loadPeriodInstances(supabase, {
         filter,
-        start: periodStart(period),
+        start: period.start,
+        end: period.end,
       })
     : { error: null, items: [], truncated: false, labelsByCompany: {} };
 
@@ -44,7 +36,7 @@ export default async function InstanciasPage({
       subtitle={`${truncated ? "300+" : items.length} tarefa${
         items.length === 1 ? "" : "s"
       }`}
-      back={{ href: `/admin?periodo=${period}`, label: "Dashboard" }}
+      back={{ href: `/admin?${dashboardQuery(period)}`, label: "Dashboard" }}
     >
       {!filter ? (
         <div className="rounded-2xl border border-line bg-surface p-12 text-center text-fg-subtle shadow-card">

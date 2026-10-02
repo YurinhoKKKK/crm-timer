@@ -3,7 +3,7 @@ import { guardRole } from "@/components/guardRole";
 import { perfRoute } from "@/lib/perf";
 import AppShell from "@/components/AppShell";
 import type { TaskStatus } from "@/lib/types";
-import PeriodFilter, { type Period } from "./PeriodFilter";
+import PeriodPicker from "./PeriodPicker";
 import CategoryTimeByCompanyChart, {
   type CompanyCategoryTime,
 } from "./CategoryTimeByCompanyChart";
@@ -11,7 +11,11 @@ import { STANDARD_KEY } from "@/lib/task-category";
 import CollaboratorSummary, {
   type CollaboratorRow,
 } from "./CollaboratorSummary";
-import { periodStart } from "@/lib/period";
+import {
+  resolveDashboardPeriod,
+  dashboardQuery,
+  dashboardPhrase,
+} from "@/lib/period";
 
 type Named = { id: string; name: string };
 type Person = {
@@ -20,8 +24,6 @@ type Person = {
   email: string;
   avatar_path: string | null;
 };
-
-const PERIODS: Period[] = ["hoje", "7d", "30d", "tudo"];
 
 const STATUS_CARDS: {
   status: TaskStatus;
@@ -45,18 +47,6 @@ const STATUS_CARDS: {
   },
 ];
 
-function normalizePeriod(value: string | string[] | undefined): Period {
-  const v = Array.isArray(value) ? value[0] : value;
-  return PERIODS.includes(v as Period) ? (v as Period) : "30d";
-}
-
-const PERIOD_LABEL: Record<Period, string> = {
-  hoje: "hoje",
-  "7d": "nos últimos 7 dias",
-  "30d": "nos últimos 30 dias",
-  tudo: "em todo o período",
-};
-
 function formatDuration(totalSeconds: number): string {
   // Ver nota em lib/format.ts: correções manuais para baixo gravam intervalo
   // negativo; num recorte curto o agregado pode somar negativo. Piso em 0.
@@ -71,12 +61,14 @@ function formatDuration(totalSeconds: number): string {
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: { periodo?: string };
+  searchParams: { periodo?: string; de?: string; ate?: string };
 }) {
   const { supabase, profile } = await guardRole(["admin"]);
 
-  const period = normalizePeriod(searchParams?.periodo);
-  const start = periodStart(period);
+  const period = resolveDashboardPeriod(searchParams ?? {});
+  const start = period.start;
+  const end = period.end;
+  const periodQ = dashboardQuery(period);
 
   // Contagens por status, atrasadas e total/concluídas por responsável são
   // AGREGADAS NO BANCO (task_status_counts / collaborator_task_counts). Antes
@@ -98,11 +90,11 @@ export default async function AdminPage({
   ] = await Promise.all([
     perf.timed(
       "rpc task_status_counts",
-      supabase.rpc("task_status_counts", { p_start: start })
+      supabase.rpc("task_status_counts", { p_start: start, p_end: end })
     ),
     perf.timed(
       "rpc collaborator_task_counts",
-      supabase.rpc("collaborator_task_counts", { p_start: start })
+      supabase.rpc("collaborator_task_counts", { p_start: start, p_end: end })
     ),
     perf.timed("companies", supabase.from("companies").select("id, name")),
     // Todos os perfis (não só role=colaborador): admin/consultor que executam
@@ -117,11 +109,11 @@ export default async function AdminPage({
     // enxerga tudo pela te_select.
     perf.timed(
       "rpc time_by_company",
-      supabase.rpc("time_by_company", { p_start: start })
+      supabase.rpc("time_by_company", { p_start: start, p_end: end })
     ),
     perf.timed(
       "rpc time_by_collaborator",
-      supabase.rpc("time_by_collaborator", { p_start: start })
+      supabase.rpc("time_by_collaborator", { p_start: start, p_end: end })
     ),
     // Tempo por (empresa, categoria) — fonte do gráfico "Tempo por empresa"
     // (reforma do cadastro). Só tarefas categorizadas (+ listagem); o resto
@@ -129,14 +121,14 @@ export default async function AdminPage({
     // seguem com o tempo TOTAL (time_by_company/collaborator).
     perf.timed(
       "rpc time_by_company_category",
-      supabase.rpc("time_by_company_category", { p_start: start })
+      supabase.rpc("time_by_company_category", { p_start: start, p_end: end })
     ),
     // Tempo das TAREFAS PADRÃO (diárias sem categoria) por empresa — a faixa
     // opcional do gráfico (botão "Mostrar tarefas padrão"). Fica de fora até
     // ligar; por isso vem numa RPC à parte, sem tocar no caminho atual.
     perf.timed(
       "rpc time_by_company_standard",
-      supabase.rpc("time_by_company_standard", { p_start: start })
+      supabase.rpc("time_by_company_standard", { p_start: start, p_end: end })
     ),
   ]);
   perf.done();
@@ -279,9 +271,9 @@ export default async function AdminPage({
     >
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-sm font-medium text-fg-muted">
-          Visão geral · {PERIOD_LABEL[period]}
+          Visão geral · {dashboardPhrase(period)}
         </h2>
-        <PeriodFilter value={period} />
+        <PeriodPicker value={period} />
       </div>
 
       {instancesError ? (
@@ -290,12 +282,16 @@ export default async function AdminPage({
         </div>
       ) : (
         <>
+          {/* Critério das tarefas por período (prazo + atrasadas em aberto). */}
+          <p className="mb-2 text-xs text-fg-subtle">
+            Tarefas com prazo no período + atrasadas em aberto
+          </p>
           {/* Cards por status (clicáveis) */}
           <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {STATUS_CARDS.map((card) => (
               <Link
                 key={card.status}
-                href={`/admin/instancias?status=${card.status}&periodo=${period}`}
+                href={`/admin/instancias?status=${card.status}&${periodQ}`}
                 className="group rounded-xl border border-line bg-surface p-5 shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
               >
                 <div className="flex items-center gap-2">
@@ -323,7 +319,7 @@ export default async function AdminPage({
               </p>
             </div>
             <Link
-              href={`/admin/instancias?status=atrasadas&periodo=${period}`}
+              href={`/admin/instancias?status=atrasadas&${periodQ}`}
               className="group rounded-xl border border-line bg-surface p-5 shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
             >
               <div className="flex items-center gap-2">
@@ -357,7 +353,8 @@ export default async function AdminPage({
             <CategoryTimeByCompanyChart
               data={categoryChartData}
               dataWithStandard={categoryChartDataWithStandard}
-              period={period}
+              start={start}
+              end={end}
             />
           </section>
 
@@ -366,7 +363,7 @@ export default async function AdminPage({
             <h3 className="mb-4 text-sm font-semibold text-fg">
               Resumo por responsável
             </h3>
-            <CollaboratorSummary rows={collaboratorRows} period={period} />
+            <CollaboratorSummary rows={collaboratorRows} periodQuery={periodQ} />
           </section>
         </>
       )}

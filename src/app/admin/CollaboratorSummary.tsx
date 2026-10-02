@@ -19,10 +19,11 @@ export type CollaboratorRow = {
 // não montar dezenas de linhas de uma vez. Mantém o visual da tabela original.
 export default function CollaboratorSummary({
   rows,
-  period,
+  periodQuery,
 }: {
   rows: CollaboratorRow[];
-  period: string;
+  // Query string do período (ex.: "periodo=hoje" ou "de=...&ate=..."), sem "?".
+  periodQuery: string;
 }) {
   const { visible, hasMore, remaining, showMore } = usePaged(rows, 12);
 
@@ -54,7 +55,7 @@ export default function CollaboratorSummary({
               >
                 <td className="py-3 pr-4 font-medium text-fg">
                   <Link
-                    href={`/admin/colaboradores/${r.id}?periodo=${period}`}
+                    href={`/admin/colaboradores/${r.id}?${periodQuery}`}
                     className="flex items-center gap-2.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                   >
                     <Avatar

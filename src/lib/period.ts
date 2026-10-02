@@ -196,3 +196,195 @@ export function resolvePeriod(input: {
 export function periodQuery(resolved: ResolvedPeriod): string {
   return new URLSearchParams(resolved.params).toString();
 }
+
+// =====================================================================
+// PERÍODO DO DASHBOARD (/admin e /admin/colaboradores/[id]) — seletor próprio
+// com atalhos + calendário. Modelo SEPARADO do ResolvedPeriod da central da
+// empresa (contratos de URL diferentes): aqui os atalhos de INTERVALO (7d, 30d,
+// este mês, mês passado) materializam em ?de/?ate; só Ontem/Hoje/Tudo usam
+// ?periodo. start/end são DATAS puras BRT (YYYY-MM-DD); end é INCLUSIVO; ambos
+// null só em "Tudo" (sem filtro — idêntico ao comportamento anterior).
+//
+// Datas: texto AAAA-MM-DD de ponta a ponta. A aritmética de calendário é pura
+// (sobre inteiros ou sobre a data UTC-âncora de `addDays`, já usada no arquivo);
+// nada de fuso em data pura. "Hoje" vem de brtToday().
+// =====================================================================
+
+export type DashboardPreset = "ontem" | "hoje" | "tudo" | "custom";
+
+export type DashboardPeriod = {
+  preset: DashboardPreset;
+  // Datas puras BRT. Ambas null só em "tudo".
+  start: string | null;
+  end: string | null;
+  // Rótulo textual SEMPRE visível: "02/10/2026" (um dia), "01/09/2026 a
+  // 30/09/2026" (intervalo) ou "Tudo".
+  label: string;
+  // Ida-e-volta na URL (?periodo=ontem|hoje|tudo OU ?de=...&ate=...).
+  params: Record<string, string>;
+};
+
+// Soma `days` (pode ser negativo) a uma data 'YYYY-MM-DD'. Mesma âncora UTC do
+// `minusDays` acima (contamos dias de calendário, imune a horário de verão).
+export function addDays(ymd: string, days: number): string {
+  return minusDays(ymd, -days);
+}
+
+// Hoje/Ontem em BRT.
+export function brtYesterday(): string {
+  return addDays(brtToday(), -1);
+}
+
+function dayLabel(start: string, end: string): string {
+  return start === end ? brDate(start) : `${brDate(start)} a ${brDate(end)}`;
+}
+
+function customPeriod(start: string, end: string): DashboardPeriod {
+  // Inverte se vier fim antes do início (decisão: 1º clique início, 2º fim).
+  const [lo, hi] = start <= end ? [start, end] : [end, start];
+  return {
+    preset: "custom",
+    start: lo,
+    end: hi,
+    label: dayLabel(lo, hi),
+    params: { de: lo, ate: hi },
+  };
+}
+
+// Atalhos que viram intervalo materializado (?de/?ate).
+export function last7Range(): { start: string; end: string } {
+  const today = brtToday();
+  return { start: addDays(today, -6), end: today };
+}
+export function last30Range(): { start: string; end: string } {
+  const today = brtToday();
+  return { start: addDays(today, -29), end: today };
+}
+export function thisMonthRange(): { start: string; end: string } {
+  const ym = brtToday().slice(0, 7);
+  return { start: `${ym}-01`, end: lastDayOfMonth(ym) };
+}
+export function lastMonthRange(): { start: string; end: string } {
+  const ym = shiftMonth(brtToday().slice(0, 7), -1);
+  return { start: `${ym}-01`, end: lastDayOfMonth(ym) };
+}
+
+// Resolve os parâmetros de URL do dashboard num período validado. Padrão (nada
+// ou inválido) = HOJE, sem erro. de/ate têm precedência (atalhos de intervalo e
+// personalizado materializam neles). Links antigos ?periodo=7d|30d continuam
+// funcionando, convertidos em intervalo.
+export function resolveDashboardPeriod(input: {
+  periodo?: string | string[];
+  de?: string | string[];
+  ate?: string | string[];
+}): DashboardPeriod {
+  const today = brtToday();
+  const hoje = (): DashboardPeriod => ({
+    preset: "hoje",
+    start: today,
+    end: today,
+    label: brDate(today),
+    params: { periodo: "hoje" },
+  });
+
+  const de = firstOf(input.de);
+  const ate = firstOf(input.ate);
+  if (de != null || ate != null) {
+    if (de && ate && isRealDate(de) && isRealDate(ate)) {
+      return customPeriod(de, ate);
+    }
+    return hoje(); // intervalo corrompido cai em Hoje
+  }
+
+  const p = firstOf(input.periodo);
+  if (p == null || p === "") return hoje();
+  if (p === "hoje") return hoje();
+  if (p === "ontem") {
+    const y = brtYesterday();
+    return {
+      preset: "ontem",
+      start: y,
+      end: y,
+      label: brDate(y),
+      params: { periodo: "ontem" },
+    };
+  }
+  if (p === "tudo") {
+    return { preset: "tudo", start: null, end: null, label: "Tudo", params: { periodo: "tudo" } };
+  }
+  // Retrocompatibilidade: ?periodo=7d|30d viram intervalo materializado.
+  if (p === "7d") {
+    const r = last7Range();
+    return customPeriod(r.start, r.end);
+  }
+  if (p === "30d") {
+    const r = last30Range();
+    return customPeriod(r.start, r.end);
+  }
+  // Desconhecido → Hoje (sem erro).
+  return hoje();
+}
+
+// Query string dos parâmetros do período do dashboard (links/"voltar"), sem "?".
+export function dashboardQuery(p: DashboardPeriod): string {
+  return new URLSearchParams(p.params).toString();
+}
+
+// Fragmento humano para a frase "Visão geral · {...}".
+export function dashboardPhrase(p: DashboardPeriod): string {
+  if (p.preset === "tudo") return "em todo o período";
+  if (p.preset === "ontem") return "ontem";
+  if (p.preset === "hoje") return "hoje";
+  return p.start === p.end
+    ? `em ${brDate(p.start as string)}`
+    : `de ${brDate(p.start as string)} a ${brDate(p.end as string)}`;
+}
+
+// --- Aritmética de calendário PURA (sobre inteiros) para o PeriodPicker ------
+
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+function isLeap(year: number): boolean {
+  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+}
+
+// Nº de dias do mês de um "YYYY-MM".
+export function daysInMonth(ym: string): number {
+  const [y, m] = ym.split("-").map(Number);
+  if (m === 2 && isLeap(y)) return 29;
+  return DAYS_IN_MONTH[m - 1];
+}
+
+// Dia da semana do dia 01 do mês (0=domingo … 6=sábado) — algoritmo de Sakamoto,
+// inteiros puros, sem Date.
+export function firstWeekdayOfMonth(ym: string): number {
+  const [y, m] = ym.split("-").map(Number);
+  const t = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
+  const yy = m < 3 ? y - 1 : y;
+  return (yy + Math.floor(yy / 4) - Math.floor(yy / 100) + Math.floor(yy / 400) + t[m - 1] + 1) % 7;
+}
+
+// Desloca um "YYYY-MM" por `delta` meses (com virada de ano). Inteiros puros.
+export function shiftMonth(ym: string, delta: number): string {
+  const [y, m] = ym.split("-").map(Number);
+  const total = y * 12 + (m - 1) + delta;
+  const ny = Math.floor(total / 12);
+  const nm = (total % 12) + 1;
+  return `${ny}-${String(nm).padStart(2, "0")}`;
+}
+
+// Monta uma data pura a partir de (ano, mês 1-12, dia). Sem Date.
+export function makeYmd(y: number, m: number, d: number): string {
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+// "YYYY-MM-DD" → "YYYY-MM".
+export function ymOf(ymd: string): string {
+  return ymd.slice(0, 7);
+}
+
+// Rótulo curto do mês ("março", sem o ano) para o cabeçalho do calendário.
+export function monthName(ym: string): string {
+  const m = Number(ym.split("-")[1]);
+  return MONTHS_FULL_PT[m - 1] ?? ym;
+}

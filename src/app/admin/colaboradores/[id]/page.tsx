@@ -15,23 +15,16 @@ import AdjustableTaskList, {
 import CategoryTimeByCompanyChart, {
   type CompanyCategoryTime,
 } from "../../CategoryTimeByCompanyChart";
-import PeriodFilter, { type Period } from "../../PeriodFilter";
-import { periodStart } from "@/lib/period";
+import PeriodPicker from "../../PeriodPicker";
+import {
+  resolveDashboardPeriod,
+  dashboardQuery,
+  dashboardPhrase,
+} from "@/lib/period";
+import { loadPeriodInstances } from "@/lib/instance-status";
 import { STANDARD_KEY } from "@/lib/task-category";
 
 type Joined<T> = T | T[] | null;
-
-type InstanceRow = {
-  id: string;
-  title: string;
-  status: TaskStatus;
-  due_at: string | null;
-  task_date: string;
-  template_id: string | null;
-  total_seconds: number;
-  company_id: string;
-  company: Joined<{ name: string }>;
-};
 
 type ActivityRow = {
   id: string;
@@ -45,20 +38,6 @@ type ActivityRow = {
 function first<T>(value: Joined<T>): T | null {
   if (Array.isArray(value)) return value[0] ?? null;
   return value;
-}
-
-const PERIODS: Period[] = ["hoje", "7d", "30d", "tudo"];
-
-const PERIOD_LABEL: Record<Period, string> = {
-  hoje: "hoje",
-  "7d": "nos últimos 7 dias",
-  "30d": "nos últimos 30 dias",
-  tudo: "em todo o período",
-};
-
-function normalizePeriod(value: string | string[] | undefined): Period {
-  const v = Array.isArray(value) ? value[0] : value;
-  return PERIODS.includes(v as Period) ? (v as Period) : "30d";
 }
 
 const ROLE_LABEL: Record<string, string> = {
@@ -94,12 +73,13 @@ export default async function CollaboratorDetailPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { periodo?: string };
+  searchParams: { periodo?: string; de?: string; ate?: string };
 }) {
   const { supabase, profile } = await guardRole(["admin"]);
 
-  const period = normalizePeriod(searchParams?.periodo);
-  const start = periodStart(period);
+  const period = resolveDashboardPeriod(searchParams ?? {});
+  const start = period.start;
+  const end = period.end;
 
   // Perfil do colaborador (RLS: is_admin() libera leitura de qualquer perfil).
   const { data: personData } = await supabase
@@ -118,23 +98,13 @@ export default async function CollaboratorDetailPage({
   };
   const personName = person.full_name || person.email;
 
-  // Tarefas do colaborador no período (RLS: is_admin() libera). A LISTA é
-  // limitada a um teto (CAP+1 para detectar corte) — os NÚMEROS do cabeçalho
-  // (total/concluídas/atrasadas) NÃO saem daqui: vêm de task_status_counts
-  // (agregado no banco), senão acima de 1000 tarefas contaríamos errado por
-  // truncamento silencioso do PostgREST.
-  const LIST_CAP = 500;
-  let instancesQuery = supabase
-    .from("task_instances")
-    .select(
-      "id, title, status, due_at, task_date, template_id, total_seconds, company_id, company:companies!task_instances_company_id_fkey(name)"
-    )
-    .eq("collaborator_id", params.id)
-    .order("due_at", { ascending: true, nullsFirst: false })
-    .limit(LIST_CAP + 1);
-  if (start) instancesQuery = instancesQuery.gte("task_date", start);
-
-  // Histórico recente de atividades do colaborador no período.
+  // Tarefas do colaborador no período — MESMO critério das contagens
+  // (tasks_in_period / task_in_period): prazo no período + atrasadas em aberto.
+  // A LISTA tem teto (com aviso de corte); os NÚMEROS do cabeçalho vêm de
+  // task_status_counts (agregado no banco), imunes ao teto.
+  //
+  // Histórico recente de atividades do colaborador no período (feed limitado a
+  // 30; filtro por início como antes).
   let activityQuery = supabase
     .from("activity_log")
     .select(
@@ -146,40 +116,45 @@ export default async function CollaboratorDetailPage({
   if (start) activityQuery = activityQuery.gte("created_at", start);
 
   const [
-    { data: instancesData, error },
+    listRes,
     { data: activityData },
     { data: timeByCompanyData },
     { data: countData },
     { data: companyCategoryData },
     { data: companyStandardData },
   ] = await Promise.all([
-    instancesQuery,
+    loadPeriodInstances(supabase, {
+      filter: null,
+      start,
+      end,
+      collaboratorId: params.id,
+    }),
     activityQuery,
     // Tempo TRABALHADO no período por empresa, escopado a este responsável
     // (time_entries por started_at BRT). Fonte do "Tempo trabalhado no período"
     // (total) e dos nomes de empresa — o total_seconds das instâncias (por
     // task_date) inflava dias errados.
-    supabase.rpc("time_by_company", { p_start: start, p_collaborator: params.id }),
+    supabase.rpc("time_by_company", { p_start: start, p_collaborator: params.id, p_end: end }),
     // Contagens do cabeçalho (total/concluídas/atrasadas) agregadas no banco,
     // escopadas a este responsável — imunes ao teto de linhas da lista.
-    supabase.rpc("task_status_counts", { p_start: start, p_collaborator: params.id }),
+    supabase.rpc("task_status_counts", { p_start: start, p_collaborator: params.id, p_end: end }),
     // Tempo por (empresa, categoria) deste responsável — fonte do gráfico
     // "Tempo por empresa" (reforma do cadastro). Só tarefas categorizadas
     // (+ listagem); o resto fica de fora.
     supabase.rpc("time_by_company_category", {
       p_start: start,
       p_collaborator: params.id,
+      p_end: end,
     }),
     // Tempo das tarefas padrão (diárias) deste responsável — a faixa opcional.
     supabase.rpc("time_by_company_standard", {
       p_start: start,
       p_collaborator: params.id,
+      p_end: end,
     }),
   ]);
 
-  const allInstances = (instancesData as InstanceRow[]) ?? [];
-  const listTruncated = allInstances.length > LIST_CAP;
-  const instances = allInstances.slice(0, LIST_CAP);
+  const { error, items: instances, truncated: listTruncated } = listRes;
   const activities = (activityData as ActivityRow[]) ?? [];
   const headerCounts = (countData as
     | { total: number; finalizada: number; overdue: number }[]
@@ -240,10 +215,7 @@ export default async function CollaboratorDetailPage({
   // do bug) não aparece na lista — buscamos o nome dela à parte.
   const companyNames = new Map<string, string>();
   for (const r of instances) {
-    companyNames.set(
-      r.company_id,
-      first(r.company)?.name ?? "(empresa removida)"
-    );
+    companyNames.set(r.companyId, r.companyName);
   }
   const missingNames = timeRows
     .map((r) => r.company_id)
@@ -316,10 +288,10 @@ export default async function CollaboratorDetailPage({
     status: r.status,
     due_at: r.due_at,
     task_date: r.task_date,
-    templateId: r.template_id,
+    templateId: r.templateId,
     total_seconds: r.total_seconds,
-    companyId: r.company_id,
-    companyName: first(r.company)?.name ?? "(empresa removida)",
+    companyId: r.companyId,
+    companyName: r.companyName,
     adjustments: adjustmentsByTask.get(r.id) ?? [],
   }));
   const companyOptions = dedupe(items.map((i) => [i.companyId, i.companyName]));
@@ -332,7 +304,7 @@ export default async function CollaboratorDetailPage({
       title: r.title,
       status: r.status,
       due_at: r.due_at,
-      companyName: first(r.company)?.name ?? "(empresa removida)",
+      companyName: r.companyName,
       overdue: !!r.due_at && new Date(r.due_at).getTime() < now,
     }))
     .sort((a, b) => {
@@ -349,18 +321,18 @@ export default async function CollaboratorDetailPage({
       user={{ name: profile.full_name, role: "admin", avatarUrl: profile.avatarUrl }}
       title="Detalhe do colaborador"
       subtitle={personName}
-      back={{ href: `/admin?periodo=${period}`, label: "Dashboard" }}
+      back={{ href: `/admin?${dashboardQuery(period)}`, label: "Dashboard" }}
     >
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-sm font-medium text-fg-muted">
-          Visão geral · {PERIOD_LABEL[period]}
+          Visão geral · {dashboardPhrase(period)}
         </h2>
-        <PeriodFilter value={period} />
+        <PeriodPicker value={period} />
       </div>
 
       {error ? (
         <div className="rounded-xl border border-red-300/60 bg-red-50 p-6 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
-          Erro ao carregar os dados: {error.message}
+          Erro ao carregar os dados: {error}
         </div>
       ) : (
         <>
@@ -482,7 +454,8 @@ export default async function CollaboratorDetailPage({
             <CategoryTimeByCompanyChart
               data={categoryChartData}
               dataWithStandard={categoryChartDataWithStandard}
-              period={period}
+              start={start}
+              end={end}
               collaboratorId={person.id}
             />
           </section>
@@ -490,23 +463,23 @@ export default async function CollaboratorDetailPage({
           {/* Lista de tarefas com busca/filtros + ajuste de tempo (Passo 16) */}
           <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
             <h3 className="mb-1 text-sm font-semibold text-fg">
-              Tarefas previstas para o período ({total})
+              Tarefas com prazo no período + atrasadas em aberto ({total})
             </h3>
             {listTruncated && (
               <p className="mb-2 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-                Lista limitada às {LIST_CAP} tarefas mais próximas do prazo. As
-                contagens acima (total, concluídas, atrasadas) consideram TODAS as
-                tarefas — só esta lista foi limitada. Refine por período para ver
-                as demais.
+                Lista limitada às tarefas mais próximas do prazo. As contagens
+                acima (total, concluídas, atrasadas) consideram TODAS as tarefas —
+                só esta lista foi limitada. Refine por período para ver as demais.
               </p>
             )}
             <p className="mb-4 text-xs text-fg-subtle">
-              Estas são as tarefas com prazo no período — o tempo de cada uma é o
-              total gasto nela. O &ldquo;Tempo trabalhado no período&rdquo; acima
-              conta o trabalho pelo dia em que foi feito, então uma tarefa
-              prevista para hoje pode ter sido trabalhada em outro dia. Como
-              admin, você pode corrigir o tempo de uma tarefa (ex.: alguém
-              esqueceu de pausar); toda correção fica registrada.
+              Entram as tarefas com prazo no período (em qualquer status) e as
+              atrasadas em aberto de antes dele — o tempo de cada uma é o total
+              gasto nela. O &ldquo;Tempo trabalhado no período&rdquo; acima conta o
+              trabalho pelo dia em que foi feito, então uma tarefa com prazo hoje
+              pode ter sido trabalhada em outro dia. Como admin, você pode corrigir
+              o tempo de uma tarefa (ex.: alguém esqueceu de pausar); toda correção
+              fica registrada.
             </p>
             <AdjustableTaskList
               items={items}

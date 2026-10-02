@@ -4,6 +4,7 @@ import AppShell from "@/components/AppShell";
 import type { TaskKind } from "@/lib/types";
 import NewCompanyForm from "./NewCompanyForm";
 import CompanyGroupsBoard, { type CompanyItem } from "./CompanyGroupsBoard";
+import ExportEmpresasButton from "./ExportEmpresasButton";
 import { withSelf } from "@/lib/people";
 import { loadLabelCatalog, loadAllLabelsByCompany, loadInUseLabels } from "@/lib/labels";
 import { loadCompanyGroups, resolveCompanyGroupId } from "@/lib/company-groups";
@@ -175,6 +176,10 @@ export default async function EmpresasPage() {
           para poder atribuí-lo a uma empresa.
         </p>
       )}
+
+      <div className="mb-4 flex justify-end">
+        <ExportEmpresasButton />
+      </div>
 
       <CompanyGroupsBoard
         companies={companyItems}

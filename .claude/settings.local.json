@@ -223,7 +223,8 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" --retry-connrefused --retry 40 --retry-delay 1 --retry-all-errors http://localhost:3007/login)",
       "Bash(curl -s -o /dev/null -w \"3000 login: %{http_code}\\\\n\" http://localhost:3000/login)",
       "mcp__claude_ai_Supabase__query_logs",
-      "Bash(python -c 'import json;d=json.load\\(open\\(r'\\\\''C:\\\\Users\\\\renat\\\\.claude\\\\projects\\\\C--Users-renat-OneDrive-Desktop-crm-timer\\\\49bd88d1-27dc-4888-852c-3186ecd1dd19\\\\tool-results\\\\mcp-claude_ai_Supabase-get_advisors-1790606476114.txt'\\\\'',encoding='\\\\''utf-8'\\\\''\\)\\); *)"
+      "Bash(python -c 'import json;d=json.load\\(open\\(r'\\\\''C:\\\\Users\\\\renat\\\\.claude\\\\projects\\\\C--Users-renat-OneDrive-Desktop-crm-timer\\\\49bd88d1-27dc-4888-852c-3186ecd1dd19\\\\tool-results\\\\mcp-claude_ai_Supabase-get_advisors-1790606476114.txt'\\\\'',encoding='\\\\''utf-8'\\\\''\\)\\); *)",
+      "PowerShell(npm install *)"
     ]
   }
 }

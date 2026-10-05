@@ -79,6 +79,13 @@ export const KIND_LABEL: Record<FollowupKind, string> = {
 // Carrega o acompanhamento do período. A RLS (companies_select) já escopa: admin
 // vê todas; consultor só a carteira dele. Uma linha por empresa (bounded pelo nº
 // de empresas do escopo — nunca linhas cruas de sinais).
+//
+// p_only_active=true: a tela de Acompanhamento mostra SÓ empresas de grupo ATIVO
+// (kind='active'). Cliente parado/renovação/onboarding/sem grupo é do comercial e
+// do sucesso do cliente — fica fora, e TODOS os números da tela (semáforo, totais,
+// recorte por consultor) saem deste mesmo conjunto filtrado, pois derivam destas
+// linhas. Outros chamadores da RPC (badge do painel, team_capacity) usam o padrão
+// false e seguem vendo tudo. Ver migration 0100.
 export async function loadFollowup(
   supabase: SupabaseServer,
   periodDays: FollowupPeriod,
@@ -87,6 +94,7 @@ export async function loadFollowup(
   const { data } = await supabase.rpc("client_followup", {
     p_period_days: periodDays,
     p_desc: desc,
+    p_only_active: true,
   });
   const rows =
     (data as

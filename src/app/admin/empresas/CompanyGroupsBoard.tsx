@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type HTMLAttributes } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -24,6 +24,7 @@ import {
   SEM_GRUPO,
   type CompanyGroup,
 } from "@/lib/company-groups";
+import GroupSectionShell from "@/components/company-groups/GroupSection";
 import GroupDialog from "./GroupDialog";
 import LabelManager from "./LabelManager";
 import {
@@ -573,7 +574,6 @@ function GroupSection({
   onRowDragStart: (id: string) => void;
   onRowDragEnd: () => void;
 }) {
-  const tint = group ? colorTints(group.color) : null;
   const isSemGrupo = sectionKey === SEM_GRUPO;
 
   const ids = items.map((c) => c.id);
@@ -588,54 +588,42 @@ function GroupSection({
 
   // Alvo de soltura = a seção inteira (cabeçalho E corpo), com destaque claro
   // enquanto o item paira. preventDefault no dragOver é o que AUTORIZA o drop.
-  const dropProps = dragActive
+  const dropProps: HTMLAttributes<HTMLElement> = dragActive
     ? {
-        onDragOver: (e: DragEvent) => {
+        onDragOver: (e) => {
           e.preventDefault();
           e.dataTransfer.dropEffect = "move";
           onDragEnterSection();
         },
-        onDragLeave: (e: DragEvent) => {
+        onDragLeave: (e) => {
           if (!e.currentTarget.contains(e.relatedTarget as Node))
             onDragLeaveSection();
         },
-        onDrop: (e: DragEvent) => {
+        onDrop: (e) => {
           e.preventDefault();
           onDropSection();
         },
       }
     : {};
 
-  return (
-    <section
-      {...dropProps}
-      className={`rounded-2xl border bg-surface shadow-card transition ${
-        dragOver
-          ? "border-risd ring-2 ring-risd ring-offset-2 ring-offset-canvas"
-          : dragActive
-          ? "border-dashed border-line-strong"
-          : "border-line"
-      }`}
-    >
-      {/* Cabeçalho: barra/bolinha na cor do grupo + nome + contagem + recolher +
-          menu. A COR só tinge barra, bolinha e fundo do cabeçalho em baixa
-          opacidade — o texto usa sempre as cores de tema (regra de uso da cor).
-          rounded-t-2xl (em vez de overflow-hidden na seção) para o fundo tingido
-          respeitar os cantos SEM recortar o dropdown do menu. */}
-      <div
-        className={`flex items-center gap-2 border-b border-line px-3 py-2.5 rounded-t-2xl ${
-          collapsed ? "rounded-b-2xl border-b-0" : ""
-        }`}
-        style={tint ? { backgroundColor: tint.headerBg } : undefined}
-      >
-        {tint && (
-          <span
-            className="h-6 w-1.5 shrink-0 rounded-full"
-            style={{ backgroundColor: tint.dot }}
-            aria-hidden="true"
-          />
-        )}
+  // Borda da seção = destaque de drop (alvo), de arraste ativo (dica) ou neutra.
+  const borderClassName = dragOver
+    ? "border-risd ring-2 ring-risd ring-offset-2 ring-offset-canvas"
+    : dragActive
+    ? "border-dashed border-line-strong"
+    : "border-line";
 
+  // A casca (cabeçalho tingido + recolher + corpo) é compartilhada com os
+  // painéis; o admin acrescenta a seleção (leading) e o menu de ações (trailing).
+  return (
+    <GroupSectionShell
+      group={group}
+      count={items.length}
+      collapsed={collapsed}
+      onToggleCollapse={onToggleCollapse}
+      borderClassName={borderClassName}
+      sectionProps={dropProps}
+      leading={
         <input
           ref={headerCheckRef}
           type="checkbox"
@@ -645,45 +633,11 @@ function GroupSection({
           aria-label={`Selecionar todas as empresas de ${group?.name ?? "Sem grupo"}`}
           className="h-4 w-4 shrink-0 cursor-pointer rounded border-line text-risd focus-visible:ring-2 focus-visible:ring-risd disabled:opacity-40"
         />
-
-        <button
-          type="button"
-          onClick={onToggleCollapse}
-          aria-expanded={!collapsed}
-          className="flex min-w-0 flex-1 items-center gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd rounded"
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-            className={`shrink-0 text-fg-subtle transition-transform ${collapsed ? "-rotate-90" : ""}`}
-          >
-            <path d="m6 9 6 6 6-6" />
-          </svg>
-          {tint && (
-            <span
-              className="h-2.5 w-2.5 shrink-0 rounded-full"
-              style={{ backgroundColor: tint.dot }}
-              aria-hidden="true"
-            />
-          )}
-          <span className="truncate font-semibold text-fg">
-            {group?.name ?? "Sem grupo"}
-          </span>
-          <span className="shrink-0 rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium tabular-nums text-fg-muted">
-            {items.length}
-          </span>
-        </button>
-
-        {/* "Sem grupo" não se renomeia, não se colore, não se reordena, não se
-            exclui — só o menu dos grupos reais aparece. */}
-        {group && (
+      }
+      trailing={
+        // "Sem grupo" não se renomeia, não se colore, não se reordena, não se
+        // exclui — só o menu dos grupos reais aparece.
+        group ? (
           <GroupMenu
             canMoveUp={canMoveUp}
             canMoveDown={canMoveDown}
@@ -693,35 +647,31 @@ function GroupSection({
             onMoveDown={onMoveDown}
             onDelete={onDelete}
           />
-        )}
-      </div>
-
-      {!collapsed && (
-        <div className="p-3">
-          {items.length === 0 ? (
-            <p className="px-1 py-4 text-center text-sm text-fg-subtle">
-              {isSemGrupo
-                ? "Todas as empresas estão em algum grupo."
-                : "Nenhuma empresa neste grupo. Selecione empresas e use “Transferir para grupo…”."}
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {items.map((company) => (
-                <CompanyRow
-                  key={company.id}
-                  company={company}
-                  viewerId={viewerId}
-                  selected={selected.has(company.id)}
-                  onToggle={() => onToggleOne(company.id)}
-                  onDragStart={onRowDragStart}
-                  onDragEnd={onRowDragEnd}
-                />
-              ))}
-            </ul>
-          )}
-        </div>
+        ) : undefined
+      }
+    >
+      {items.length === 0 ? (
+        <p className="px-1 py-4 text-center text-sm text-fg-subtle">
+          {isSemGrupo
+            ? "Todas as empresas estão em algum grupo."
+            : "Nenhuma empresa neste grupo. Selecione empresas e use “Transferir para grupo…”."}
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {items.map((company) => (
+            <CompanyRow
+              key={company.id}
+              company={company}
+              viewerId={viewerId}
+              selected={selected.has(company.id)}
+              onToggle={() => onToggleOne(company.id)}
+              onDragStart={onRowDragStart}
+              onDragEnd={onRowDragEnd}
+            />
+          ))}
+        </ul>
       )}
-    </section>
+    </GroupSectionShell>
   );
 }
 

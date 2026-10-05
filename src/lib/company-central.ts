@@ -59,6 +59,9 @@ export type CentralCompany = {
   // cabeçalho; null quando não preenchido (a barra some).
   startedOn: string | null;
   endsOn: string | null;
+  // Nome do grupo quando a empresa está num grupo PARADO (kind='paused'); null
+  // caso contrário. Alimenta a faixa discreta de "cliente parado" na central.
+  pausedGroupName: string | null;
 };
 
 export type CentralPerson = { name: string; avatarUrl: string | null };
@@ -174,7 +177,7 @@ export async function loadCompanyCentral(
       supabase
         .from("companies")
         .select(
-          "id, name, whatsapp_group_name, whatsapp_contact_id, created_at, created_by, company_details(started_on, ends_on)"
+          "id, name, whatsapp_group_name, whatsapp_contact_id, created_at, created_by, company_details(started_on, ends_on), group:company_groups(name, kind)"
         )
         .eq("id", companyId)
         .maybeSingle()
@@ -308,12 +311,21 @@ export async function loadCompanyCentral(
       | { started_on: string | null; ends_on: string | null }
       | { started_on: string | null; ends_on: string | null }[]
       | null;
+    // Embed do grupo da empresa (FK companies.group_id). Legível por admin,
+    // consultor e colaborador desde a 0099. null = "Sem grupo".
+    group:
+      | { name: string; kind: string }
+      | { name: string; kind: string }[]
+      | null;
   } | null;
   if (!company) return { notFound: true };
 
   const details = Array.isArray(company.company_details)
     ? company.company_details[0] ?? null
     : company.company_details;
+  const groupRow = first(company.group);
+  const pausedGroupName =
+    groupRow?.kind === "paused" ? groupRow.name : null;
 
   if (overviewError) return { notFound: false, error: overviewError.message };
   const tasksError = openError ?? closedError;
@@ -514,6 +526,7 @@ export async function loadCompanyCentral(
         labels: companyLabels,
         startedOn: details?.started_on ?? null,
         endsOn: details?.ends_on ?? null,
+        pausedGroupName,
       },
       consultants,
       overview,

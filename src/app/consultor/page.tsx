@@ -7,10 +7,17 @@ import CompanySummaryGrid, {
 import { withSelf, loadResponsiblesByCompany } from "@/lib/people";
 import { loadCompanyNoteCounts } from "@/lib/notes";
 import { loadStartedOnByCompany } from "@/lib/company-details";
+import {
+  loadCompanyGroups,
+  pausedGroupNamesByCompany,
+  resolveCompanyGroupId,
+} from "@/lib/company-groups";
 import { perfRoute } from "@/lib/perf";
 
-type Option = { id: string; name: string };
 type PersonOption = { id: string; full_name: string; email: string };
+
+// Empresa como vem do banco para este painel: id + nome + grupo (para as seções).
+type CompanyRow = { id: string; name: string; group_id: string | null };
 
 type CompanyCountRow = {
   company_id: string;
@@ -46,12 +53,16 @@ export default async function ConsultorPage() {
     noteCounts,
     startedOnByCompany,
     responsiblesByCompany,
-    { data: pauseStateData },
+    groups,
   ] = await Promise.all([
     // RLS (companies_select) limita às empresas atribuídas a este consultor.
+    // group_id alimenta as seções por grupo (resolveCompanyGroupId).
     perf.timed(
       "companies",
-      supabase.from("companies").select("id, name").order("name", { ascending: true })
+      supabase
+        .from("companies")
+        .select("id, name, group_id")
+        .order("name", { ascending: true })
     ),
     perf.timed(
       "profiles",
@@ -84,25 +95,23 @@ export default async function ConsultorPage() {
       "company_collaborators (responsáveis por empresa)",
       loadResponsiblesByCompany(supabase)
     ),
-    // Fluxo de grupos (0095): empresas em grupo PARADO somem do painel, MENOS as
-    // que ainda têm tarefa EM ABERTO deste usuário (aí ficam com aviso discreto).
-    // A RPC (SECURITY DEFINER) devolve id + has_open só das empresas paradas.
-    perf.timed(
-      "rpc my_company_pause_state",
-      supabase.rpc("my_company_pause_state")
-    ),
+    // Grupos (0059 + kind 0095) — legíveis pelo consultor desde a 0099. Dão a
+    // ordem, a cor e o kind das seções (grupo parado nasce recolhido e avisa ao
+    // criar tarefa). A RLS de companies NÃO muda: só deixa de esconder as paradas.
+    perf.timed("company_groups (seções)", loadCompanyGroups(supabase)),
   ]);
   perf.done();
 
-  // Estado de pausa por empresa: paused = em grupo parado; hasOpen = tem tarefa
-  // em aberto do usuário. Hide quando pausada e sem tarefa em aberto.
-  const pauseState = new Map<string, boolean>(
-    ((pauseStateData as { company_id: string; has_open: boolean }[]) ?? []).map(
-      (r) => [r.company_id, r.has_open]
-    )
-  );
+  const companyRows = (companiesData as CompanyRow[]) ?? [];
+  // Empresa → grupo (ponto único de leitura de group_id) e empresa → nome do
+  // grupo PARADO (alimenta o aviso de nova tarefa). Nenhuma empresa some: as
+  // paradas agora aparecem na sua seção em vez de serem escondidas.
+  const groupByCompany = new Map<string, string | null>();
+  for (const c of companyRows) groupByCompany.set(c.id, resolveCompanyGroupId(c));
+  const pausedGroupByCompany = pausedGroupNamesByCompany(groupByCompany, groups);
 
-  const companies = (companiesData as Option[]) ?? [];
+  // Lista para o seletor de "Nova tarefa" (id + nome).
+  const companies = companyRows.map((c) => ({ id: c.id, name: c.name }));
 
   // Mapa empresa → dias desde o último contato (null = nunca). A RPC já é
   // escopada pela RLS, então nunca traz empresa fora da carteira do consultor.
@@ -119,7 +128,7 @@ export default async function ConsultorPage() {
   // Cada empresa da carteira começa zerada (mesmo as sem tarefa) e recebe as
   // contagens do banco. Empresas sem tarefa simplesmente ficam em 0.
   const summaries = new Map<string, CompanySummary>();
-  for (const c of companies) {
+  for (const c of companyRows) {
     summaries.set(c.id, {
       id: c.id,
       name: c.name,
@@ -138,12 +147,7 @@ export default async function ConsultorPage() {
     s.overdue = Number(r.overdue);
   }
 
-  // Some do painel a empresa pausada sem tarefa em aberto do usuário; a que tem
-  // fica visível marcada como "cliente pausado". As demais seguem normais.
-  const companyList = Array.from(summaries.values()).filter((c) => {
-    if (!pauseState.has(c.id)) return true; // não está em grupo parado
-    return pauseState.get(c.id) === true; // pausada: só fica se tem tarefa em aberto
-  });
+  const companyList = Array.from(summaries.values());
   const canCreate = companies.length > 0 && collaborators.length > 0;
 
   return (
@@ -171,6 +175,7 @@ export default async function ConsultorPage() {
               companies={companies}
               collaborators={collaborators}
               responsiblesByCompany={responsiblesByCompany}
+              pausedGroupByCompany={pausedGroupByCompany}
             />
           )}
 
@@ -185,6 +190,8 @@ export default async function ConsultorPage() {
           ) : (
             <CompanySummaryGrid
               viewerId={profile.id}
+              groups={groups}
+              collapseKey="crm:consultor:grupos-recolhidos"
               items={companyList.map(
                 (c): CompanyCardItem => ({
                   id: c.id,
@@ -197,7 +204,7 @@ export default async function ConsultorPage() {
                   contact: { days: contactDays.get(c.id) ?? null },
                   noteCount: noteCounts.get(c.id) ?? 0,
                   startedOn: startedOnByCompany.get(c.id) ?? null,
-                  paused: pauseState.has(c.id),
+                  groupId: groupByCompany.get(c.id) ?? null,
                 })
               )}
             />

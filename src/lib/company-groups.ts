@@ -13,11 +13,18 @@ import type { createClient } from "@/lib/supabase-server";
 
 type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
 
+// Semântica do grupo para o fluxo automático (migration 0095). TODO consumidor
+// decide por `kind`, NUNCA pelo nome: `paused` (Aguardando Renovação, Pausados,
+// Sem Resposta|BO, Projetos Finalizados, Cancelados) é o que pausa a geração e,
+// nos painéis, nasce recolhido e dispara o aviso ao criar tarefa.
+export type GroupKind = "active" | "paused" | "onboarding" | "neutral";
+
 export type CompanyGroup = {
   id: string;
   name: string;
   color: string;
   position: number;
+  kind: GroupKind;
 };
 
 // Chave do balde "Sem grupo" (empresas com group_id nulo). Não é um grupo real:
@@ -61,16 +68,54 @@ export function resolveCompanyGroupId(company: {
   return company.group_id ?? null;
 }
 
-// Grupos existentes, na ordem de exibição (position; empate por nome).
+// Grupos existentes, na ordem de exibição (position; empate por nome). Desde a
+// 0099, company_groups é legível por admin, consultor e colaborador — então esta
+// função serve aos três (os painéis montam as seções com ela). `kind` decide o
+// recolhimento inicial e o aviso de empresa parada.
 export async function loadCompanyGroups(
   supabase: SupabaseServer
 ): Promise<CompanyGroup[]> {
   const { data } = await supabase
     .from("company_groups")
-    .select("id, name, color, position")
+    .select("id, name, color, position, kind")
     .order("position", { ascending: true })
     .order("name", { ascending: true });
   return (data as CompanyGroup[]) ?? [];
+}
+
+// Mapa empresa → grupo (id) das empresas que o CHAMADOR alcança (RLS de companies
+// escopa: admin todas, consultor a carteira, colaborador o vínculo∪tarefas). Para
+// painéis que só têm a lista de ids das empresas (ex.: colaborador, cuja RPC não
+// devolve group_id) e precisam agrupar. A leitura de group_id passa por
+// resolveCompanyGroupId (ponto único — porta aberta a M:N).
+export async function loadCompanyGroupMap(
+  supabase: SupabaseServer
+): Promise<Map<string, string | null>> {
+  const { data } = await supabase.from("companies").select("id, group_id");
+  const map = new Map<string, string | null>();
+  for (const c of (data as { id: string; group_id: string | null }[] | null) ??
+    []) {
+    map.set(c.id, resolveCompanyGroupId(c));
+  }
+  return map;
+}
+
+// Dado o mapa empresa→grupo e a lista de grupos, devolve empresa→NOME do grupo
+// SÓ para empresas em grupo PARADO (kind='paused'). Alimenta o aviso de "cliente
+// parado" ao criar tarefa (faixa + confirmação). Empresa sem grupo ou em grupo
+// não-parado fica de fora (sem aviso). Pura (sem I/O).
+export function pausedGroupNamesByCompany(
+  groupByCompany: Map<string, string | null>,
+  groups: CompanyGroup[]
+): Record<string, string> {
+  const pausedNameById = new Map<string, string>();
+  for (const g of groups) if (g.kind === "paused") pausedNameById.set(g.id, g.name);
+  const out: Record<string, string> = {};
+  groupByCompany.forEach((groupId, companyId) => {
+    const name = groupId ? pausedNameById.get(groupId) : undefined;
+    if (name) out[companyId] = name;
+  });
+  return out;
 }
 
 // REGRA DE USO DA COR (obrigatória — é o que torna o seletor livre seguro): a

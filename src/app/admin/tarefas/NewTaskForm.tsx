@@ -7,6 +7,8 @@ import type { TaskCategory } from "@/lib/types";
 import { TASK_CATEGORIES } from "@/lib/task-category";
 import Combobox from "@/components/Combobox";
 import { DateField } from "@/components/DateField";
+import ConfirmDialog from "@/components/ConfirmDialog";
+import PausedCompanyBanner from "@/components/company-groups/PausedCompanyBanner";
 import ListingFields, {
   emptyListingForm,
   type ListingFormValue,
@@ -49,6 +51,7 @@ export default function NewTaskForm({
   companies,
   collaborators,
   responsiblesByCompany = {},
+  pausedGroupByCompany = {},
   lockedCompany,
   isAdmin = false,
 }: {
@@ -58,6 +61,10 @@ export default function NewTaskForm({
   // só oferece quem é responsável pela empresa escolhida; o servidor também
   // valida. Ausente/vazio ⇒ nenhuma opção até vincular alguém à empresa.
   responsiblesByCompany?: Record<string, string[]>;
+  // Fluxo de grupos: mapa empresa → NOME do grupo quando ela está num grupo
+  // PARADO (kind='paused'). Só AVISA — nada bloqueia (nem aqui nem no servidor):
+  // faixa no formulário + confirmação ao salvar. Empresa fora do mapa = sem aviso.
+  pausedGroupByCompany?: Record<string, string>;
   // Quando definido, a empresa vem pré-selecionada e travada (uso dentro da
   // tela de detalhe da empresa). O usuário não escolhe a empresa.
   lockedCompany?: Option;
@@ -81,6 +88,13 @@ export default function NewTaskForm({
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [isPending, startTransition] = useTransition();
+  // Confirmação ao criar tarefa em cliente de grupo PARADO (só aviso; cancelar
+  // volta ao formulário sem perder o que foi preenchido).
+  const [confirmPaused, setConfirmPaused] = useState(false);
+
+  // Nome do grupo PARADO da empresa escolhida (ou travada), quando houver — o
+  // gatilho do aviso. Empresa fora do mapa ⇒ undefined ⇒ sem faixa nem confirmação.
+  const pausedGroupName = companyId ? pausedGroupByCompany[companyId] : undefined;
 
   // Âncora (0090): as opções de colaborador dependem da empresa escolhida —
   // só os responsáveis por ela. Sem empresa, sem opções. EXCEÇÃO: o admin pode
@@ -128,6 +142,7 @@ export default function NewTaskForm({
     setEndDate("");
     setListing(emptyListingForm());
     setError(null);
+    setConfirmPaused(false);
   }
 
   function toggleWeekday(value: number) {
@@ -139,7 +154,7 @@ export default function NewTaskForm({
     });
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (submitting) return; // trava reentrância (clique repetido)
     setError(null);
@@ -152,6 +167,19 @@ export default function NewTaskForm({
       setError("Informe a data da tarefa.");
       return;
     }
+    // Cliente em grupo PARADO: confirma antes de criar (só aviso, nada bloqueia).
+    // A validação já passou, então o diálogo não reaparece por erro de preenchimento.
+    if (pausedGroupName) {
+      setConfirmPaused(true);
+      return;
+    }
+    void doCreate();
+  }
+
+  // A criação em si — chamada direto quando a empresa não está parada, ou pela
+  // confirmação quando está. Devolve o erro para o ConfirmDialog poder exibi-lo
+  // sem fechar; no caminho direto, o erro aparece no próprio formulário.
+  async function doCreate(): Promise<{ error?: string | null }> {
     setSubmitting(true);
     try {
       const { error: actionError } = await createTaskTemplate({
@@ -178,12 +206,13 @@ export default function NewTaskForm({
 
       if (actionError) {
         setError(actionError);
-        return;
+        return { error: actionError };
       }
 
       reset();
       setOpen(false);
       startTransition(() => router.refresh());
+      return { error: null };
     } finally {
       setSubmitting(false);
     }
@@ -208,6 +237,10 @@ export default function NewTaskForm({
       className="mb-6 space-y-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6"
     >
       <h2 className="font-semibold text-fg">Nova tarefa</h2>
+
+      {/* Aviso de cliente em grupo PARADO — aparece assim que a empresa escolhida
+          (ou travada) está num grupo parado. Só informa; não impede criar. */}
+      {pausedGroupName && <PausedCompanyBanner groupName={pausedGroupName} />}
 
       {/* Grupo TAREFA: categoria (a primeira decisão), descrição, instruções. */}
       <div className="space-y-4">
@@ -465,6 +498,19 @@ export default function NewTaskForm({
           Cancelar
         </button>
       </div>
+
+      {/* Confirmação de criar tarefa em cliente parado. Confirmar cria; cancelar
+          fecha o diálogo e mantém o formulário preenchido (nada é perdido). */}
+      <ConfirmDialog
+        open={confirmPaused}
+        tone="primary"
+        title={`Este cliente está no grupo “${pausedGroupName ?? ""}”.`}
+        description="Criar a tarefa mesmo assim?"
+        confirmLabel="Criar tarefa"
+        cancelLabel="Cancelar"
+        onClose={() => setConfirmPaused(false)}
+        onConfirm={doCreate}
+      />
     </form>
   );
 }

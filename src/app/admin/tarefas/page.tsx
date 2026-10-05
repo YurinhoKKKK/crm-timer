@@ -9,10 +9,16 @@ import NewStandardTaskForm from "./NewStandardTaskForm";
 import StandardTaskList, { type StandardItem } from "./StandardTaskList";
 import { withSelf, loadResponsiblesByCompany } from "@/lib/people";
 import { loadAllLabelsByCompany, type Label } from "@/lib/labels";
+import {
+  loadCompanyGroups,
+  pausedGroupNamesByCompany,
+  resolveCompanyGroupId,
+} from "@/lib/company-groups";
 import { avatarUrl } from "@/lib/avatar";
 import { perfRoute } from "@/lib/perf";
 
 type Option = { id: string; name: string };
+type CompanyRow = { id: string; name: string; group_id: string | null };
 type PersonOption = { id: string; full_name: string; email: string };
 
 type TemplateRow = {
@@ -51,10 +57,14 @@ export default async function TarefasPage() {
     { data: usageData },
     labelsMap,
     responsiblesByCompany,
+    groups,
   ] = await Promise.all([
     perf.timed(
       "companies",
-      supabase.from("companies").select("id, name").order("name", { ascending: true })
+      supabase
+        .from("companies")
+        .select("id, name, group_id")
+        .order("name", { ascending: true })
     ),
     perf.timed(
       "profiles (seletor de responsável)",
@@ -100,9 +110,16 @@ export default async function TarefasPage() {
       "company_collaborators (responsáveis por empresa)",
       loadResponsiblesByCompany(supabase)
     ),
+    // Grupos (com kind) p/ o aviso de criar tarefa em cliente parado.
+    perf.timed("company_groups (aviso parado)", loadCompanyGroups(supabase)),
   ]);
 
-  const companies = (companiesData as Option[]) ?? [];
+  const companyRows = (companiesData as CompanyRow[]) ?? [];
+  const companies: Option[] = companyRows.map((c) => ({ id: c.id, name: c.name }));
+  // Empresa → nome do grupo PARADO (alimenta a faixa + confirmação do NewTaskForm).
+  const groupByCompany = new Map<string, string | null>();
+  for (const c of companyRows) groupByCompany.set(c.id, resolveCompanyGroupId(c));
+  const pausedGroupByCompany = pausedGroupNamesByCompany(groupByCompany, groups);
   // O admin também pode se atribuir como responsável (Passo 14).
   const collaborators = withSelf(
     (collaboratorsData as PersonOption[]) ?? [],
@@ -233,6 +250,7 @@ export default async function TarefasPage() {
                 companies={companies}
                 collaborators={collaborators}
                 responsiblesByCompany={responsiblesByCompany}
+                pausedGroupByCompany={pausedGroupByCompany}
                 isAdmin
               />
             )}

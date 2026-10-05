@@ -1657,7 +1657,11 @@ export type Database = {
         Returns: Database["public"]["Enums"]["user_role"]
       }
       client_followup: {
-        Args: { p_desc?: boolean; p_period_days?: number }
+        Args: {
+          p_desc?: boolean
+          p_period_days?: number
+          p_only_active?: boolean
+        }
         Returns: {
           company_id: string
           company_name: string

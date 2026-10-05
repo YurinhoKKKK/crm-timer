@@ -71,7 +71,7 @@ export async function createGroup(input: {
       position: nextPosition,
       created_by: user.id,
     })
-    .select("id, name, color, position")
+    .select("id, name, color, position, kind")
     .single();
 
   if (error || !data) {

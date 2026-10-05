@@ -8,9 +8,15 @@ import CompanyNotes from "@/components/company-central/CompanyNotes";
 import { loadCompanyLabels } from "@/lib/labels";
 import { loadCompanyNotes } from "@/lib/notes";
 import { btnSecondary } from "@/lib/ui";
+import PausedCompanyBanner from "@/components/company-groups/PausedCompanyBanner";
 import TaskList, { type TaskItem } from "./TaskList";
 
-type CompanyRow = { id: string; name: string };
+type CompanyGroupEmbed = { name: string; kind: string };
+type CompanyRow = {
+  id: string;
+  name: string;
+  group: CompanyGroupEmbed | CompanyGroupEmbed[] | null;
+};
 
 export default async function ColaboradorEmpresaPage({
   params,
@@ -46,7 +52,11 @@ export default async function ColaboradorEmpresaPage({
     { count: totalCount },
     { count: doneCount },
   ] = await Promise.all([
-    supabase.from("companies").select("id, name").eq("id", companyId).maybeSingle(),
+    supabase
+      .from("companies")
+      .select("id, name, group:company_groups(name, kind)")
+      .eq("id", companyId)
+      .maybeSingle(),
     scoped()
       .in("status", ["a_fazer", "iniciada"])
       .order("due_at", { ascending: true, nullsFirst: false })
@@ -75,6 +85,13 @@ export default async function ColaboradorEmpresaPage({
   const error = openError ?? closedError;
   const company = companyData as CompanyRow | null;
   if (!company) notFound();
+
+  // Grupo PARADO (kind='paused') → faixa discreta de "cliente parado".
+  const groupEmbed = Array.isArray(company.group)
+    ? company.group[0] ?? null
+    : company.group;
+  const pausedGroupName =
+    groupEmbed?.kind === "paused" ? groupEmbed.name : null;
 
   const [labels, notes] = await Promise.all([
     loadCompanyLabels(supabase, companyId),
@@ -111,6 +128,10 @@ export default async function ColaboradorEmpresaPage({
       title={company.name}
       back={{ href: "/colaborador", label: "Minhas empresas" }}
     >
+      {pausedGroupName && (
+        <PausedCompanyBanner groupName={pausedGroupName} className="mb-4" />
+      )}
+
       <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           {labels.length > 0 ? (

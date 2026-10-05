@@ -8,6 +8,7 @@ import ClientAccessManager from "./ClientAccessManager";
 import CompanyActivityFeed from "./CompanyActivityFeed";
 import CreatorMeta from "@/components/CreatorMeta";
 import ContractBar from "@/components/ContractBar";
+import PausedCompanyBanner from "@/components/company-groups/PausedCompanyBanner";
 import LabelChips from "@/components/LabelChips";
 import NewClientChip from "@/components/NewClientChip";
 import TaskDetailLink from "@/components/TaskDetailLink";
@@ -113,6 +114,14 @@ export default function CompanyCentral({
         </p>
       )}
 
+      {/* Faixa discreta de "cliente parado" (grupo kind='paused'). Só informa. */}
+      {company.pausedGroupName && (
+        <PausedCompanyBanner
+          groupName={company.pausedGroupName}
+          className="mb-4"
+        />
+      )}
+
       {/* 1. Cabeçalho da empresa */}
       <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -183,6 +192,11 @@ export default function CompanyCentral({
           companies={[{ id: company.id, name: company.name }]}
           collaborators={data.collaborators}
           responsiblesByCompany={{ [company.id]: data.responsibleIds }}
+          pausedGroupByCompany={
+            company.pausedGroupName
+              ? { [company.id]: company.pausedGroupName }
+              : {}
+          }
           lockedCompany={{ id: company.id, name: company.name }}
           isAdmin={data.clientAccess.role === "admin"}
         />

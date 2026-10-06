@@ -16,6 +16,8 @@ import Avatar from "@/components/Avatar";
 import NoteBody from "./NoteBody";
 import AreaChips from "./AreaChips";
 import NoteRepliesSection from "@/components/replies/NoteRepliesSection";
+import { TASK_READONLY_TITLE } from "@/components/rich-text/useTaskCheckboxes";
+import { toggleNoteCheckbox } from "@/components/rich-text/task-checkbox-actions";
 import {
   FilterBar,
   SearchBox,
@@ -429,6 +431,16 @@ export default function CompanyNotes({
                     html={n.contentHtml}
                     onImageClick={(images, index) =>
                       setLightbox({ images, index })
+                    }
+                    canEditTasks={canManage(n)}
+                    taskReadOnlyTitle={TASK_READONLY_TITLE}
+                    onToggleTask={(index, checked) =>
+                      toggleNoteCheckbox(
+                        n.id,
+                        n.updatedAtISO ?? n.createdAtISO,
+                        index,
+                        checked
+                      )
                     }
                   />
 

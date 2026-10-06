@@ -210,6 +210,11 @@ export default function NoteEditor({
   initialAttachments = [],
   initialAreas = [],
   saveLabel = "Salvar atualização",
+  // Trava externa do botão de salvar (além do busy/upload): usada quando um
+  // campo FORA do editor ainda não está válido — ex.: a empresa obrigatória do
+  // chamado. Com o title, o usuário entende por que está desabilitado.
+  saveDisabled = false,
+  saveDisabledTitle,
   // Texto do placeholder do editor. Quando não informado, deriva do contexto:
   // no de Atualizações (com noção de cliente) fala "atualização"; nos reusos
   // internos sem cliente (chamados de suporte) fica neutro, para não introduzir
@@ -243,6 +248,8 @@ export default function NoteEditor({
   initialAttachments?: NoteAttachmentMeta[];
   initialAreas?: NoteArea[];
   saveLabel?: string;
+  saveDisabled?: boolean;
+  saveDisabledTitle?: string;
   placeholder?: string;
   showClientVisibility?: boolean;
   showAreas?: boolean;
@@ -1059,7 +1066,8 @@ export default function NoteEditor({
           <button
             type="button"
             onClick={handleSave}
-            disabled={busy || uploading > 0}
+            disabled={busy || uploading > 0 || saveDisabled}
+            title={saveDisabled ? saveDisabledTitle : undefined}
             className={btnPrimary}
           >
             {busy ? "Salvando…" : saveLabel}

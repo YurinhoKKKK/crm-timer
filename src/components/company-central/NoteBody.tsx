@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import {
+  useTaskCheckboxes,
+  type TaskToggleFn,
+} from "@/components/rich-text/useTaskCheckboxes";
 
 // Altura máxima do texto retraído (~9 linhas). Recolhe por ALTURA, não por
 // número de caracteres — título, imagem e tabela ocupam alturas muito
@@ -22,16 +26,35 @@ export default function NoteBody({
   className = "rich-text note-view",
   moreLabel = "Ver mais",
   lessLabel = "Ver menos",
+  // Caixas de checklist clicáveis na leitura: quem pode editar este conteúdo
+  // marca/desmarca aqui mesmo (onToggleTask chama a action pelo índice). Sem
+  // permissão (padrão), as caixas aparecem desabilitadas com o title.
+  canEditTasks = false,
+  onToggleTask,
+  taskReadOnlyTitle,
 }: {
   html: string;
   onImageClick: (images: string[], index: number) => void;
   className?: string;
   moreLabel?: string;
   lessLabel?: string;
+  canEditTasks?: boolean;
+  onToggleTask?: TaskToggleFn;
+  taskReadOnlyTitle?: string;
 }) {
   const innerRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [overflows, setOverflows] = useState(false);
+  const [taskError, setTaskError] = useState<string | null>(null);
+
+  useTaskCheckboxes({
+    containerRef: innerRef,
+    html,
+    canEdit: canEditTasks,
+    onToggle: onToggleTask,
+    readOnlyTitle: taskReadOnlyTitle,
+    onError: setTaskError,
+  });
 
   useEffect(() => {
     const el = innerRef.current;
@@ -83,6 +106,11 @@ export default function NoteBody({
         >
           {expanded ? lessLabel : moreLabel}
         </button>
+      )}
+      {taskError && (
+        <p role="alert" className="mt-1.5 text-xs text-red-600 dark:text-red-400">
+          {taskError}
+        </p>
       )}
     </div>
   );

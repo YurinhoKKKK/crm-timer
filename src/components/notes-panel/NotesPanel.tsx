@@ -15,6 +15,8 @@ import Lightbox from "@/components/Lightbox";
 import NoteBody from "@/components/company-central/NoteBody";
 import AreaChips from "@/components/company-central/AreaChips";
 import NoteRepliesSection from "@/components/replies/NoteRepliesSection";
+import { TASK_READONLY_TITLE } from "@/components/rich-text/useTaskCheckboxes";
+import { toggleNoteCheckbox } from "@/components/rich-text/task-checkbox-actions";
 import { getPanelNotes } from "./notes-panel-actions";
 
 // O editor (TipTap) só entra no bundle quando o painel de fato abre e este
@@ -390,6 +392,16 @@ export default function NotesPanel({
                         lessLabel="Ler menos"
                         onImageClick={(images, index) =>
                           setLightbox({ images, index })
+                        }
+                        canEditTasks={canManage(n)}
+                        taskReadOnlyTitle={TASK_READONLY_TITLE}
+                        onToggleTask={(index, checked) =>
+                          toggleNoteCheckbox(
+                            n.id,
+                            n.updatedAtISO ?? n.createdAtISO,
+                            index,
+                            checked
+                          )
                         }
                       />
 

@@ -11,10 +11,16 @@ import dynamic from "next/dynamic";
 import { CornerUpLeft, FileSpreadsheet, FileText, Reply, X } from "lucide-react";
 import type { NoteAttachmentMeta, NoteAttachmentView } from "@/lib/notes";
 import type { MentionContext } from "@/lib/mentions";
+import type { TaskToggleResult } from "@/lib/task-checkbox";
 import { formatBytes } from "@/lib/format";
 import { btnPrimary } from "@/lib/ui";
 import Avatar from "@/components/Avatar";
 import Lightbox from "@/components/Lightbox";
+import {
+  useTaskCheckboxes,
+  TASK_READONLY_TITLE,
+  type TaskToggleFn,
+} from "@/components/rich-text/useTaskCheckboxes";
 
 // O editor rich text (mesmo NoteEditor das atualizações/chamados, com TipTap por
 // dentro) só entra no bundle quando alguém abre um campo de resposta/edição —
@@ -128,6 +134,49 @@ function AttachmentList({ items }: { items: NoteAttachmentView[] }) {
   );
 }
 
+// Corpo de UMA resposta (HTML já sanitizado no servidor). Componente próprio
+// (não uma função dentro do pai) para poder ter seu ref/estado e ligar as
+// caixas de checklist da leitura via useTaskCheckboxes — só o autor da resposta
+// marca; para os demais, as caixas aparecem desabilitadas.
+function ReplyBody({
+  html,
+  canEdit,
+  onToggle,
+  onImageClick,
+}: {
+  html: string;
+  canEdit: boolean;
+  onToggle?: TaskToggleFn;
+  onImageClick: (e: MouseEvent<HTMLDivElement>) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [taskError, setTaskError] = useState<string | null>(null);
+  useTaskCheckboxes({
+    containerRef: ref,
+    html,
+    canEdit,
+    onToggle,
+    readOnlyTitle: TASK_READONLY_TITLE,
+    onError: setTaskError,
+  });
+  return (
+    <>
+      <div
+        ref={ref}
+        className="rich-text note-view text-sm"
+        onClick={onImageClick}
+        // Sanitizado no servidor (loadTicketReplies/loadNoteReplies).
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+      {taskError && (
+        <p role="alert" className="mt-1.5 text-xs text-red-600 dark:text-red-400">
+          {taskError}
+        </p>
+      )}
+    </>
+  );
+}
+
 // Monta os fios da conversa a partir da lista plana. Cada resposta pertence à
 // sua RAIZ (o ancestral cujo parent_id é nulo); a tela exibe no máximo UM nível
 // de indentação, então TODA a descendência de uma raiz é achatada nesse único
@@ -190,6 +239,7 @@ export default function ReplyThread({
   onChanged,
   emptyText = "Nenhuma resposta ainda.",
   mentionContext,
+  toggleCheckbox,
 }: {
   userId: string;
   load: () => Promise<ReplyView[]>;
@@ -207,6 +257,16 @@ export default function ReplyThread({
   emptyText?: string;
   // Habilita @menção no editor das respostas (repassado ao NoteEditor).
   mentionContext?: MentionContext;
+  // Marca/desmarca caixas de checklist na leitura da resposta. Recebe o id da
+  // resposta, o índice do item, o novo estado e o token de versão que a tela
+  // tinha. Ausente = caixas somente leitura. A permissão (só o autor) e o
+  // conflito ficam no servidor; o autor é identificado por userId.
+  toggleCheckbox?: (
+    replyId: string,
+    index: number,
+    checked: boolean,
+    token: string
+  ) => Promise<TaskToggleResult>;
 }) {
   const [replies, setReplies] = useState<ReplyView[] | null>(null); // null = carregando
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -423,11 +483,21 @@ export default function ReplyThread({
                 </button>
               )}
 
-              <div
-                className="rich-text note-view text-sm"
-                onClick={onImageClick}
-                // Sanitizado no servidor (loadTicketReplies/loadNoteReplies).
-                dangerouslySetInnerHTML={{ __html: r.bodyHtml }}
+              <ReplyBody
+                html={r.bodyHtml}
+                onImageClick={onImageClick}
+                canEdit={r.authorId === userId}
+                onToggle={
+                  toggleCheckbox
+                    ? (index, checked) =>
+                        toggleCheckbox(
+                          r.id,
+                          index,
+                          checked,
+                          r.editedAtISO ?? r.createdAtISO
+                        )
+                    : undefined
+                }
               />
 
               <AttachmentList items={r.attachments} />

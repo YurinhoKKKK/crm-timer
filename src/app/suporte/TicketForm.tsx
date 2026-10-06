@@ -5,6 +5,8 @@ import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase-browser";
 import { syncMentions } from "@/lib/mention-actions";
 import type { NoteAttachmentMeta } from "@/lib/notes";
+import type { ReachableCompany } from "@/lib/meetings";
+import Combobox from "@/components/Combobox";
 import {
   URGENCY_ORDER,
   URGENCY_UI,
@@ -13,7 +15,7 @@ import {
   type TicketUrgency,
   type TicketIssueType,
 } from "@/lib/support";
-import { inputClass, labelClass } from "@/lib/ui";
+import { inputClass, labelClass, hintClass } from "@/lib/ui";
 
 // O editor (TipTap) das anotações — carregado sob demanda (só entra no bundle
 // quando alguém abre um chamado), como em CompanyNotes.
@@ -67,13 +69,17 @@ function ChoiceChip({
 // interno.
 export default function TicketForm({
   userId,
+  companies,
   onCreated,
   onCancel,
 }: {
   userId: string;
+  // Empresas que o usuário alcança (mesmo loader/seletor da criação de reunião).
+  companies: ReachableCompany[];
   onCreated: () => void;
   onCancel: () => void;
 }) {
+  const [companyId, setCompanyId] = useState("");
   const [title, setTitle] = useState("");
   const [urgency, setUrgency] = useState<TicketUrgency | "">("");
   const [issueType, setIssueType] = useState<TicketIssueType | "">("");
@@ -83,6 +89,9 @@ export default function TicketForm({
     _visibleToClient: boolean,
     attachments: NoteAttachmentMeta[]
   ) {
+    // Empresa é obrigatória — o servidor (NOT NULL + RLS st_insert) também
+    // recusa, mas aqui damos a mensagem direta sem nem ir ao banco.
+    if (!companyId) return { error: "Selecione a empresa do chamado." };
     const cleanTitle = title.trim();
     if (cleanTitle.length < 3) {
       return { error: "Informe um título com pelo menos 3 caracteres." };
@@ -95,6 +104,7 @@ export default function TicketForm({
       .from("support_tickets")
       .insert({
         title: cleanTitle,
+        company_id: companyId,
         context_html: html,
         attachments,
         urgency,
@@ -112,6 +122,23 @@ export default function TicketForm({
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-line bg-surface p-4 shadow-card sm:p-5">
+        <div className="mb-4">
+          <label className={labelClass} htmlFor="ticket-company">
+            Empresa
+          </label>
+          <Combobox
+            id="ticket-company"
+            value={companyId}
+            onChange={setCompanyId}
+            options={companies.map((c) => ({ value: c.id, label: c.name }))}
+            ariaLabel="Empresa do chamado"
+            searchPlaceholder="Buscar empresa…"
+          />
+          {!companyId && (
+            <p className={`mt-1 ${hintClass}`}>Selecione a empresa do chamado.</p>
+          )}
+        </div>
+
         <div className="mb-4">
           <label className={labelClass} htmlFor="ticket-title">
             Título
@@ -169,6 +196,8 @@ export default function TicketForm({
           showAreas={false}
           mentionContext={{ sourceType: "chamado", companyId: null }}
           saveLabel="Abrir chamado"
+          saveDisabled={!companyId}
+          saveDisabledTitle="Selecione a empresa do chamado."
           onSave={submit}
           onCancel={onCancel}
         />

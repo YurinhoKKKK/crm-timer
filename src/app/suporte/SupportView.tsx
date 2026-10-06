@@ -23,10 +23,21 @@ import { createClient } from "@/lib/supabase-browser";
 import { formatBytes } from "@/lib/format";
 import type { NoteAttachmentMeta, NoteAttachmentView } from "@/lib/notes";
 import Avatar from "@/components/Avatar";
+import Combobox from "@/components/Combobox";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import Lightbox from "@/components/Lightbox";
 import Modal from "@/components/Modal";
+import type { ReachableCompany } from "@/lib/meetings";
+import { Building2 } from "lucide-react";
 import ReplyThread, { classifyReplyError } from "@/components/replies/ReplyThread";
+import {
+  useTaskCheckboxes,
+  TASK_READONLY_TITLE,
+} from "@/components/rich-text/useTaskCheckboxes";
+import {
+  toggleTicketCheckbox,
+  toggleTicketReplyCheckbox,
+} from "@/components/rich-text/task-checkbox-actions";
 import { syncMentions } from "@/lib/mention-actions";
 import { fetchTicketReplies } from "./actions";
 import {
@@ -240,14 +251,66 @@ function StatusMenu({
   );
 }
 
+type Role = "admin" | "consultor" | "colaborador";
+
+// Central da empresa por cargo (mesmo mapeamento de lib/notifications.ts).
+function companyCentralHref(role: Role, companyId: string): string {
+  if (role === "admin") return `/admin/empresas/${companyId}`;
+  if (role === "consultor") return `/consultor/${companyId}`;
+  return `/colaborador/${companyId}`;
+}
+
+// Empresa do chamado na leitura: nome com link para a central (button +
+// router.push em useTransition — regra do projeto; nada de <a> dentro de linha
+// clicável). Para quem NÃO alcança a empresa (nome null pela RLS), texto neutro
+// sem link.
+function CompanyLink({
+  companyId,
+  companyName,
+  role,
+}: {
+  companyId: string;
+  companyName: string | null;
+  role: Role;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  if (!companyName) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs italic text-fg-subtle">
+        <Building2 size={12} aria-hidden="true" />
+        Empresa fora do seu acesso
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        startTransition(() =>
+          router.push(companyCentralHref(role, companyId))
+        );
+      }}
+      title={`Abrir central de ${companyName}`}
+      className="inline-flex max-w-full items-center gap-1 text-xs font-medium text-risd transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
+    >
+      <Building2 size={12} className="shrink-0" aria-hidden="true" />
+      <span className="truncate">{pending ? "Abrindo…" : companyName}</span>
+    </button>
+  );
+}
+
 function TicketRow({
   ticket,
+  role,
   canManage,
   onOpen,
   onStatusChange,
   onDelete,
 }: {
   ticket: SupportTicketView;
+  role: Role;
   canManage: boolean;
   onOpen: () => void;
   onStatusChange: (next: TicketStatus) => void;
@@ -267,9 +330,18 @@ function TicketRow({
         }}
         className="flex cursor-pointer flex-col gap-2 border-t border-line px-3 py-3 transition hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-risd sm:flex-row sm:items-center sm:gap-4"
       >
-        <p className="min-w-0 flex-1 truncate font-medium text-fg" title={ticket.title}>
-          {ticket.title}
-        </p>
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-medium text-fg" title={ticket.title}>
+            {ticket.title}
+          </p>
+          <div className="mt-0.5">
+            <CompanyLink
+              companyId={ticket.companyId}
+              companyName={ticket.companyName}
+              role={role}
+            />
+          </div>
+        </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
           <Chip ui={URGENCY_UI[ticket.urgency]} />
@@ -429,6 +501,9 @@ function RepliesSection({
         update={update}
         onChanged={onChanged}
         mentionContext={{ sourceType: "chamado_resposta", companyId: null }}
+        toggleCheckbox={(id, index, checked, token) =>
+          toggleTicketReplyCheckbox(id, token, index, checked)
+        }
       />
     </section>
   );
@@ -438,17 +513,25 @@ function RepliesSection({
 // de status é na linha. O botão de excluir aparece só para autor/admin.
 function DetailModal({
   ticket,
+  role,
+  companies,
   canManage,
   userId,
   onClose,
   onDelete,
+  onChangeCompany,
   onRepliesChanged,
 }: {
   ticket: SupportTicketView;
+  role: Role;
+  companies: ReachableCompany[];
   canManage: boolean;
   userId: string;
   onClose: () => void;
   onDelete: () => void;
+  // Troca a empresa do chamado; devolve erro classificado (ou null). A regra de
+  // alcance é do banco (gatilho de reachability).
+  onChangeCompany: (companyId: string) => Promise<{ error: string | null }>;
   onRepliesChanged: () => void;
 }) {
   // Imagens do contexto ampliam num lightbox (mesmo mecanismo das anotações): o
@@ -457,6 +540,48 @@ function DetailModal({
     images: string[];
     index: number;
   } | null>(null);
+
+  // Troca de empresa (mesmas pessoas que gerenciam o chamado = canManage).
+  const [editingCompany, setEditingCompany] = useState(false);
+  const [newCompanyId, setNewCompanyId] = useState(ticket.companyId);
+  const [savingCompany, setSavingCompany] = useState(false);
+  const [companyError, setCompanyError] = useState<string | null>(null);
+
+  async function saveCompany() {
+    if (!newCompanyId || newCompanyId === ticket.companyId) {
+      setEditingCompany(false);
+      setCompanyError(null);
+      return;
+    }
+    setSavingCompany(true);
+    setCompanyError(null);
+    const res = await onChangeCompany(newCompanyId);
+    setSavingCompany(false);
+    if (res.error) {
+      setCompanyError(res.error);
+      return;
+    }
+    setEditingCompany(false);
+  }
+
+  // Caixas de checklist clicáveis no contexto do chamado: edita quem já pode
+  // editar o contexto (autor ou admin = canManage); os demais veem desabilitado.
+  const contextRef = useRef<HTMLDivElement>(null);
+  const [taskError, setTaskError] = useState<string | null>(null);
+  useTaskCheckboxes({
+    containerRef: contextRef,
+    html: ticket.contextHtml,
+    canEdit: canManage,
+    readOnlyTitle: TASK_READONLY_TITLE,
+    onError: setTaskError,
+    onToggle: (index, checked) =>
+      toggleTicketCheckbox(
+        ticket.id,
+        ticket.updatedAtISO ?? ticket.createdAtISO,
+        index,
+        checked
+      ),
+  });
 
   return (
     <Modal open onClose={onClose} labelledBy="ticket-detail-title" maxWidth="max-w-2xl">
@@ -504,9 +629,78 @@ function DetailModal({
               </>
             )}
           </p>
+
+          {/* Empresa do chamado: exibida sempre; trocável por quem gerencia o
+              chamado (canManage), no mesmo lugar. O alcance da empresa-alvo é
+              garantido no banco (gatilho de reachability). */}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-fg-muted">Empresa:</span>
+            {editingCompany && canManage ? (
+              <div className="flex flex-1 flex-wrap items-center gap-2">
+                <div className="min-w-[220px] flex-1">
+                  <Combobox
+                    value={newCompanyId}
+                    onChange={setNewCompanyId}
+                    options={companies.map((c) => ({
+                      value: c.id,
+                      label: c.name,
+                    }))}
+                    ariaLabel="Empresa do chamado"
+                    searchPlaceholder="Buscar empresa…"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={saveCompany}
+                  disabled={savingCompany || !newCompanyId}
+                  className="rounded-lg bg-risd px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd disabled:opacity-60"
+                >
+                  {savingCompany ? "Salvando…" : "Salvar"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingCompany(false);
+                    setNewCompanyId(ticket.companyId);
+                    setCompanyError(null);
+                  }}
+                  disabled={savingCompany}
+                  className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-fg-muted transition hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
+                >
+                  Cancelar
+                </button>
+              </div>
+            ) : (
+              <>
+                <CompanyLink
+                  companyId={ticket.companyId}
+                  companyName={ticket.companyName}
+                  role={role}
+                />
+                {canManage && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewCompanyId(ticket.companyId);
+                      setEditingCompany(true);
+                    }}
+                    className="rounded-md px-1.5 py-0.5 text-xs font-medium text-fg-muted transition hover:bg-surface-2 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
+                  >
+                    Alterar
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+          {companyError && (
+            <p role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">
+              {companyError}
+            </p>
+          )}
         </div>
 
         <div
+          ref={contextRef}
           className="rich-text note-view border-t border-line pt-4"
           onClick={(e) => {
             const t = e.target;
@@ -523,6 +717,11 @@ function DetailModal({
           // Sanitizado no servidor (loadSupportTickets → getNoteSanitizer).
           dangerouslySetInnerHTML={{ __html: ticket.contextHtml }}
         />
+        {taskError && (
+          <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+            {taskError}
+          </p>
+        )}
 
         {ticket.attachments.length > 0 && (
           <div className="border-t border-line pt-4">
@@ -576,12 +775,16 @@ export default function SupportView({
   truncated,
   userId,
   isAdmin,
+  role,
+  companies,
 }: {
   tickets: SupportTicketView[];
   counts: { open: number; finished: number };
   truncated: boolean;
   userId: string;
   isAdmin: boolean;
+  role: Role;
+  companies: ReachableCompany[];
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -689,6 +892,54 @@ export default function SupportView({
     startTransition(() => router.refresh());
   }
 
+  // Troca a empresa do chamado. O alcance da empresa-alvo é garantido pelo
+  // gatilho do banco (reachability); aqui só traduzimos o erro e refletimos a
+  // mudança (otimista + refresh). A empresa nova vem da lista de alcançáveis,
+  // então o nome é conhecido na hora.
+  async function changeCompany(
+    t: SupportTicketView,
+    newCompanyId: string
+  ): Promise<{ error: string | null }> {
+    const prevRows = rows;
+    const prevDetail = detail;
+    const newName = companies.find((c) => c.id === newCompanyId)?.name ?? null;
+    setRows((rs) =>
+      rs.map((r) =>
+        r.id === t.id
+          ? { ...r, companyId: newCompanyId, companyName: newName }
+          : r
+      )
+    );
+    setDetail((d) =>
+      d && d.id === t.id
+        ? { ...d, companyId: newCompanyId, companyName: newName }
+        : d
+    );
+
+    const supabase = createClient();
+    const { error: err } = await supabase
+      .from("support_tickets")
+      .update({ company_id: newCompanyId })
+      .eq("id", t.id);
+
+    if (err) {
+      setRows(prevRows);
+      setDetail(prevDetail);
+      // O gatilho recusa empresa fora do alcance (check_violation / 23514).
+      if (
+        err.code === "23514" ||
+        (err.message ?? "").toLowerCase().includes("fora do seu acesso")
+      ) {
+        return {
+          error: "Você não pode vincular o chamado a uma empresa fora do seu acesso.",
+        };
+      }
+      return { error: `Não foi possível trocar a empresa: ${err.message}` };
+    }
+    startTransition(() => router.refresh());
+    return { error: null };
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
@@ -710,6 +961,7 @@ export default function SupportView({
       {creating && (
         <TicketFormLazy
           userId={userId}
+          companies={companies}
           onCreated={() => {
             setCreating(false);
             startTransition(() => router.refresh());
@@ -796,6 +1048,7 @@ export default function SupportView({
                     <TicketRow
                       key={t.id}
                       ticket={t}
+                      role={role}
                       canManage={canManage(t)}
                       onOpen={() => setDetail(t)}
                       onStatusChange={(next) => changeStatus(t, next)}
@@ -832,6 +1085,7 @@ export default function SupportView({
                     <TicketRow
                       key={t.id}
                       ticket={t}
+                      role={role}
                       canManage={canManage(t)}
                       onOpen={() => setDetail(t)}
                       onStatusChange={(next) => changeStatus(t, next)}
@@ -856,12 +1110,15 @@ export default function SupportView({
       {detail && (
         <DetailModal
           ticket={detail}
+          role={role}
+          companies={companies}
           canManage={canManage(detail)}
           userId={userId}
           onClose={() => setDetail(null)}
           onDelete={() => {
             setDeleting(detail);
           }}
+          onChangeCompany={(companyId) => changeCompany(detail, companyId)}
           onRepliesChanged={() => startTransition(() => router.refresh())}
         />
       )}

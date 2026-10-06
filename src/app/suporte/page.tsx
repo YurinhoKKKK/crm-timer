@@ -2,6 +2,7 @@ import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import SupportView from "./SupportView";
 import { loadSupportTickets } from "@/lib/support";
+import { loadReachableCompanies } from "@/lib/meetings";
 
 // Chamados internos de suporte (Fatia 1) — o quadro do Monday no CRM. 100%
 // interno: os TRÊS cargos veem TODOS os chamados (a RLS st_select escopa por
@@ -19,7 +20,12 @@ export default async function SuportePage() {
     "colaborador",
   ]);
 
-  const { tickets, counts, truncated } = await loadSupportTickets(supabase);
+  // As empresas que o usuário alcança (mesmo loader do seletor de reunião) para
+  // o campo "Empresa" do chamado (abrir e trocar).
+  const [{ tickets, counts, truncated }, companies] = await Promise.all([
+    loadSupportTickets(supabase),
+    loadReachableCompanies(supabase),
+  ]);
 
   return (
     <AppShell
@@ -37,6 +43,8 @@ export default async function SuportePage() {
         truncated={truncated}
         userId={profile.id}
         isAdmin={profile.role === "admin"}
+        role={profile.role as "admin" | "consultor" | "colaborador"}
+        companies={companies}
       />
     </AppShell>
   );

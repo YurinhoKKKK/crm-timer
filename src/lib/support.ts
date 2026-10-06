@@ -142,6 +142,11 @@ export function isOpenStatus(status: TicketStatus): boolean {
 export type SupportTicketView = {
   id: string;
   title: string;
+  // Empresa a que o chamado se refere (obrigatória). O NOME só vem para quem
+  // ALCANÇA a empresa (join sob a RLS de companies); para os demais é null e a
+  // tela mostra "Empresa fora do seu acesso" — sem nome e sem link.
+  companyId: string;
+  companyName: string | null;
   contextHtml: string; // já sanitizado (ponto único de leitura)
   attachments: NoteAttachmentView[];
   urgency: TicketUrgency;
@@ -220,7 +225,7 @@ export async function loadSupportTickets(
     supabase
       .from("support_tickets")
       .select(
-        "id, title, context_html, attachments, urgency, issue_type, status, created_by, created_at, updated_at, updated_by, finished_at"
+        "id, title, company_id, context_html, attachments, urgency, issue_type, status, created_by, created_at, updated_at, updated_by, finished_at"
       )
       .order("created_at", { ascending: false })
       .limit(LOAD_CAP),
@@ -241,6 +246,7 @@ export async function loadSupportTickets(
   type Row = {
     id: string;
     title: string;
+    company_id: string;
     context_html: string;
     attachments: unknown;
     urgency: TicketUrgency;
@@ -266,13 +272,24 @@ export async function loadSupportTickets(
     return { tickets: [], counts, truncated: false };
   }
 
-  const [people, sanitize] = await Promise.all([
+  // Nomes das empresas sob a RLS de companies: só voltam as que o usuário
+  // ALCANÇA. As demais ficam de fora do Map → companyName null → a tela mostra
+  // "Empresa fora do seu acesso" (nada de SECURITY DEFINER para expor o nome).
+  const companyIds = Array.from(new Set(rows.map((r) => r.company_id)));
+  const [people, sanitize, companiesRes] = await Promise.all([
     resolvePeople(
       supabase,
       rows.flatMap((r) => [r.created_by, r.updated_by])
     ),
     getNoteSanitizer(),
+    supabase.from("companies").select("id, name").in("id", companyIds),
   ]);
+
+  const companyNames = new Map<string, string>();
+  for (const c of (companiesRes.data as { id: string; name: string }[] | null) ??
+    []) {
+    companyNames.set(c.id, c.name);
+  }
 
   const publicUrl = (path: string) =>
     supabase.storage.from("note-files").getPublicUrl(path).data.publicUrl;
@@ -283,6 +300,8 @@ export async function loadSupportTickets(
     return {
       id: r.id,
       title: r.title,
+      companyId: r.company_id,
+      companyName: companyNames.get(r.company_id) ?? null,
       // Sanitiza no ponto único de leitura — o HTML vem do editor, nunca
       // renderizar sem passar por aqui.
       contextHtml: sanitize(r.context_html),

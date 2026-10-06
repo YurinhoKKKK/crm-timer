@@ -482,6 +482,15 @@ export async function deleteCompany(
   const { error } = await supabase.from("companies").delete().eq("id", companyId);
 
   if (error) {
+    // Chamado de suporte vinculado (FK ON DELETE RESTRICT, 23503): não se perde
+    // histórico. Mensagem específica, nunca a genérica do Postgres.
+    const text = `${error.message ?? ""} ${error.details ?? ""}`.toLowerCase();
+    if (error.code === "23503" && text.includes("support_tickets")) {
+      return {
+        error:
+          "Esta empresa tem chamados de suporte vinculados e não pode ser excluída.",
+      };
+    }
     return { error: error.message };
   }
 

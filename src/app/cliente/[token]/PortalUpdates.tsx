@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { PortalUpdate } from "@/lib/client-portal";
+import { useTaskCheckboxes } from "@/components/rich-text/useTaskCheckboxes";
 import { formatPortalDate } from "./portal-format";
 
 // Aba "Atualizações do projeto" do portal do cliente. O HTML de cada
@@ -18,6 +19,16 @@ export default function PortalUpdates({
   updates: PortalUpdate[];
 }) {
   const [zoom, setZoom] = useState<{ src: string; alt: string } | null>(null);
+
+  // No portal do cliente as caixas de checklist são SEMPRE somente leitura:
+  // exibem o estado (pelo data-checked) mas ficam desabilitadas. Um único
+  // binder sobre a lista cobre todas as atualizações.
+  const listRef = useRef<HTMLOListElement>(null);
+  useTaskCheckboxes({
+    containerRef: listRef,
+    html: updates.map((u) => u.id).join("|"),
+    canEdit: false,
+  });
 
   function handleContentClick(e: React.MouseEvent<HTMLDivElement>) {
     const target = e.target as HTMLElement;
@@ -61,7 +72,7 @@ export default function PortalUpdates({
           Nenhuma atualização ainda.
         </p>
       ) : (
-        <ol className="mt-6 space-y-5">
+        <ol ref={listRef} className="mt-6 space-y-5">
           {updates.map((u) => (
             <li
               key={u.id}

@@ -7,6 +7,7 @@ import type { NoteAttachmentMeta } from "@/lib/notes";
 import { syncMentions } from "@/lib/mention-actions";
 import ReplyThread, { classifyReplyError, type ReplyView } from "./ReplyThread";
 import { fetchNoteReplies } from "./reply-actions";
+import { toggleNoteReplyCheckbox } from "@/components/rich-text/task-checkbox-actions";
 
 // Conversa de UMA atualização da empresa. Encapsula o adaptador do
 // company_note_replies (carregar sob demanda no servidor; inserir/editar via
@@ -98,6 +99,9 @@ export default function NoteRepliesSection({
             update={update}
             onChanged={onChanged}
             mentionContext={{ sourceType: "atualizacao_resposta", companyId }}
+            toggleCheckbox={(id, index, checked, token) =>
+              toggleNoteReplyCheckbox(id, token, index, checked)
+            }
           />
         </div>
       )}

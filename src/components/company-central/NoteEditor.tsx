@@ -61,6 +61,26 @@ import { ResizableImage } from "./resizable-image";
 const MAX_IMAGE_MB = 5;
 const MAX_DOC_MB = 20;
 
+// Onde os anexos deste editor vivem. Atualizações normais: buckets PÚBLICOS
+// (note-images/note-files) com URL pública. Atualizações do CS: bucket PRIVADO
+// admin-only (cs-note-files) com URL ASSINADA — a imagem embutida no HTML só é
+// vista por quem alcança a nota (admins, pela RLS de cs_notes).
+export type EditorStorage = {
+  imagesBucket: string;
+  filesBucket: string;
+  signed: boolean;
+};
+
+const DEFAULT_STORAGE: EditorStorage = {
+  imagesBucket: "note-images",
+  filesBucket: "note-files",
+  signed: false,
+};
+
+// Expiração longa para a URL assinada da imagem embutida no HTML (o conteúdo
+// persiste). ~10 anos.
+const SIGNED_IMAGE_TTL = 315360000;
+
 // Formatos de documento aceitos como anexo (além das imagens, que vão inline).
 const DOC_EXTS = ["pdf", "doc", "docx", "xls", "xlsx", "csv", "txt"];
 const DOC_ACCEPT = DOC_EXTS.map((e) => `.${e}`).join(",");
@@ -215,6 +235,9 @@ export default function NoteEditor({
   // chamado. Com o title, o usuário entende por que está desabilitado.
   saveDisabled = false,
   saveDisabledTitle,
+  // Destino/visibilidade dos anexos (imagens inline e documentos). Padrão =
+  // buckets públicos das Atualizações; o CS passa o bucket privado admin-only.
+  storage = DEFAULT_STORAGE,
   // Texto do placeholder do editor. Quando não informado, deriva do contexto:
   // no de Atualizações (com noção de cliente) fala "atualização"; nos reusos
   // internos sem cliente (chamados de suporte) fica neutro, para não introduzir
@@ -250,6 +273,7 @@ export default function NoteEditor({
   saveLabel?: string;
   saveDisabled?: boolean;
   saveDisabledTitle?: string;
+  storage?: EditorStorage;
   placeholder?: string;
   showClientVisibility?: boolean;
   showAreas?: boolean;
@@ -322,16 +346,29 @@ export default function NoteEditor({
       // Pasta do próprio usuário — exigido pela política do bucket.
       const path = `${userId}/${crypto.randomUUID()}.${ext}`;
       const { error: upError } = await supabase.storage
-        .from("note-images")
+        .from(storage.imagesBucket)
         .upload(path, file, { contentType: file.type || undefined });
       if (upError) {
         setImgError(`Falha ao enviar a imagem: ${upError.message}`);
         return;
       }
-      const { data } = supabase.storage.from("note-images").getPublicUrl(path);
-      const node = view.state.schema.nodes.image.create({
-        src: data.publicUrl,
-      });
+      // Bucket privado (CS): URL ASSINADA (longa) embutida no HTML. Público: URL
+      // pública direta.
+      let src: string | null = null;
+      if (storage.signed) {
+        const { data } = await supabase.storage
+          .from(storage.imagesBucket)
+          .createSignedUrl(path, SIGNED_IMAGE_TTL);
+        src = data?.signedUrl ?? null;
+      } else {
+        src = supabase.storage.from(storage.imagesBucket).getPublicUrl(path).data
+          .publicUrl;
+      }
+      if (!src) {
+        setImgError("Falha ao gerar o endereço da imagem.");
+        return;
+      }
+      const node = view.state.schema.nodes.image.create({ src });
       const tr =
         pos != null
           ? view.state.tr.insert(pos, node)
@@ -361,7 +398,7 @@ export default function NoteEditor({
       const supabase = createClient();
       const path = `${userId}/${crypto.randomUUID()}.${ext}`;
       const { error: upError } = await supabase.storage
-        .from("note-files")
+        .from(storage.filesBucket)
         .upload(path, file, { contentType: file.type || undefined });
       if (upError) {
         setImgError(`Falha ao enviar o documento: ${upError.message}`);
@@ -382,7 +419,7 @@ export default function NoteEditor({
     // Subiu agora e ainda não foi salvo: pode apagar do Storage sem risco.
     if (newPathsRef.current.has(path)) {
       newPathsRef.current.delete(path);
-      void createClient().storage.from("note-files").remove([path]);
+      void createClient().storage.from(storage.filesBucket).remove([path]);
     }
   }
 
@@ -390,7 +427,7 @@ export default function NoteEditor({
     // Descarta os uploads desta edição (ficariam órfãos no Storage).
     const orphans = Array.from(newPathsRef.current);
     if (orphans.length > 0) {
-      void createClient().storage.from("note-files").remove(orphans);
+      void createClient().storage.from(storage.filesBucket).remove(orphans);
       newPathsRef.current.clear();
     }
     onCancel();

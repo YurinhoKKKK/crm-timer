@@ -8,7 +8,10 @@ export type MentionSourceType =
   | "atualizacao"
   | "atualizacao_resposta"
   | "chamado"
-  | "chamado_resposta";
+  | "chamado_resposta"
+  // Atualizações do CS (Sucesso do Cliente) — exclusivas de admin.
+  | "cs_note"
+  | "cs_note_reply";
 
 // Contexto passado ao editor para habilitar o @: o tipo da fonte e a empresa
 // (nula em chamado, que é visível a toda a equipe).

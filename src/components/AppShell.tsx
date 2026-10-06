@@ -46,6 +46,9 @@ const ic = {
       <path d="M9 7h2M9 11h2M9 15h2" />
     </>
   ),
+  heart: (
+    <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7z" />
+  ),
   tasks: (
     <>
       <path d="M9 11l3 3 8-8" />
@@ -125,6 +128,7 @@ const NAV: Record<Role, NavItem[]> = {
     { href: "/admin", label: "Dashboard", icon: <Icon>{ic.dashboard}</Icon> },
     { href: "/admin/usuarios", label: "Usuários", icon: <Icon>{ic.users}</Icon> },
     { href: "/admin/empresas", label: "Empresas", icon: <Icon>{ic.building}</Icon> },
+    { href: "/admin/sucesso-do-cliente", label: "Sucesso do Cliente", icon: <Icon>{ic.heart}</Icon> },
     { href: "/acompanhamento", label: "Acompanhamento", icon: <Icon>{ic.pulse}</Icon> },
     { href: "/admin/capacidade", label: "Capacidade", icon: <Icon>{ic.gauge}</Icon> },
     { href: "/admin/tarefas", label: "Tarefas", icon: <Icon>{ic.tasks}</Icon> },

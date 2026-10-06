@@ -47,6 +47,8 @@ const SOURCE_SPEC: Record<
   atualizacao_resposta: { table: "company_note_replies", column: "body_html" },
   chamado: { table: "support_tickets", column: "context_html" },
   chamado_resposta: { table: "support_ticket_replies", column: "body_html" },
+  cs_note: { table: "cs_notes", column: "content_html" },
+  cs_note_reply: { table: "cs_note_replies", column: "body_html" },
 };
 
 // Reconcilia as menções de um conteúdo APÓS o salvamento. Lê o HTML salvo (sob

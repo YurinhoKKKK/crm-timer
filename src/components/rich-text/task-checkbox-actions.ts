@@ -180,6 +180,54 @@ export async function toggleNoteReplyCheckbox(
   );
 }
 
+// --- Atualizações do CS (admin-only; a RLS de cs_notes/cs_note_replies é a
+//     barreira; o toggle de nota do CS é de qualquer admin, o de resposta é do
+//     autor, espelhando company). ------------------------------------------ //
+
+export async function toggleCsNoteCheckbox(
+  id: string,
+  token: string,
+  index: number,
+  checked: boolean
+): Promise<TaskToggleResult> {
+  return toggle(
+    {
+      table: "cs_notes",
+      htmlCol: "content_html",
+      stampCol: "updated_at",
+      authorCol: "author_id",
+      rpc: "toggle_cs_note_checkbox",
+      adminMayEdit: true,
+    },
+    id,
+    token,
+    index,
+    checked
+  );
+}
+
+export async function toggleCsNoteReplyCheckbox(
+  id: string,
+  token: string,
+  index: number,
+  checked: boolean
+): Promise<TaskToggleResult> {
+  return toggle(
+    {
+      table: "cs_note_replies",
+      htmlCol: "body_html",
+      stampCol: "edited_at",
+      authorCol: "author_id",
+      rpc: "toggle_cs_note_reply_checkbox",
+      adminMayEdit: false,
+    },
+    id,
+    token,
+    index,
+    checked
+  );
+}
+
 export async function toggleTicketReplyCheckbox(
   id: string,
   token: string,

@@ -8,6 +8,7 @@ import { syncMentions } from "@/lib/mention-actions";
 import ReplyThread, { classifyReplyError, type ReplyView } from "./ReplyThread";
 import { fetchNoteReplies } from "./reply-actions";
 import { toggleNoteReplyCheckbox } from "@/components/rich-text/task-checkbox-actions";
+import type { NotesSource } from "@/components/notes-panel/notes-source";
 
 // Conversa de UMA atualização da empresa. Encapsula o adaptador do
 // company_note_replies (carregar sob demanda no servidor; inserir/editar via
@@ -22,22 +23,27 @@ export default function NoteRepliesSection({
   userId,
   replyCount,
   onChanged,
+  // Fonte alternativa (CS). Ausente = Atualizações normais (company_note_replies).
+  source,
 }: {
   noteId: string;
   companyId: string;
   userId: string;
   replyCount: number;
   onChanged?: () => void;
+  source?: NotesSource;
 }) {
   const [open, setOpen] = useState(false);
 
-  const load = (): Promise<ReplyView[]> => fetchNoteReplies(noteId);
+  const load = (): Promise<ReplyView[]> =>
+    source ? source.loadReplies(noteId) : fetchNoteReplies(noteId);
 
   async function insert(
     parentId: string | null,
     html: string,
     attachments: NoteAttachmentMeta[]
   ) {
+    if (source) return source.insertReply(noteId, parentId, html, attachments);
     const supabase = createClient();
     const { data, error } = await supabase
       .from("company_note_replies")
@@ -61,6 +67,7 @@ export default function NoteRepliesSection({
     html: string,
     attachments: NoteAttachmentMeta[]
   ) {
+    if (source) return source.updateReply(id, html, attachments);
     const supabase = createClient();
     const { error } = await supabase
       .from("company_note_replies")
@@ -98,9 +105,15 @@ export default function NoteRepliesSection({
             insert={insert}
             update={update}
             onChanged={onChanged}
-            mentionContext={{ sourceType: "atualizacao_resposta", companyId }}
+            mentionContext={{
+              sourceType: source ? source.mentionReplyType : "atualizacao_resposta",
+              companyId,
+            }}
+            editorStorage={source?.editorStorage}
             toggleCheckbox={(id, index, checked, token) =>
-              toggleNoteReplyCheckbox(id, token, index, checked)
+              source
+                ? source.toggleReplyCheckbox(id, token, index, checked)
+                : toggleNoteReplyCheckbox(id, token, index, checked)
             }
           />
         </div>

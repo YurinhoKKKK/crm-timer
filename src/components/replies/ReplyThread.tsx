@@ -12,6 +12,7 @@ import { CornerUpLeft, FileSpreadsheet, FileText, Reply, X } from "lucide-react"
 import type { NoteAttachmentMeta, NoteAttachmentView } from "@/lib/notes";
 import type { MentionContext } from "@/lib/mentions";
 import type { TaskToggleResult } from "@/lib/task-checkbox";
+import type { EditorStorage } from "@/components/company-central/NoteEditor";
 import { formatBytes } from "@/lib/format";
 import { btnPrimary } from "@/lib/ui";
 import Avatar from "@/components/Avatar";
@@ -240,6 +241,7 @@ export default function ReplyThread({
   emptyText = "Nenhuma resposta ainda.",
   mentionContext,
   toggleCheckbox,
+  editorStorage,
 }: {
   userId: string;
   load: () => Promise<ReplyView[]>;
@@ -267,6 +269,8 @@ export default function ReplyThread({
     checked: boolean,
     token: string
   ) => Promise<TaskToggleResult>;
+  // Destino dos anexos do editor de resposta (bucket privado no CS).
+  editorStorage?: EditorStorage;
 }) {
   const [replies, setReplies] = useState<ReplyView[] | null>(null); // null = carregando
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -385,6 +389,7 @@ export default function ReplyThread({
           mentionContext={mentionContext}
           toolbarOffset="0px"
           saveLabel="Enviar"
+          storage={editorStorage}
           onSave={(html, _v, atts) => doCreate(target, html, atts)}
           onCancel={() => setComposing(null)}
         />
@@ -419,6 +424,7 @@ export default function ReplyThread({
               mentionContext={mentionContext}
               toolbarOffset="0px"
               saveLabel="Salvar alterações"
+              storage={editorStorage}
               onSave={(html, _v, atts) => doUpdate(r.id, html, atts)}
               onCancel={() => setEditingId(null)}
             />

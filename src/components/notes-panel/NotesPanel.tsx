@@ -18,6 +18,7 @@ import NoteRepliesSection from "@/components/replies/NoteRepliesSection";
 import { TASK_READONLY_TITLE } from "@/components/rich-text/useTaskCheckboxes";
 import { toggleNoteCheckbox } from "@/components/rich-text/task-checkbox-actions";
 import { getPanelNotes } from "./notes-panel-actions";
+import type { NotesSource } from "./notes-source";
 
 // O editor (TipTap) só entra no bundle quando o painel de fato abre e este
 // módulo é avaliado — e ainda assim carregado sob demanda, para não pesar nem a
@@ -63,6 +64,7 @@ export default function NotesPanel({
   notesHref,
   onClose,
   onCountChange,
+  source,
 }: {
   companyId: string;
   companyName: string;
@@ -73,8 +75,13 @@ export default function NotesPanel({
   onClose: () => void;
   // Avisa o balão para atualizar a contagem sem recarregar a tela (delta).
   onCountChange: (delta: number) => void;
+  // Fonte alternativa (CS). Ausente = Atualizações normais (company_notes).
+  source?: NotesSource;
 }) {
   const router = useRouter();
+  // Termos exibidos: "atualização(ões)" (padrão) ou "atualização(ões) do CS".
+  const termS = source?.termSingular ?? "atualização";
+  const termP = source?.termPlural ?? "atualizações";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState<CompanyNoteView[]>([]);
@@ -103,20 +110,25 @@ export default function NotesPanel({
     r?.(ok);
   }
 
+  const loadNotes = useCallback(
+    () => (source ? source.loadNotes(companyId) : getPanelNotes(companyId)),
+    [companyId, source]
+  );
+
   const reload = useCallback(async () => {
-    const res = await getPanelNotes(companyId);
+    const res = await loadNotes();
     if (res.error) {
       setError(res.error);
     } else {
       setError(null);
       setNotes(res.notes ?? []);
     }
-  }, [companyId]);
+  }, [loadNotes]);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
-    getPanelNotes(companyId).then((res) => {
+    loadNotes().then((res) => {
       if (!active) return;
       if (res.error) setError(res.error);
       else setNotes(res.notes ?? []);
@@ -125,7 +137,7 @@ export default function NotesPanel({
     return () => {
       active = false;
     };
-  }, [companyId]);
+  }, [loadNotes]);
 
   // Fechar por Esc (clique fora é o backdrop). Não fecha enquanto o diálogo de
   // confirmação está aberto — lá o Esc pertence ao diálogo.
@@ -153,6 +165,22 @@ export default function NotesPanel({
     attachments: NoteAttachmentMeta[],
     areas: NoteArea[]
   ): Promise<{ error?: string | null }> {
+    // Fonte CS: sem "visível ao cliente", sem áreas, sem confirmação. As escritas
+    // vão por server action (RLS admin-only + menções restritas a admins).
+    if (source) {
+      const res = id
+        ? await source.updateNote(id, html, attachments)
+        : await source.createNote(companyId, html, attachments);
+      if (res.error) return { error: res.error };
+      if (id) setEditingId(null);
+      else {
+        setCreating(false);
+        onCountChange(1);
+      }
+      await reload();
+      return { error: null };
+    }
+
     if (visibleToClient) {
       const ok = await askVisibleConfirm();
       // Cancelou a publicação: mantém o editor aberto, sem gravar.
@@ -224,7 +252,7 @@ export default function NotesPanel({
       <aside
         role="dialog"
         aria-modal="true"
-        aria-label={`Atualizações de ${companyName}`}
+        aria-label={`${termP[0].toUpperCase()}${termP.slice(1)} de ${companyName}`}
         // Largura ~48% em telas grandes (referência: painel de atualizações do
         // Monday), com teto para não esticar em ultrawide; tela cheia no estreito.
         className="relative flex h-full w-full flex-col overflow-hidden bg-surface shadow-pop sm:w-[48%] sm:max-w-[860px]"
@@ -232,19 +260,22 @@ export default function NotesPanel({
         <header className="flex items-start justify-between gap-3 border-b border-line p-5">
           <div className="min-w-0">
             <p className="text-xs uppercase tracking-wide text-fg-subtle">
-              Atualizações
+              {source ? "Atualizações do CS" : "Atualizações"}
             </p>
             <h2 className="truncate text-lg font-semibold text-fg">
               {companyName}
             </h2>
-            <button
-              type="button"
-              onClick={openFullTab}
-              disabled={navPending}
-              className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-risd transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:opacity-60"
-            >
-              {navPending ? "Abrindo…" : "Abrir aba completa de Atualizações →"}
-            </button>
+            {/* A aba completa só existe nas Atualizações normais. */}
+            {!source && (
+              <button
+                type="button"
+                onClick={openFullTab}
+                disabled={navPending}
+                className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-risd transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:opacity-60"
+              >
+                {navPending ? "Abrindo…" : "Abrir aba completa de Atualizações →"}
+              </button>
+            )}
           </div>
           <button
             type="button"
@@ -263,7 +294,13 @@ export default function NotesPanel({
               <NoteEditor
                 userId={userId}
                 toolbarOffset="0px"
-                mentionContext={{ sourceType: "atualizacao", companyId }}
+                showClientVisibility={!source}
+                showAreas={!source}
+                storage={source?.editorStorage}
+                mentionContext={{
+                  sourceType: source ? source.mentionNoteType : "atualizacao",
+                  companyId,
+                }}
                 onSave={(html, vis, atts, areas) =>
                   persist(null, html, vis, atts, areas)
                 }
@@ -280,7 +317,7 @@ export default function NotesPanel({
               className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-line bg-surface-2/40 px-4 py-3 text-sm font-medium text-fg-muted transition hover:border-risd/50 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
             >
               <PencilLine size={16} />
-              Escrever atualização
+              Escrever {termS}
             </button>
           )}
 
@@ -289,7 +326,7 @@ export default function NotesPanel({
           ) : error ? (
             <div className="py-8 text-center">
               <p className="text-sm text-red-600 dark:text-red-400">
-                Não foi possível carregar as atualizações.
+                Não foi possível carregar as {termP}.
               </p>
               <p className="mt-1 text-xs text-fg-subtle">{error}</p>
               <button
@@ -305,7 +342,7 @@ export default function NotesPanel({
             </div>
           ) : notes.length === 0 ? (
             <div className="rounded-xl border border-dashed border-line bg-surface-2/30 p-6 text-center text-sm text-fg-subtle">
-              Nenhuma atualização ainda. Escreva a primeira — resumos de reunião,
+              Nenhuma {termS} ainda. Escreva a primeira — resumos de reunião,
               planos de ação e observações sobre o cliente.
             </div>
           ) : (
@@ -436,6 +473,7 @@ export default function NotesPanel({
                         userId={userId}
                         replyCount={n.replyCount}
                         onChanged={() => void reload()}
+                        source={source}
                       />
                     </>
                   )}

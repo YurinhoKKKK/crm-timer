@@ -1656,6 +1656,57 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      cs_board: {
+        Args: never
+        Returns: {
+          id: string
+          name: string
+          group_id: string | null
+          started_on: string | null
+          monthly_value: string | null
+          project_value: string | null
+          installments: number | null
+          months_total: number | null
+          period_days: number | null
+          nps_status: string | null
+          meeting_on: string | null
+          responsibles: Json
+          cs_note_count: number
+        }[]
+      }
+      cs_note_reply_counts: {
+        Args: { p_company: string }
+        Returns: { note_id: string; reply_count: number }[]
+      }
+      toggle_cs_note_checkbox: {
+        Args: { p_id: string; p_html: string; p_token: string }
+        Returns: string
+      }
+      toggle_cs_note_reply_checkbox: {
+        Args: { p_id: string; p_html: string; p_token: string }
+        Returns: string
+      }
+      cs_set_company_nps: {
+        Args: { p_company_id: string; p_status: string | null }
+        Returns: undefined
+      }
+      cs_set_meeting_on: {
+        Args: { p_company_id: string; p_date: string | null }
+        Returns: undefined
+      }
+      cs_set_person_nps: {
+        Args: { p_company_id: string; p_user_id: string; p_status: string | null }
+        Returns: undefined
+      }
+      cs_set_contract_values: {
+        Args: {
+          p_company_id: string
+          p_installments: number | null
+          p_total: string | null
+          p_monthly: string | null
+        }
+        Returns: undefined
+      }
       client_followup: {
         Args: {
           p_desc?: boolean

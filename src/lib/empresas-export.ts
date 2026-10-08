@@ -5,6 +5,10 @@ import {
   normalizeGroupColor,
   type CompanyGroup,
 } from "@/lib/company-groups";
+import {
+  PROJECT_MODEL_LABEL,
+  type ProjectModel,
+} from "@/lib/company-details";
 
 type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
 
@@ -28,9 +32,35 @@ type ExportCompany = {
   id: string;
   name: string;
   groupId: string | null;
+  projectModel: ProjectModel | null;
+  startedOn: string | null; // "AAAA-MM-DD" (data pura, de company_details)
   consultants: PersonRef[];
   collaborators: PersonRef[];
 };
+
+// started_on é DATA pura "AAAA-MM-DD". Convertemos para o NÚMERO DE SÉRIE do
+// Excel (dias desde 30/12/1899) por aritmética pura sobre ano/mês/dia — sem
+// objeto Date, sem toISOString, sem fuso. A célula recebe esse número + formato
+// de data, então o Excel a reconhece como DATA real (ordena/filtra como data).
+// Ex.: "2026-10-01" → 46296 → exibe 01/10/2026 (nunca 30/09/2026).
+function excelSerialFromPureDate(iso: string | null): number | null {
+  if (!iso) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  // days_from_civil (Howard Hinnant): dias desde 1970-01-01 no calendário
+  // gregoriano proléptico, puramente aritmético (sem Date).
+  const yy = y - (mo <= 2 ? 1 : 0);
+  const era = Math.floor((yy >= 0 ? yy : yy - 399) / 400);
+  const yoe = yy - era * 400;
+  const doy = Math.floor((153 * (mo > 2 ? mo - 3 : mo + 9) + 2) / 5) + d - 1;
+  const doe = yoe * 365 + Math.floor(yoe / 4) - Math.floor(yoe / 100) + doy;
+  const daysSinceUnixEpoch = era * 146097 + doe - 719468;
+  // 25569 = dias de 1899-12-30 (epoch de série do Excel) até 1970-01-01.
+  return daysSinceUnixEpoch + 25569;
+}
 
 // --- Cor -------------------------------------------------------------------
 
@@ -87,7 +117,12 @@ export async function loadEmpresasExportData(supabase: SupabaseServer): Promise<
     loadCompanyGroups(supabase),
     supabase
       .from("companies")
-      .select("id, name, group_id")
+      // Modelo e data de início vêm no MESMO select, por join 1-para-1 com
+      // company_details (company_id é PK lá), escopado pela mesma RLS de admin.
+      // Nada de segunda consulta que pudesse truncar em 1000 linhas.
+      .select(
+        "id, name, group_id, company_details(project_model, started_on)"
+      )
       .order("name", { ascending: true })
       .limit(5000),
     supabase
@@ -123,16 +158,32 @@ export async function loadEmpresasExportData(supabase: SupabaseServer): Promise<
   const byName = (a: PersonRef, b: PersonRef) =>
     a.name.localeCompare(b.name, "pt-BR");
 
+  type DetailEmbed = {
+    project_model: ProjectModel | null;
+    started_on: string | null;
+  };
+  type CompanyRow = {
+    id: string;
+    name: string;
+    group_id: string | null;
+    // Relação 1-para-1, mas o PostgREST pode devolver objeto ou lista 1-elem.
+    company_details: DetailEmbed | DetailEmbed[] | null;
+  };
+
   const companies: ExportCompany[] = (
-    (companiesRes.data as { id: string; name: string; group_id: string | null }[]) ??
-    []
-  ).map((c) => ({
-    id: c.id,
-    name: c.name,
-    groupId: c.group_id ?? null,
-    consultants: (consByCompany.get(c.id) ?? []).sort(byName),
-    collaborators: (colabByCompany.get(c.id) ?? []).sort(byName),
-  }));
+    (companiesRes.data as CompanyRow[]) ?? []
+  ).map((c) => {
+    const detail = first(c.company_details);
+    return {
+      id: c.id,
+      name: c.name,
+      groupId: c.group_id ?? null,
+      projectModel: detail?.project_model ?? null,
+      startedOn: detail?.started_on ?? null,
+      consultants: (consByCompany.get(c.id) ?? []).sort(byName),
+      collaborators: (colabByCompany.get(c.id) ?? []).sort(byName),
+    };
+  });
 
   return { groups, companies };
 }
@@ -184,20 +235,33 @@ export async function buildEmpresasWorkbook(data: {
     views: [{ state: "frozen", ySplit: 0 }],
   });
 
-  // Colunas: A = indicador de cor | B = Empresa | consultores | colaboradores.
+  // Colunas: A = indicador de cor | B = Empresa | C = Modelo do Projeto |
+  // D = Data de início | consultores | colaboradores. O grupo aparece como
+  // faixa/seção (não há coluna textual de grupo), então as duas colunas novas
+  // ficam logo após o nome da empresa.
   const consHeaders = Array.from({ length: maxCons }, (_, i) =>
     maxCons === 1 ? "Consultor responsável" : `Consultor ${i + 1}`
   );
   const colabHeaders = Array.from({ length: maxColab }, (_, i) =>
     maxColab === 1 ? "Colaborador responsável" : `Colaborador ${i + 1}`
   );
-  const headers = ["", "Empresa", ...consHeaders, ...colabHeaders];
+  const headers = [
+    "",
+    "Empresa",
+    "Modelo do Projeto",
+    "Data de início",
+    ...consHeaders,
+    ...colabHeaders,
+  ];
   const totalCols = headers.length;
-  const lastColLetter = ws.getColumn(totalCols).letter;
+  // Primeira coluna de pessoa (após Empresa + Modelo + Data de início).
+  const FIRST_PERSON_COL = 5;
 
   ws.getColumn(1).width = 3;
   ws.getColumn(2).width = 34;
-  for (let i = 3; i <= totalCols; i++) ws.getColumn(i).width = 26;
+  ws.getColumn(3).width = 18; // Modelo do Projeto
+  ws.getColumn(4).width = 14; // Data de início
+  for (let i = FIRST_PERSON_COL; i <= totalCols; i++) ws.getColumn(i).width = 26;
 
   const thin = { style: "thin" as const, color: { argb: LINE } };
   const allBorders = { top: thin, bottom: thin, left: thin, right: thin };
@@ -236,7 +300,12 @@ export async function buildEmpresasWorkbook(data: {
       pattern: "solid",
       fgColor: { argb: HEADER_BG },
     };
-    cell.alignment = { vertical: "middle", horizontal: "left" };
+    // Modelo do Projeto (C) e Data de início (D) centralizados p/ acompanhar as
+    // células; demais cabeçalhos à esquerda.
+    cell.alignment = {
+      vertical: "middle",
+      horizontal: col === 3 || col === 4 ? "center" : "left",
+    };
     cell.border = allBorders;
   }
   // Congela abaixo do cabeçalho das colunas e à direita da coluna Empresa.
@@ -285,7 +354,19 @@ export async function buildEmpresasWorkbook(data: {
     }
 
     for (const company of section.items) {
-      const values: string[] = ["", company.name];
+      // Modelo como rótulo da tela (BPO / Consultoria / Ema); vazio se nulo.
+      const modelLabel = company.projectModel
+        ? PROJECT_MODEL_LABEL[company.projectModel] ?? ""
+        : "";
+      // Data de início como número de série do Excel (ou null = célula vazia).
+      const startSerial = excelSerialFromPureDate(company.startedOn);
+
+      const values: (string | number | null)[] = [
+        "",
+        company.name,
+        modelLabel,
+        startSerial,
+      ];
       for (let i = 0; i < maxCons; i++) {
         values.push(company.consultants[i]?.name ?? "");
       }
@@ -307,7 +388,23 @@ export async function buildEmpresasWorkbook(data: {
       nameCell.alignment = { vertical: "middle" };
       nameCell.border = allBorders;
 
-      for (let col = 3; col <= totalCols; col++) {
+      // Modelo do Projeto (C): texto simples, centralizado; célula vazia fica
+      // vazia mesmo (sem "—", para não atrapalhar filtro/ordenação no Excel).
+      const modelCell = ws.getCell(row.number, 3);
+      modelCell.alignment = { vertical: "middle", horizontal: "center" };
+      modelCell.font = { color: { argb: INK } };
+      modelCell.border = allBorders;
+
+      // Data de início (D): DATA real (número de série + formato dd/mm/aaaa),
+      // centralizada. Nula → célula vazia (nunca texto), p/ ordenar como data.
+      const dateCell = ws.getCell(row.number, 4);
+      dateCell.alignment = { vertical: "middle", horizontal: "center" };
+      dateCell.font = { color: { argb: INK } };
+      dateCell.border = allBorders;
+      if (startSerial != null) dateCell.numFmt = "dd/mm/yyyy";
+
+      // Pessoas (consultores/colaboradores): "—" quando a coluna não se aplica.
+      for (let col = FIRST_PERSON_COL; col <= totalCols; col++) {
         const cell = ws.getCell(row.number, col);
         cell.alignment = { vertical: "middle" };
         cell.font = { color: { argb: INK } };

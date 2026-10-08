@@ -9,7 +9,7 @@ import CompanyStandardTasks from "@/components/CompanyStandardTasks";
 import CompanyEditor from "../CompanyEditor";
 import DeleteCompanyButton from "../DeleteCompanyButton";
 import { withSelf } from "@/lib/people";
-import { loadLabelCatalog, loadCompanyLabels } from "@/lib/labels";
+import { loadLabelCatalog, loadManualCompanyLabelIds } from "@/lib/labels";
 import type { TaskKind } from "@/lib/types";
 
 type ConsultantOption = { id: string; full_name: string; email: string };
@@ -44,7 +44,7 @@ export default async function EmpresaEditarPage({
     { data: consultoresData },
     { data: colaboradoresData },
     labelCatalog,
-    companyLabels,
+    manualLabelIds,
     { data: standardData },
     { data: assignedData },
   ] = await Promise.all([
@@ -82,7 +82,7 @@ export default async function EmpresaEditarPage({
       .in("role", ["colaborador", "consultor", "admin"])
       .order("full_name", { ascending: true }),
     loadLabelCatalog(supabase),
-    loadCompanyLabels(supabase, id),
+    loadManualCompanyLabelIds(supabase, id),
     // Catálogo de tarefas padrão ATIVAS (para escolher). Molde inativo não aparece.
     supabase
       .from("standard_tasks")
@@ -199,7 +199,7 @@ export default async function EmpresaEditarPage({
           <CompanyLabels
             companyId={company.id}
             labels={labelCatalog}
-            selectedIds={companyLabels.map((l) => l.id)}
+            selectedIds={manualLabelIds}
           />
         </section>
 

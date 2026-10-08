@@ -6,8 +6,14 @@ import { createCompany } from "../actions";
 import GroupSelect from "./GroupSelect";
 import { inputClass, labelClass, btnPrimary, btnSecondary } from "@/lib/ui";
 import type { TaskKind } from "@/lib/types";
-import type { Label } from "@/lib/labels";
+import type { Label, DerivedKind } from "@/lib/labels";
 import LabelChips from "@/components/LabelChips";
+
+// Texto que explica a origem de uma etiqueta calculada (mostrada desabilitada).
+const DERIVED_TEXT: Record<DerivedKind, string> = {
+  project_model: "Definida pelo Modelo do Projeto",
+  contracted_service: "Definida pelos Serviços contratados",
+};
 import LabelDialog from "./LabelDialog";
 import AssignmentPicker, {
   KindBadge,
@@ -52,6 +58,14 @@ export default function NewCompanyForm({
     label: s.title,
     badge: <KindBadge kind={s.kind} />,
   }));
+
+  // Só as MANUAIS podem ser escolhidas aqui. As calculadas (Modelo do Projeto /
+  // Serviços) aparecem desabilitadas — saem sozinhas quando a empresa tiver os
+  // dados; não entram em company_labels.
+  const manualLabels = labels.filter((l) => !l.derived_kind);
+  const derivedGroups = (["project_model", "contracted_service"] as DerivedKind[])
+    .map((kind) => ({ kind, items: labels.filter((l) => l.derived_kind === kind) }))
+    .filter((g) => g.items.length > 0);
 
   function reset() {
     setName("");
@@ -208,7 +222,7 @@ export default function NewCompanyForm({
           <span className="font-normal text-fg-subtle">(opcional)</span>
         </legend>
         <div className="flex flex-wrap gap-2">
-          {labels.map((l) => {
+          {manualLabels.map((l) => {
             const checked = labelIds.has(l.id);
             return (
               <button
@@ -239,10 +253,35 @@ export default function NewCompanyForm({
             <span aria-hidden="true">＋</span> Nova etiqueta
           </button>
         </div>
+
+        {/* Calculadas: desabilitadas, agrupadas pela origem. */}
+        {derivedGroups.map((group) => (
+          <div key={group.kind} className="mt-2">
+            <p className="mb-1 text-xs text-fg-subtle">{DERIVED_TEXT[group.kind]}</p>
+            <div className="flex flex-wrap gap-2">
+              {group.items.map((l) => (
+                <span
+                  key={l.id}
+                  title={DERIVED_TEXT[group.kind]}
+                  aria-disabled="true"
+                  className={`inline-flex cursor-not-allowed items-center gap-1 rounded-full border border-dashed border-line opacity-60 ${
+                    l.highlight
+                      ? "px-3 py-1.5 text-sm font-bold tracking-wide"
+                      : "px-2.5 py-1 text-xs font-medium"
+                  }`}
+                  style={{ backgroundColor: l.bg_color, color: l.text_color }}
+                >
+                  {l.name}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+
         {labelIds.size > 0 && (
           <p className="mt-2 flex items-center gap-1.5 text-xs text-fg-subtle">
             Selecionadas:{" "}
-            <LabelChips labels={labels.filter((l) => labelIds.has(l.id))} />
+            <LabelChips labels={manualLabels.filter((l) => labelIds.has(l.id))} />
           </p>
         )}
       </fieldset>

@@ -42,45 +42,76 @@ export default function LabelManager({ labels }: { labels: Label[] }) {
 
       {labels.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3">
-          {labels.map((l) => (
-            <span
-              key={l.id}
-              className={`group inline-flex items-center gap-1 rounded-full leading-none ${
-                l.highlight
-                  ? "pl-3 pr-1.5 py-1.5 text-sm font-bold tracking-wide"
-                  : "pl-2.5 pr-1 py-1 text-xs font-medium"
-              }`}
-              style={labelChipStyle(l)}
-            >
-              <button
-                type="button"
-                onClick={() => setEditing(l)}
-                className="rounded outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-                title={`Editar "${l.name}"`}
+          {labels.map((l) => {
+            // Etiqueta calculada: não pode ser excluída nem renomeada (só a cor).
+            // Editar abre o diálogo em modo "só cor"; sem o × de remover.
+            const calculated = !!l.derived_kind;
+            return (
+              <span
+                key={l.id}
+                className={`group inline-flex items-center gap-1 rounded-full leading-none ${
+                  l.highlight
+                    ? "pl-3 pr-1.5 py-1.5 text-sm font-bold tracking-wide"
+                    : "pl-2.5 pr-1 py-1 text-xs font-medium"
+                }`}
+                style={labelChipStyle(l)}
               >
-                {l.name}
-              </button>
-              <button
-                type="button"
-                onClick={() => setRemoving(l)}
-                aria-label={`Remover etiqueta ${l.name}`}
-                title={`Remover "${l.name}"`}
-                className="flex h-4 w-4 items-center justify-center rounded-full opacity-60 transition hover:bg-black/20 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70"
-              >
-                <svg
-                  width="10"
-                  height="10"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="3"
-                  strokeLinecap="round"
+                <button
+                  type="button"
+                  onClick={() => setEditing(l)}
+                  className="rounded outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                  title={
+                    calculated
+                      ? `Etiqueta calculada — editar só a cor de "${l.name}"`
+                      : `Editar "${l.name}"`
+                  }
                 >
-                  <path d="M18 6 6 18M6 6l12 12" />
-                </svg>
-              </button>
-            </span>
-          ))}
+                  {l.name}
+                </button>
+                {calculated ? (
+                  <span
+                    aria-hidden="true"
+                    title="Etiqueta calculada (automática) — não pode ser removida nem renomeada"
+                    className="flex h-4 w-4 items-center justify-center opacity-70"
+                  >
+                    <svg
+                      width="10"
+                      height="10"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect x="4" y="11" width="16" height="9" rx="1.5" />
+                      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+                    </svg>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setRemoving(l)}
+                    aria-label={`Remover etiqueta ${l.name}`}
+                    title={`Remover "${l.name}"`}
+                    className="flex h-4 w-4 items-center justify-center rounded-full opacity-60 transition hover:bg-black/20 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/70"
+                  >
+                    <svg
+                      width="10"
+                      height="10"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                    >
+                      <path d="M18 6 6 18M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </span>
+            );
+          })}
         </div>
       )}
 

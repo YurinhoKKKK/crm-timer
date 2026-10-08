@@ -32,6 +32,9 @@ export default function LabelDialog({
   const [error, setError] = useState<string | null>(null);
 
   const editing = !!initial;
+  // Etiqueta calculada (automática): só a cor pode mudar. Nome e destaque ficam
+  // travados — o banco (gatilho labels_protect_derived) recusa renomear.
+  const calculated = !!initial?.derived_kind;
 
   async function save() {
     if (busy) return;
@@ -61,8 +64,15 @@ export default function LabelDialog({
   return (
     <Modal open={open} onClose={busy ? () => {} : onClose} labelledBy="label-dialog-title">
       <h2 id="label-dialog-title" className="text-base font-semibold text-fg">
-        {editing ? "Editar etiqueta" : "Nova etiqueta"}
+        {calculated ? "Editar cor da etiqueta" : editing ? "Editar etiqueta" : "Nova etiqueta"}
       </h2>
+
+      {calculated && (
+        <p className="mt-2 rounded-lg border border-line bg-canvas px-3 py-2 text-xs text-fg-muted">
+          Etiqueta <strong>calculada</strong> (sai do Modelo do Projeto ou dos
+          Serviços contratados). O nome não pode mudar — só a cor.
+        </p>
+      )}
 
       <div className="mt-4 space-y-4">
         <div>
@@ -76,7 +86,8 @@ export default function LabelDialog({
             onChange={(e) => setName(e.target.value)}
             placeholder="Ex.: Ema"
             className={inputClass}
-            autoFocus
+            autoFocus={!calculated}
+            disabled={calculated}
           />
         </div>
 
@@ -94,7 +105,8 @@ export default function LabelDialog({
                 type="button"
                 onClick={() => setHighlight(o.value)}
                 aria-pressed={highlight === o.value}
-                className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${
+                disabled={calculated}
+                className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-50 ${
                   highlight === o.value
                     ? "border-risd/50 bg-brand-tint text-risd"
                     : "border-line bg-surface text-fg-muted hover:border-risd/40"

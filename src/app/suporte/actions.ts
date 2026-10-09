@@ -11,6 +11,6 @@ import { loadTicketReplies, type TicketReplyView } from "@/lib/support";
 export async function fetchTicketReplies(
   ticketId: string
 ): Promise<TicketReplyView[]> {
-  const { supabase } = await guardRole(["admin", "consultor", "colaborador"]);
+  const { supabase } = await guardRole(["admin", "consultor", "colaborador", "gestor_trafego"]);
   return loadTicketReplies(supabase, ticketId);
 }

@@ -71,7 +71,7 @@ export async function createGroup(input: {
       position: nextPosition,
       created_by: user.id,
     })
-    .select("id, name, color, position, kind")
+    .select("id, name, color, position, kind, traffic_group_id")
     .single();
 
   if (error || !data) {
@@ -86,7 +86,7 @@ export async function createGroup(input: {
 // de menu "Renomear" e "Trocar cor" abrem o mesmo diálogo). Uma ida só.
 export async function updateGroup(
   groupId: string,
-  input: { name: string; color: string }
+  input: { name: string; color: string; trafficGroupId?: string | null }
 ): Promise<{ error: string | null }> {
   const { name, error: nameError } = validateName(input.name);
   if (nameError) return { error: nameError };
@@ -95,9 +95,18 @@ export async function updateGroup(
   const { supabase, user } = await requireUser();
   if (!user) return { error: SESSION_MSG };
 
+  // Correspondência com o quadro Tráfego (migration 0108): só gravada quando o
+  // campo vem no input (edição); "" vira null ("Nenhum"). A RLS admin barra o
+  // resto.
+  const patch: { name: string; color: string; traffic_group_id?: string | null } =
+    { name: name!, color: normalizeGroupColor(input.color) };
+  if (input.trafficGroupId !== undefined) {
+    patch.traffic_group_id = input.trafficGroupId || null;
+  }
+
   const { error } = await supabase
     .from("company_groups")
-    .update({ name: name!, color: normalizeGroupColor(input.color) })
+    .update(patch)
     .eq("id", groupId);
   if (error) {
     if (isDuplicate(error)) return { error: DUP_NAME_MSG };

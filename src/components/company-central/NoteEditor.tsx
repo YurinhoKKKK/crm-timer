@@ -229,6 +229,10 @@ export default function NoteEditor({
   initialVisible = false,
   initialAttachments = [],
   initialAreas = [],
+  // Áreas TRAVADAS: sempre presentes e não desmarcáveis (chip visível, com
+  // title). Usado pelo quadro de Tráfego (área 'trafego' presa às notas criadas
+  // lá, e às que já têm origin='traffic' quando editadas na central).
+  lockedAreas = [],
   saveLabel = "Salvar atualização",
   // Trava externa do botão de salvar (além do busy/upload): usada quando um
   // campo FORA do editor ainda não está válido — ex.: a empresa obrigatória do
@@ -270,6 +274,7 @@ export default function NoteEditor({
   initialVisible?: boolean;
   initialAttachments?: NoteAttachmentMeta[];
   initialAreas?: NoteArea[];
+  lockedAreas?: NoteArea[];
   saveLabel?: string;
   saveDisabled?: boolean;
   saveDisabledTitle?: string;
@@ -288,7 +293,11 @@ export default function NoteEditor({
   onCancel: () => void;
 }) {
   const [visible, setVisible] = useState(initialVisible);
-  const [areas, setAreas] = useState<NoteArea[]>(initialAreas);
+  // As áreas travadas entram sempre (mesmo que não estejam em initialAreas, ex.:
+  // nova nota do Tráfego) e não saem.
+  const [areas, setAreas] = useState<NoteArea[]>(() =>
+    Array.from(new Set<NoteArea>([...initialAreas, ...lockedAreas]))
+  );
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -1038,24 +1047,33 @@ export default function NoteEditor({
           <div className="flex flex-wrap gap-1.5">
             {NOTE_AREAS.map(({ value, label }) => {
               const on = areas.includes(value);
+              const locked = lockedAreas.includes(value);
               const c = NOTE_AREA_COLORS[value];
               return (
                 <button
                   key={value}
                   type="button"
                   aria-pressed={on}
-                  onClick={() =>
+                  aria-disabled={locked}
+                  disabled={locked}
+                  title={
+                    locked
+                      ? "Atualizações criadas no quadro de Tráfego mantêm a área Tráfego"
+                      : undefined
+                  }
+                  onClick={() => {
+                    if (locked) return; // trava: não desmarca
                     setAreas((prev) =>
                       prev.includes(value)
                         ? prev.filter((a) => a !== value)
                         : [...prev, value]
-                    )
-                  }
+                    );
+                  }}
                   className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd ${
                     on
                       ? "shadow-sm ring-1 ring-black/10 dark:ring-white/20"
                       : "border border-line bg-surface text-fg-muted hover:border-risd/50 hover:text-fg"
-                  }`}
+                  } ${locked ? "cursor-not-allowed" : ""}`}
                   style={on ? { backgroundColor: c.bg, color: c.fg } : undefined}
                 >
                   <span

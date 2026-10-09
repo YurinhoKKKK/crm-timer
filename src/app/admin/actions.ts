@@ -62,7 +62,7 @@ async function collaboratorInPortfolio(
 const NOT_RESPONSIBLE_MSG =
   "Este colaborador não é responsável por esta empresa. Vincule-o em Editar empresa antes de atribuir a tarefa.";
 
-const VALID_ROLES: Role[] = ["pending", "colaborador", "consultor", "admin"];
+const VALID_ROLES: Role[] = ["pending", "colaborador", "consultor", "admin", "gestor_trafego"];
 
 // Altera o cargo de um usuário. A RLS (policy profiles_update_self → with check
 // is_admin()) garante que somente um admin consegue mudar o cargo de terceiros;

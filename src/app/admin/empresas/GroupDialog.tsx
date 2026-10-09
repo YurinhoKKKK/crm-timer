@@ -14,6 +14,7 @@ export default function GroupDialog({
   mode,
   group,
   focusColor,
+  trafficGroups = [],
   onClose,
   onSubmit,
 }: {
@@ -22,11 +23,19 @@ export default function GroupDialog({
   group?: CompanyGroup | null;
   // "Trocar cor" foca a cor; "Renomear"/"Novo grupo" focam o nome.
   focusColor?: boolean;
+  // Grupos do quadro Tráfego (para o campo de correspondência, só na edição).
+  trafficGroups?: { id: string; name: string }[];
   onClose: () => void;
-  onSubmit: (input: { name: string; color: string }) => Promise<{ error: string | null }>;
+  onSubmit: (input: {
+    name: string;
+    color: string;
+    trafficGroupId?: string | null;
+  }) => Promise<{ error: string | null }>;
 }) {
   const [name, setName] = useState("");
   const [color, setColor] = useState(DEFAULT_GROUP_COLOR);
+  // "" = Nenhum. Só usado/enviado na edição.
+  const [trafficGroupId, setTrafficGroupId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -36,6 +45,7 @@ export default function GroupDialog({
     if (!open) return;
     setName(mode === "edit" ? group?.name ?? "" : "");
     setColor(mode === "edit" ? group?.color ?? DEFAULT_GROUP_COLOR : DEFAULT_GROUP_COLOR);
+    setTrafficGroupId(mode === "edit" ? group?.traffic_group_id ?? "" : "");
     setError(null);
     if (!focusColor) setTimeout(() => nameRef.current?.focus(), 0);
   }, [open, mode, group, focusColor]);
@@ -44,7 +54,11 @@ export default function GroupDialog({
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const res = await onSubmit({ name, color });
+    const res = await onSubmit(
+      mode === "edit"
+        ? { name, color, trafficGroupId: trafficGroupId || null }
+        : { name, color }
+    );
     setBusy(false);
     if (res.error) {
       setError(res.error);
@@ -77,6 +91,31 @@ export default function GroupDialog({
         </div>
 
         <GroupColorPicker value={color} onChange={setColor} />
+
+        {mode === "edit" && (
+          <div>
+            <label htmlFor="group-traffic" className={labelClass}>
+              Grupo no quadro de Tráfego
+            </label>
+            <select
+              id="group-traffic"
+              value={trafficGroupId}
+              onChange={(e) => setTrafficGroupId(e.target.value)}
+              className={inputClass}
+            >
+              <option value="">Nenhum</option>
+              {trafficGroups.map((tg) => (
+                <option key={tg.id} value={tg.id}>
+                  {tg.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-fg-subtle">
+              Define em qual seção do quadro Tráfego as empresas deste grupo
+              aparecem. “Nenhum” deixa-as em “Sem grupo”.
+            </p>
+          </div>
+        )}
 
         {error && (
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { avatarUrl } from "@/lib/avatar";
 import { perfRoute } from "@/lib/perf";
 
-type Role = "admin" | "consultor" | "colaborador";
+type Role = "admin" | "consultor" | "colaborador" | "gestor_trafego";
 
 // Quem é o usuário desta requisição: DUAS idas ao Supabase, em cascata (getUser
 // valida o JWT no servidor de auth pela rede; só depois dá para ler o profile

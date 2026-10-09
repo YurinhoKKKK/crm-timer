@@ -20,6 +20,7 @@ export default async function PerfilPage({
     "admin",
     "consultor",
     "colaborador",
+    "gestor_trafego",
   ]);
 
   // guardRole não traz o e-mail; busca aqui (registro próprio, via RLS).

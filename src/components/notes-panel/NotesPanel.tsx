@@ -65,6 +65,10 @@ export default function NotesPanel({
   onClose,
   onCountChange,
   source,
+  areaFilter,
+  lockedArea,
+  origin,
+  showFullTab = true,
 }: {
   companyId: string;
   companyName: string;
@@ -77,11 +81,26 @@ export default function NotesPanel({
   onCountChange: (delta: number) => void;
   // Fonte alternativa (CS). Ausente = Atualizações normais (company_notes).
   source?: NotesSource;
+  // Variação "Tráfego" sobre a fonte COMPANY (nunca com `source`): são as
+  // Atualizações normais da empresa, mas o painel (a) lista só as que têm a área
+  // `areaFilter`; (b) trava `lockedArea` no editor; (c) grava `origin` nas novas.
+  areaFilter?: NoteArea;
+  lockedArea?: NoteArea;
+  origin?: string;
+  showFullTab?: boolean;
 }) {
   const router = useRouter();
   // Termos exibidos: "atualização(ões)" (padrão) ou "atualização(ões) do CS".
   const termS = source?.termSingular ?? "atualização";
   const termP = source?.termPlural ?? "atualizações";
+  // Contexto de @menção: no painel de Tráfego (areaFilter), usa
+  // 'atualizacao_trafego' para a LISTA incluir o Gestor de Tráfego. A gravação
+  // (syncMentions) segue 'atualizacao'/'atualizacao_resposta' (company_notes).
+  const noteMentionType: "atualizacao" | "atualizacao_trafego" | undefined = source
+    ? undefined
+    : areaFilter
+      ? "atualizacao_trafego"
+      : "atualizacao";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState<CompanyNoteView[]>([]);
@@ -110,10 +129,14 @@ export default function NotesPanel({
     r?.(ok);
   }
 
-  const loadNotes = useCallback(
-    () => (source ? source.loadNotes(companyId) : getPanelNotes(companyId)),
-    [companyId, source]
-  );
+  const loadNotes = useCallback(async () => {
+    const res = source ? await source.loadNotes(companyId) : await getPanelNotes(companyId);
+    // Variação Tráfego: lista só as Atualizações da empresa que têm a área.
+    if (res.notes && areaFilter) {
+      return { ...res, notes: res.notes.filter((n) => n.areas.includes(areaFilter)) };
+    }
+    return res;
+  }, [companyId, source, areaFilter]);
 
   const reload = useCallback(async () => {
     const res = await loadNotes();
@@ -197,16 +220,21 @@ export default function NotesPanel({
         })
         .eq("id", id);
       if (error) return { error: error.message };
-      // Reescreve as áreas: apaga as atuais e insere a nova seleção.
-      const { error: delErr } = await supabase
-        .from("company_note_areas")
-        .delete()
-        .eq("note_id", id);
+      // Reconcilia as áreas por DIFERENÇA (não apaga tudo): remove só as que
+      // saíram e insere as novas (upsert ignorando duplicadas). Assim a área
+      // TRAVADA ('trafego', sempre na seleção) nunca é apagada — o que o gatilho
+      // de proteção recusaria.
+      let del = supabase.from("company_note_areas").delete().eq("note_id", id);
+      if (areas.length > 0) del = del.not("area", "in", `(${areas.join(",")})`);
+      const { error: delErr } = await del;
       if (delErr) return { error: delErr.message };
       if (areas.length > 0) {
         const { error: aErr } = await supabase
           .from("company_note_areas")
-          .insert(areas.map((area) => ({ note_id: id, area })));
+          .upsert(
+            areas.map((area) => ({ note_id: id, area })),
+            { onConflict: "note_id,area", ignoreDuplicates: true }
+          );
         if (aErr) return { error: aErr.message };
       }
       await syncMentions("atualizacao", id);
@@ -222,14 +250,21 @@ export default function NotesPanel({
         content_html: html,
         visible_to_client: visibleToClient,
         attachments,
+        // Variação Tráfego: marca a origem (o gatilho garante a área 'trafego').
+        origin: origin ?? null,
       })
       .select("id")
       .single();
     if (error) return { error: error.message };
     if (areas.length > 0) {
+      // upsert ignorando duplicados: a área travada ('trafego') pode já ter sido
+      // inserida pelo gatilho AFTER INSERT (origin='traffic').
       const { error: aErr } = await supabase
         .from("company_note_areas")
-        .insert(areas.map((area) => ({ note_id: data.id, area })));
+        .upsert(
+          areas.map((area) => ({ note_id: data.id, area })),
+          { onConflict: "note_id,area", ignoreDuplicates: true }
+        );
       if (aErr) return { error: aErr.message };
     }
     await syncMentions("atualizacao", data.id);
@@ -265,8 +300,9 @@ export default function NotesPanel({
             <h2 className="truncate text-lg font-semibold text-fg">
               {companyName}
             </h2>
-            {/* A aba completa só existe nas Atualizações normais. */}
-            {!source && (
+            {/* A aba completa só existe nas Atualizações normais e para quem
+                acessa a central da empresa (o Gestor de Tráfego não). */}
+            {!source && showFullTab && (
               <button
                 type="button"
                 onClick={openFullTab}
@@ -296,9 +332,10 @@ export default function NotesPanel({
                 toolbarOffset="0px"
                 showClientVisibility={!source}
                 showAreas={!source}
+                lockedAreas={lockedArea ? [lockedArea] : []}
                 storage={source?.editorStorage}
                 mentionContext={{
-                  sourceType: source ? source.mentionNoteType : "atualizacao",
+                  sourceType: source ? source.mentionNoteType : noteMentionType!,
                   companyId,
                 }}
                 onSave={(html, vis, atts, areas) =>
@@ -367,7 +404,11 @@ export default function NotesPanel({
                         })
                       )}
                       initialAreas={n.areas}
-                      mentionContext={{ sourceType: "atualizacao", companyId }}
+                      lockedAreas={n.origin === "traffic" ? ["trafego"] : []}
+                      mentionContext={{
+                        sourceType: source ? source.mentionNoteType : noteMentionType!,
+                        companyId,
+                      }}
                       saveLabel="Salvar alterações"
                       onSave={(html, vis, atts, areas) =>
                         persist(n.id, html, vis, atts, areas)
@@ -474,6 +515,9 @@ export default function NotesPanel({
                         replyCount={n.replyCount}
                         onChanged={() => void reload()}
                         source={source}
+                        mentionSourceOverride={
+                          !source && areaFilter ? "atualizacao_trafego" : undefined
+                        }
                       />
                     </>
                   )}

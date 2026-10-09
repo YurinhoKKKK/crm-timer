@@ -1,20 +1,20 @@
 "use client";
 
-import {
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  useTransition,
-  type ReactNode,
-} from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { History } from "lucide-react";
 import { FilterBar, SearchBox, EmptyState, norm } from "@/components/ListControls";
 import GroupSection from "@/components/company-groups/GroupSection";
 import { groupCompanies, type CompanyGroup } from "@/lib/company-groups";
+import AnchoredPopover from "@/components/AnchoredPopover";
+import {
+  formatBRL,
+  brToDecimalString,
+  decimalToBRInput,
+  decimalToCents,
+  centsToDecimal,
+  centsToBRL,
+} from "@/lib/money-br";
 import { DateField } from "@/components/DateField";
 import {
   CS_STATUS_META,
@@ -31,6 +31,8 @@ import {
 import CsHistoryPanel from "./CsHistoryPanel";
 import NotesButton from "@/components/notes-panel/NotesButton";
 import { csNotesSource } from "@/components/notes-panel/notes-source";
+import { formatProjectTime } from "@/lib/contract-time";
+import BoardGrid, { type BoardColumn } from "@/components/board/BoardGrid";
 
 // Responsável (consultor, colaborador ou AMBOS na mesma empresa) + seu NPS
 // individual naquela empresa. O rótulo do papel vai SEMPRE em texto.
@@ -67,146 +69,9 @@ function formatDateBR(iso: string | null): string {
   return y && m && d ? `${d}/${m}/${y}` : "Não informado";
 }
 
-const BRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-function formatBRL(text: string | null): string | null {
-  if (text == null) return null;
-  const n = Number(text);
-  return Number.isFinite(n) ? BRL.format(n) : null;
-}
-
-function formatProjectTime(months: number | null, days: number | null): string {
-  if (months == null || days == null) return "Não informado";
-  const parts: string[] = [];
-  if (months > 0) parts.push(`${months} ${months === 1 ? "mês" : "meses"}`);
-  if (days > 0) parts.push(`${days} ${days === 1 ? "dia" : "dias"}`);
-  return parts.length > 0 ? parts.join(" e ") : "0 dias";
-}
-
 function roleLabel(role: Responsible["role"]): string {
   if (role === "ambos") return "Consultor e Colaborador";
   return role === "consultor" ? "Consultor" : "Colaborador";
-}
-
-// Dinheiro: o input aceita BR ("2.980,00"); convertemos por TEXTO para "digits.dd"
-// e enviamos como texto ao banco (nunca float no JS). Vírgula = decimal, ponto =
-// milhar (convenção BR). Inválido → null.
-function brToDecimalString(raw: string): string | null {
-  let s = raw.replace(/[^\d.,]/g, "");
-  if (!s) return null;
-  if (s.includes(",")) {
-    if ((s.match(/,/g) || []).length > 1) return null;
-    s = s.replace(/\./g, "").replace(",", ".");
-  } else {
-    s = s.replace(/\./g, "");
-  }
-  if (!/^\d+(\.\d{1,2})?$/.test(s)) return null;
-  const [i, f = ""] = s.split(".");
-  return `${i}.${(f + "00").slice(0, 2)}`;
-}
-
-// "10000.00" → "10.000,00" (pré-preenche o input em BR).
-function decimalToBRInput(ds: string): string {
-  const [i, f = "00"] = ds.split(".");
-  return `${Number(i).toLocaleString("pt-BR")},${(f + "00").slice(0, 2)}`;
-}
-
-// "digits.dd" → centavos (inteiro) — para prévia e otimismo, sem float de dinheiro.
-function decimalToCents(ds: string): number {
-  const [i, f = "00"] = ds.split(".");
-  return Number(i) * 100 + Number((f + "00").slice(0, 2));
-}
-
-// centavos (inteiro) → "digits.dd".
-function centsToDecimal(cents: number): string {
-  const c = Math.max(0, Math.round(cents));
-  return `${Math.floor(c / 100)}.${String(c % 100).padStart(2, "0")}`;
-}
-
-// centavos (inteiro) → "R$ 1.234,56" (só exibição).
-function centsToBRL(cents: number): string {
-  const c = Math.max(0, Math.round(cents));
-  const reais = Math.floor(c / 100);
-  return `R$ ${reais.toLocaleString("pt-BR")},${String(c % 100).padStart(2, "0")}`;
-}
-
-// --- Popover ancorado (portal + posição fixa) — não é recortado pelo
-//     overflow-x das seções; fecha no Esc e no clique fora; z-overlay. --------
-function AnchoredPopover({
-  anchor,
-  onClose,
-  children,
-  width = 240,
-}: {
-  anchor: HTMLElement;
-  onClose: () => void;
-  children: ReactNode;
-  width?: number;
-}) {
-  const panelRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-
-  useLayoutEffect(() => {
-    function place() {
-      const panel = panelRef.current;
-      if (!panel) return;
-      const r = anchor.getBoundingClientRect();
-      const h = panel.offsetHeight;
-      const w = panel.offsetWidth || width;
-      let left = Math.min(Math.max(8, r.left), window.innerWidth - 8 - w);
-      let top = r.bottom + 6;
-      // Vira para cima se estourar embaixo.
-      if (top + h > window.innerHeight - 8) {
-        const above = r.top - 6 - h;
-        top = above >= 8 ? above : Math.max(8, window.innerHeight - 8 - h);
-      }
-      setPos({ top, left });
-    }
-    place();
-    window.addEventListener("scroll", place, true);
-    window.addEventListener("resize", place);
-    return () => {
-      window.removeEventListener("scroll", place, true);
-      window.removeEventListener("resize", place);
-    };
-  }, [anchor, width]);
-
-  useEffect(() => {
-    function onDown(e: PointerEvent) {
-      const t = e.target as Node;
-      if (panelRef.current?.contains(t) || anchor.contains(t)) return;
-      onClose();
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        onClose();
-      }
-    }
-    document.addEventListener("pointerdown", onDown, true);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onDown, true);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [anchor, onClose]);
-
-  return createPortal(
-    <div
-      ref={panelRef}
-      role="dialog"
-      style={{
-        position: "fixed",
-        top: pos?.top ?? 0,
-        left: pos?.left ?? 0,
-        minWidth: width,
-        visibility: pos ? "visible" : "hidden",
-      }}
-      className="z-overlay max-w-[calc(100vw-1rem)] rounded-xl border border-line bg-surface p-1.5 shadow-pop"
-    >
-      {children}
-    </div>,
-    document.body
-  );
 }
 
 // Lista de opções de status (+ Limpar) para o popover de NPS.
@@ -473,14 +338,7 @@ function MeetingCell({ row, ctx }: { row: CsRow; ctx: CellCtx }) {
 
 // --- Colunas (fonte única; ordem final da fatia 2) -------------------------- //
 
-type CsColumn = {
-  id: string;
-  label: string;
-  width: string;
-  align: "left" | "center" | "right";
-  sticky?: boolean;
-  cell: (row: CsRow, ctx: CellCtx) => ReactNode;
-};
+type CsColumn = BoardColumn<CsRow, CellCtx>;
 
 const COLUMNS: CsColumn[] = [
   {
@@ -488,7 +346,8 @@ const COLUMNS: CsColumn[] = [
     label: "Empresa",
     width: "minmax(220px, 1.6fr)",
     align: "left",
-    sticky: true,
+    stickyLeft: 0,
+    borderRight: true,
     cell: (row, ctx) => <EmpresaCell row={row} ctx={ctx} />,
   },
   {
@@ -551,7 +410,6 @@ const COLUMNS: CsColumn[] = [
   },
 ];
 
-const GRID_TEMPLATE = COLUMNS.map((c) => c.width).join(" ");
 const MIN_WIDTH = 1280;
 
 // Editor do Valor Mensal: parcelas + alternância total/mensal + prévia. Converte
@@ -715,14 +573,6 @@ function ValorMensalCell({ row, ctx }: { row: CsRow; ctx: CellCtx }) {
   );
 }
 
-function alignClass(a: CsColumn["align"]): string {
-  return a === "right"
-    ? "justify-end text-right"
-    : a === "center"
-      ? "justify-center text-center"
-      : "justify-start text-left";
-}
-
 // --- Seção ------------------------------------------------------------------ //
 
 function CsSection({
@@ -750,46 +600,7 @@ function CsSection({
           Nenhuma empresa neste grupo.
         </p>
       ) : (
-        <div className="overflow-x-auto">
-          <div style={{ minWidth: MIN_WIDTH }}>
-            <div
-              className="grid items-center border-b border-line"
-              style={{ gridTemplateColumns: GRID_TEMPLATE }}
-            >
-              {COLUMNS.map((col) => (
-                <div
-                  key={col.id}
-                  className={`flex px-3 py-2 text-xs font-semibold uppercase tracking-wide text-fg-subtle ${alignClass(
-                    col.align
-                  )} ${col.sticky ? "sticky left-0 z-[1] border-r border-line bg-surface" : ""}`}
-                >
-                  {col.label}
-                </div>
-              ))}
-            </div>
-
-            {items.map((row) => (
-              <div
-                key={row.id}
-                className="group/row grid border-b border-line transition last:border-b-0 hover:bg-surface-2"
-                style={{ gridTemplateColumns: GRID_TEMPLATE }}
-              >
-                {COLUMNS.map((col) => (
-                  <div
-                    key={col.id}
-                    className={`flex items-center px-3 py-3 text-sm ${alignClass(col.align)} ${
-                      col.sticky
-                        ? "sticky left-0 z-[1] border-r border-line bg-surface group-hover/row:bg-surface-2"
-                        : ""
-                    }`}
-                  >
-                    {col.cell(row, ctx)}
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
+        <BoardGrid columns={COLUMNS} rows={items} ctx={ctx} minWidth={MIN_WIDTH} />
       )}
     </GroupSection>
   );

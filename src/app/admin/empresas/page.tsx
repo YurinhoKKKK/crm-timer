@@ -8,6 +8,7 @@ import ExportEmpresasButton from "./ExportEmpresasButton";
 import { withSelf } from "@/lib/people";
 import { loadLabelCatalog, loadAllLabelsByCompany, loadInUseLabels } from "@/lib/labels";
 import { loadCompanyGroups, resolveCompanyGroupId } from "@/lib/company-groups";
+import { loadTrafficGroups } from "@/lib/traffic";
 import { loadCompanyNoteCounts } from "@/lib/notes";
 import { avatarUrl } from "@/lib/avatar";
 
@@ -61,6 +62,7 @@ export default async function EmpresasPage() {
     labelCatalog,
     { data: linksData },
     noteCounts,
+    trafficGroups,
   ] = await Promise.all([
     supabase
       .from("companies")
@@ -102,6 +104,8 @@ export default async function EmpresasPage() {
     // Contagem de anotações por empresa numa ida agregada (RPC), nunca uma por
     // empresa nem contando array no cliente.
     loadCompanyNoteCounts(supabase),
+    // Grupos do quadro Tráfego (para o campo de correspondência na edição de grupo).
+    loadTrafficGroups(supabase),
   ]);
 
   const rows = (companiesRes.data as CompanyRow[]) ?? [];
@@ -193,6 +197,7 @@ export default async function EmpresasPage() {
           value: c.id,
           label: c.full_name || c.email,
         }))}
+        trafficGroups={trafficGroups.map((g) => ({ id: g.id, name: g.name }))}
       />
     </AppShell>
   );

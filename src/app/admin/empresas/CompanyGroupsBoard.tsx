@@ -67,6 +67,7 @@ export default function CompanyGroupsBoard({
   inUseLabels,
   labelCatalog,
   consultores,
+  trafficGroups,
 }: {
   companies: CompanyItem[];
   groups: CompanyGroup[];
@@ -76,6 +77,7 @@ export default function CompanyGroupsBoard({
   inUseLabels: Label[]; // etiquetas EM USO — alimentam os chips de filtro (sempre visíveis)
   labelCatalog: Label[]; // catálogo COMPLETO — gerenciado atrás do "Configurar página"
   consultores: SelectOption[];
+  trafficGroups: { id: string; name: string }[]; // correspondência no quadro Tráfego
 }) {
   const router = useRouter();
 
@@ -241,12 +243,19 @@ export default function CompanyGroupsBoard({
   }
 
   // --- Grupos: criar / editar / reordenar / excluir ------------------------
-  async function handleCreate(input: { name: string; color: string }) {
-    const res = await createGroup(input);
+  async function handleCreate(input: {
+    name: string;
+    color: string;
+    trafficGroupId?: string | null;
+  }) {
+    const res = await createGroup({ name: input.name, color: input.color });
     if (!res.error) router.refresh();
     return res;
   }
-  async function handleEdit(group: CompanyGroup, input: { name: string; color: string }) {
+  async function handleEdit(
+    group: CompanyGroup,
+    input: { name: string; color: string; trafficGroupId?: string | null }
+  ) {
     const res = await updateGroup(group.id, input);
     if (!res.error) router.refresh();
     return res;
@@ -486,6 +495,7 @@ export default function CompanyGroupsBoard({
           mode={dialog.mode}
           group={dialog.mode === "edit" ? dialog.group : null}
           focusColor={dialog.mode === "edit" ? dialog.focusColor : false}
+          trafficGroups={trafficGroups}
           onClose={() => setDialog(null)}
           onSubmit={(input) =>
             dialog.mode === "create"

@@ -211,16 +211,21 @@ export default function CompanyNotes({
       })
       .eq("id", id);
     if (error) return { error: error.message };
-    // Reescreve as áreas: apaga as atuais e insere a nova seleção.
-    const { error: delErr } = await supabase
-      .from("company_note_areas")
-      .delete()
-      .eq("note_id", id);
+    // Reconcilia as áreas por DIFERENÇA (não apaga tudo): remove só as que saíram
+    // e insere as novas (upsert ignorando duplicadas). A área travada de uma nota
+    // origin='traffic' ('trafego') está sempre na seleção, então nunca é apagada
+    // — o que o gatilho de proteção recusaria.
+    let del = supabase.from("company_note_areas").delete().eq("note_id", id);
+    if (areas.length > 0) del = del.not("area", "in", `(${areas.join(",")})`);
+    const { error: delErr } = await del;
     if (delErr) return { error: delErr.message };
     if (areas.length > 0) {
       const { error: aErr } = await supabase
         .from("company_note_areas")
-        .insert(areas.map((area) => ({ note_id: id, area })));
+        .upsert(
+          areas.map((area) => ({ note_id: id, area })),
+          { onConflict: "note_id,area", ignoreDuplicates: true }
+        );
       if (aErr) return { error: aErr.message };
     }
     await syncMentions("atualizacao", id);
@@ -370,6 +375,7 @@ export default function CompanyNotes({
                     ({ path, name, size, mime }) => ({ path, name, size, mime })
                   )}
                   initialAreas={n.areas}
+                  lockedAreas={n.origin === "traffic" ? ["trafego"] : []}
                   mentionContext={{ sourceType: "atualizacao", companyId }}
                   saveLabel="Salvar alterações"
                   onSave={(html, vis, atts, areas) =>

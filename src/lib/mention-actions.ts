@@ -39,9 +39,11 @@ export async function fetchMentionableUsers(
 // Tabela/coluna de conteúdo por contexto — o servidor RELÊ o conteúdo salvo
 // (autoritativo) para extrair as menções, em vez de confiar numa lista do
 // navegador.
-const SOURCE_SPEC: Record<
-  MentionSourceType,
-  { table: string; column: string }
+// Partial: 'atualizacao_trafego' é contexto SÓ de sugestão de @ (lista o Gestor
+// de Tráfego no painel de Tráfego) — nunca é gravado. syncMentions guarda com
+// `if (!spec) return`, então não precisa de entrada aqui.
+const SOURCE_SPEC: Partial<
+  Record<MentionSourceType, { table: string; column: string }>
 > = {
   atualizacao: { table: "company_notes", column: "content_html" },
   atualizacao_resposta: { table: "company_note_replies", column: "body_html" },

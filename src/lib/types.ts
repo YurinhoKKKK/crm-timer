@@ -2248,7 +2248,7 @@ export type Database = {
         | "aguardando_email"
         | "finalizado"
       ticket_urgency: "baixa" | "media" | "alta"
-      user_role: "admin" | "consultor" | "colaborador" | "pending"
+      user_role: "admin" | "consultor" | "colaborador" | "pending" | "gestor_trafego"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2407,7 +2407,7 @@ export const Constants = {
         "finalizado",
       ],
       ticket_urgency: ["baixa", "media", "alta"],
-      user_role: ["admin", "consultor", "colaborador", "pending"],
+      user_role: ["admin", "consultor", "colaborador", "pending", "gestor_trafego"],
     },
   },
 } as const

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import { MessageSquareText } from "lucide-react";
+import type { NoteArea } from "@/lib/types";
 import type { NotesSource } from "./notes-source";
 
 // O painel (e o editor TipTap que ele arrasta) só entram no bundle quando o
@@ -25,6 +26,11 @@ export default function NotesButton({
   className = "",
   size = "md",
   source,
+  areaFilter,
+  lockedArea,
+  origin,
+  showFullTab = true,
+  defaultOpen = false,
 }: {
   companyId: string;
   companyName: string;
@@ -38,8 +44,18 @@ export default function NotesButton({
   size?: "sm" | "md";
   // Fonte alternativa (CS). Ausente = Atualizações normais (company_notes).
   source?: NotesSource;
+  // Variação "Tráfego" sobre a fonte COMPANY: filtra a lista pela área, trava a
+  // área no editor e grava a origem nas novas. (Ver NotesPanel.)
+  areaFilter?: NoteArea;
+  lockedArea?: NoteArea;
+  origin?: string;
+  // Esconde o link "Abrir aba completa" (ex.: Gestor de Tráfego não acessa a
+  // central da empresa).
+  showFullTab?: boolean;
+  // Abre o painel já no mount (ex.: notificação que leva a /trafego?empresa=).
+  defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   // Contagem local: atualiza sozinha quando uma anotação nova é criada no
   // painel, sem recarregar a tela inteira.
   const [count, setCount] = useState(initialCount);
@@ -87,6 +103,10 @@ export default function NotesButton({
           onClose={() => setOpen(false)}
           onCountChange={(delta) => setCount((c) => Math.max(0, c + delta))}
           source={source}
+          areaFilter={areaFilter}
+          lockedArea={lockedArea}
+          origin={origin}
+          showFullTab={showFullTab}
         />
       )}
     </>

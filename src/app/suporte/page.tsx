@@ -18,6 +18,7 @@ export default async function SuportePage() {
     "admin",
     "consultor",
     "colaborador",
+    "gestor_trafego",
   ]);
 
   // As empresas que o usuário alcança (mesmo loader do seletor de reunião) para

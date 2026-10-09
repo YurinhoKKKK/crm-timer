@@ -103,6 +103,10 @@ export type CompanyNoteView = {
   authorAvatarUrl: string | null;
   contentHtml: string;
   visibleToClient: boolean;
+  // Origem da atualização: null (criada fora do quadro de Tráfego) ou 'traffic'
+  // (criada pelo quadro de Tráfego). Em 'traffic' a área Tráfego fica TRAVADA
+  // (não se remove) — o editor mostra o chip travado. Imutável no banco.
+  origin: string | null;
   // Áreas de trabalho às quais a atualização se refere (ML, ERP, Site…). Pode
   // ter várias. Vazio nas 6 atualizações antigas anteriores ao campo ("sem
   // área") — não houve backfill; elas podem ser editadas depois.
@@ -180,7 +184,7 @@ export async function loadCompanyNotes(
   const { data } = await supabase
     .from("company_notes")
     .select(
-      "id, author_id, content_html, visible_to_client, attachments, created_at, updated_at, updated_by, company_note_areas(area)"
+      "id, author_id, content_html, visible_to_client, origin, attachments, created_at, updated_at, updated_by, company_note_areas(area)"
     )
     .eq("company_id", companyId)
     .order("created_at", { ascending: false });
@@ -190,6 +194,7 @@ export async function loadCompanyNotes(
     author_id: string;
     content_html: string;
     visible_to_client: boolean;
+    origin: string | null;
     attachments: unknown;
     created_at: string;
     updated_at: string | null;
@@ -231,6 +236,7 @@ export async function loadCompanyNotes(
     // conteúdo é exposto ao cliente externo no portal do passo 25).
     contentHtml: sanitize(r.content_html),
     visibleToClient: r.visible_to_client,
+    origin: r.origin,
     createdAtISO: r.created_at,
     updatedAtISO: r.updated_at,
     updatedByName: r.updated_by

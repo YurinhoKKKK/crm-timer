@@ -9,6 +9,7 @@ import ReplyThread, { classifyReplyError, type ReplyView } from "./ReplyThread";
 import { fetchNoteReplies } from "./reply-actions";
 import { toggleNoteReplyCheckbox } from "@/components/rich-text/task-checkbox-actions";
 import type { NotesSource } from "@/components/notes-panel/notes-source";
+import type { MentionSourceType } from "@/lib/mentions";
 
 // Conversa de UMA atualização da empresa. Encapsula o adaptador do
 // company_note_replies (carregar sob demanda no servidor; inserir/editar via
@@ -25,6 +26,9 @@ export default function NoteRepliesSection({
   onChanged,
   // Fonte alternativa (CS). Ausente = Atualizações normais (company_note_replies).
   source,
+  // Só a LISTA de @menção (ex.: 'atualizacao_trafego' no painel de Tráfego, p/
+  // incluir o Gestor). A gravação segue 'atualizacao_resposta' (company_notes).
+  mentionSourceOverride,
 }: {
   noteId: string;
   companyId: string;
@@ -32,6 +36,7 @@ export default function NoteRepliesSection({
   replyCount: number;
   onChanged?: () => void;
   source?: NotesSource;
+  mentionSourceOverride?: MentionSourceType;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -106,7 +111,9 @@ export default function NoteRepliesSection({
             update={update}
             onChanged={onChanged}
             mentionContext={{
-              sourceType: source ? source.mentionReplyType : "atualizacao_resposta",
+              sourceType: source
+                ? source.mentionReplyType
+                : mentionSourceOverride ?? "atualizacao_resposta",
               companyId,
             }}
             editorStorage={source?.editorStorage}

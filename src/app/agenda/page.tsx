@@ -30,6 +30,7 @@ export default async function AgendaPage() {
     "admin",
     "consultor",
     "colaborador",
+    "gestor_trafego",
   ]);
 
   // Semana atual (BRT, domingo→sábado) — a janela padrão ao abrir. O calendário

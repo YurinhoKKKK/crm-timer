@@ -23,10 +23,13 @@ export default function LabelChips({
   labels,
   size = "sm",
   className = "",
+  // Impede a QUEBRA do texto dentro de cada chip (quadro de Tráfego compacto).
+  nowrap = false,
 }: {
   labels: Label[];
   size?: "sm" | "md";
   className?: string;
+  nowrap?: boolean;
 }) {
   if (!labels || labels.length === 0) return null;
   const pad =
@@ -39,6 +42,8 @@ export default function LabelChips({
         <span
           key={l.id}
           className={`inline-flex items-center rounded-full leading-none ${
+            nowrap ? "whitespace-nowrap" : ""
+          } ${
             l.highlight
               ? `${padHighlight} font-bold tracking-wide`
               : `${pad} font-medium`

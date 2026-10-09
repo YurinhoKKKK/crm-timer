@@ -37,10 +37,17 @@ export default function ContractBar({
   startedOn,
   endsOn,
   compact = false,
+  // Variante "board" (quadro de Tráfego): SEM o rótulo "Contrato" (o cabeçalho da
+  // coluna já diz) — barra fina em cima e UMA linha, sem quebra, com um prefixo
+  // opcional ("12 meses") + o texto de dias: "12 meses · faltam 364 dias".
+  board = false,
+  prefix,
 }: {
   startedOn: string | null;
   endsOn: string | null;
   compact?: boolean;
+  board?: boolean;
+  prefix?: string;
 }) {
   const bar = computeContractBar(startedOn, endsOn, todayBRT());
   if (!bar) return null;
@@ -76,6 +83,31 @@ export default function ContractBar({
 
   const trackH = compact ? "h-1.5" : "h-2";
   const labelSize = compact ? "text-[11px]" : "text-xs";
+
+  // Variante do quadro de Tráfego: barra fina + uma linha única (sem rótulo
+  // "Contrato", sem quebra).
+  if (board) {
+    return (
+      <div title={buildTitle(startedOn as string, endsOn as string)} className="min-w-0">
+        <div
+          className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2"
+          role="progressbar"
+          aria-valuenow={percent}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`Período do contrato: ${label}`}
+        >
+          <div
+            className={`h-full rounded-full transition-all ${fillClass}`}
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+        <div className={`mt-1 truncate text-[11px] ${labelClass}`}>
+          {prefix ? `${prefix} · ${label}` : label}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

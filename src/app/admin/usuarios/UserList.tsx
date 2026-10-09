@@ -19,6 +19,7 @@ const ROLE_LABEL: Record<Role, string> = {
   pending: "Pendente",
   colaborador: "Colaborador",
   consultor: "Consultor",
+  gestor_trafego: "Gestor de Tráfego",
   admin: "Admin",
 };
 

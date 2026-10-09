@@ -13,7 +13,7 @@ import UnreadValidationsBadge from "./UnreadValidationsBadge";
 import OpenTicketsBadge from "./OpenTicketsBadge";
 import NotificationBell from "./NotificationBell";
 
-type Role = "admin" | "consultor" | "colaborador";
+type Role = "admin" | "consultor" | "colaborador" | "gestor_trafego";
 
 // `validations` liga o badge de validações de listagem não vistas (tela
 // "Validações") no item.
@@ -97,6 +97,12 @@ const ic = {
       <path d="M13.4 10.6 19 5M3.5 18a9 9 0 1 1 17 0" />
     </>
   ),
+  trafego: (
+    <>
+      <path d="M3 17l6-6 4 4 7-7" />
+      <path d="M17 7h4v4" />
+    </>
+  ),
   headset: (
     <>
       <path d="M3 11h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1v-6a9 9 0 0 1 18 0v6a1 1 0 0 1-1 1h-2a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3" />
@@ -129,6 +135,7 @@ const NAV: Record<Role, NavItem[]> = {
     { href: "/admin/usuarios", label: "Usuários", icon: <Icon>{ic.users}</Icon> },
     { href: "/admin/empresas", label: "Empresas", icon: <Icon>{ic.building}</Icon> },
     { href: "/admin/sucesso-do-cliente", label: "Sucesso do Cliente", icon: <Icon>{ic.heart}</Icon> },
+    { href: "/trafego", label: "Tráfego", icon: <Icon>{ic.trafego}</Icon> },
     { href: "/acompanhamento", label: "Acompanhamento", icon: <Icon>{ic.pulse}</Icon> },
     { href: "/admin/capacidade", label: "Capacidade", icon: <Icon>{ic.gauge}</Icon> },
     { href: "/admin/tarefas", label: "Tarefas", icon: <Icon>{ic.tasks}</Icon> },
@@ -154,12 +161,20 @@ const NAV: Record<Role, NavItem[]> = {
     { href: "/colaborador/validacoes", label: "Validações", icon: <Icon>{ic.badgeCheck}</Icon>, validations: true },
     { href: "/suporte", label: "Suporte", icon: <Icon>{ic.headset}</Icon>, openTickets: true },
   ],
+  // Gestor de Tráfego: acesso EXATAMENTE a Painel (quadro de Tráfego), Agenda e
+  // Suporte (+ sino e perfil, fora do NAV). Nada mais.
+  gestor_trafego: [
+    { href: "/trafego", label: "Painel", icon: <Icon>{ic.trafego}</Icon> },
+    { href: "/agenda", label: "Agenda", icon: <Icon>{ic.calendar}</Icon> },
+    { href: "/suporte", label: "Suporte", icon: <Icon>{ic.headset}</Icon>, openTickets: true },
+  ],
 };
 
 const ROLE_LABEL: Record<Role, string> = {
   admin: "Administrador",
   consultor: "Consultor",
   colaborador: "Colaborador",
+  gestor_trafego: "Gestor de Tráfego",
 };
 
 function bestMatch(pathname: string, items: NavItem[]): string | null {
@@ -255,12 +270,16 @@ export default function AppShell({
   title,
   subtitle,
   back,
+  // Usa toda a largura da área de conteúdo (sem o teto max-w-6xl), mantendo o
+  // respiro lateral padrão. Usado pelo quadro de Tráfego.
+  wide = false,
   children,
 }: {
   user: ShellUser;
   title: string;
   subtitle?: string;
   back?: { href: string; label: string };
+  wide?: boolean;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -339,13 +358,19 @@ export default function AppShell({
           <ThemeToggle />
         </header>
 
-        <main className="mx-auto max-w-6xl animate-fade-in px-4 py-6 sm:px-6 lg:px-8">
+        <main
+          className={`mx-auto animate-fade-in px-4 py-6 sm:px-6 lg:px-8 ${
+            wide ? "max-w-none" : "max-w-6xl"
+          }`}
+        >
           {children}
         </main>
       </div>
 
-      {/* Lembrete global de timer rodando — todos os cargos executam tarefas */}
-      <ActiveTimerIndicator />
+      {/* Lembrete global de timer rodando — os cargos que executam tarefas. O
+          Gestor de Tráfego não tem tarefas/tempo, então o indicador (que faz
+          poll de tempo) não roda para ele. */}
+      {user.role !== "gestor_trafego" && <ActiveTimerIndicator />}
     </div>
   );
 }

@@ -8,7 +8,7 @@
 
 import Logo from "@/components/Logo";
 
-type Role = "admin" | "consultor" | "colaborador";
+type Role = "admin" | "consultor" | "colaborador" | "gestor_trafego";
 
 // Quantos itens de navegação cada cargo tem na sidebar (espelha o NAV do
 // AppShell), só para o esqueleto ter a altura certa.
@@ -16,6 +16,7 @@ const NAV_COUNT: Record<Role, number> = {
   admin: 4,
   consultor: 2,
   colaborador: 2,
+  gestor_trafego: 3,
 };
 
 function Bar({ className = "" }: { className?: string }) {

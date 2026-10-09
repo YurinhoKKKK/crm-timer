@@ -15,7 +15,7 @@ export type NotificationType =
   | "empresa_onboarding"
   | "empresa_renovacao";
 
-export type ShellRole = "admin" | "consultor" | "colaborador";
+export type ShellRole = "admin" | "consultor" | "colaborador" | "gestor_trafego";
 
 // Uma notificação pronta para exibir. body/companyName já vêm REDIGIDOS pelo
 // banco quando a pessoa perdeu o acesso (reachable=false): nesse caso não
@@ -61,12 +61,20 @@ export function notificationHref(
       // Vão para os administradores; a notificação leva à empresa.
       return n.companyId ? `/admin/empresas/${n.companyId}` : null;
     default: {
-      // mencionado / resposta_recebida / listagem
+      // mencionado / resposta_recebida / listagem — PONTO ÚNICO de decisão do
+      // destino. As Atualizações do Tráfego são company_notes normais (source_type
+      // 'atualizacao'/'atualizacao_resposta'); para os demais cargos vão à central
+      // da empresa, como qualquer Atualização.
       const isChamado =
         n.sourceType === "chamado" ||
         n.sourceType === "chamado_resposta" ||
         n.companyId === null;
       if (isChamado) return "/suporte";
+      // Gestor de Tráfego não acessa a central: menção/resposta em Atualização o
+      // leva ao quadro de Tráfego, com o painel daquela empresa aberto (?empresa=).
+      if (role === "gestor_trafego") {
+        return n.companyId ? `/trafego?empresa=${n.companyId}` : "/trafego";
+      }
       const suffix =
         n.type === "listagem_ajuste_solicitado" ? "?aba=listings" : "";
       if (role === "admin") return `/admin/empresas/${n.companyId}${suffix}`;

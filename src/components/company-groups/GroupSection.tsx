@@ -27,6 +27,13 @@ export default function GroupSection({
   borderClassName = "border-line",
   // Handlers/atributos extras na <section> (o admin passa os de drag-and-drop).
   sectionProps,
+  // Padding do corpo. Padrão "p-3"; o quadro de Tráfego passa "p-0" para a tabela
+  // encostar nas bordas (coluna fixa alinhada à borda do cartão na rolagem única).
+  bodyClassName = "p-3",
+  // Recorta o conteúdo aos cantos arredondados com `overflow: clip` — que, ao
+  // contrário de `overflow: hidden`, NÃO cria contêiner de rolagem, então a coluna
+  // fixa (sticky) continua presa ao viewport único do quadro. Usado pelo Tráfego.
+  overflowClip = false,
   leading,
   trailing,
   meta,
@@ -38,6 +45,8 @@ export default function GroupSection({
   onToggleCollapse: () => void;
   borderClassName?: string;
   sectionProps?: HTMLAttributes<HTMLElement>;
+  bodyClassName?: string;
+  overflowClip?: boolean;
   leading?: ReactNode;
   trailing?: ReactNode;
   meta?: ReactNode;
@@ -48,7 +57,9 @@ export default function GroupSection({
   return (
     <section
       {...sectionProps}
-      className={`rounded-2xl border bg-surface shadow-card transition ${borderClassName}`}
+      className={`rounded-2xl border bg-surface shadow-card transition ${borderClassName} ${
+        overflowClip ? "overflow-clip" : ""
+      }`}
     >
       {/* Cabeçalho: barra/bolinha na cor do grupo + nome + contagem + recolher.
           rounded-t-2xl (em vez de overflow-hidden) para o fundo tingido respeitar
@@ -110,7 +121,7 @@ export default function GroupSection({
         {trailing}
       </div>
 
-      {!collapsed && <div className="p-3">{children}</div>}
+      {!collapsed && <div className={bodyClassName}>{children}</div>}
     </section>
   );
 }

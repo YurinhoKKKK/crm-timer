@@ -11,7 +11,11 @@ export type MentionSourceType =
   | "chamado_resposta"
   // Atualizações do CS (Sucesso do Cliente) — exclusivas de admin.
   | "cs_note"
-  | "cs_note_reply";
+  | "cs_note_reply"
+  // CONTEXTO de sugestão do painel de Tráfego: lista também o Gestor de Tráfego.
+  // Só para a LISTA de @ (mentionable_users) — a gravação (syncMentions) continua
+  // como 'atualizacao'/'atualizacao_resposta' (são company_notes normais).
+  | "atualizacao_trafego";
 
 // Contexto passado ao editor para habilitar o @: o tipo da fonte e a empresa
 // (nula em chamado, que é visível a toda a equipe).

@@ -127,6 +127,7 @@ export async function loadCsNotes(
     attachments: toViews(metasById.get(r.id) ?? [], signed),
     contentHtml: sanitize(r.content_html),
     visibleToClient: false,
+    origin: null, // o CS não usa origem de Tráfego (tabelas próprias)
     createdAtISO: r.created_at,
     updatedAtISO: r.updated_at,
     updatedByName: r.updated_by ? people.get(r.updated_by)?.name ?? null : null,

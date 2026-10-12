@@ -13,7 +13,7 @@ import UnreadValidationsBadge from "./UnreadValidationsBadge";
 import OpenTicketsBadge from "./OpenTicketsBadge";
 import NotificationBell from "./NotificationBell";
 
-type Role = "admin" | "consultor" | "colaborador" | "gestor_trafego";
+type Role = "admin" | "consultor" | "colaborador" | "gestor_trafego" | "desenvolvedor";
 
 // `validations` liga o badge de validações de listagem não vistas (tela
 // "Validações") no item.
@@ -103,6 +103,12 @@ const ic = {
       <path d="M17 7h4v4" />
     </>
   ),
+  code: (
+    <>
+      <path d="M8 6l-6 6 6 6" />
+      <path d="M16 6l6 6-6 6" />
+    </>
+  ),
   headset: (
     <>
       <path d="M3 11h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H4a1 1 0 0 1-1-1v-6a9 9 0 0 1 18 0v6a1 1 0 0 1-1 1h-2a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3" />
@@ -136,6 +142,7 @@ const NAV: Record<Role, NavItem[]> = {
     { href: "/admin/empresas", label: "Empresas", icon: <Icon>{ic.building}</Icon> },
     { href: "/admin/sucesso-do-cliente", label: "Sucesso do Cliente", icon: <Icon>{ic.heart}</Icon> },
     { href: "/trafego", label: "Tráfego", icon: <Icon>{ic.trafego}</Icon> },
+    { href: "/desenvolvimento", label: "Desenvolvimento", icon: <Icon>{ic.code}</Icon> },
     { href: "/acompanhamento", label: "Acompanhamento", icon: <Icon>{ic.pulse}</Icon> },
     { href: "/admin/capacidade", label: "Capacidade", icon: <Icon>{ic.gauge}</Icon> },
     { href: "/admin/tarefas", label: "Tarefas", icon: <Icon>{ic.tasks}</Icon> },
@@ -168,6 +175,13 @@ const NAV: Record<Role, NavItem[]> = {
     { href: "/agenda", label: "Agenda", icon: <Icon>{ic.calendar}</Icon> },
     { href: "/suporte", label: "Suporte", icon: <Icon>{ic.headset}</Icon>, openTickets: true },
   ],
+  // Desenvolvedor: acesso EXATAMENTE a Painel (quadro de Desenvolvimento), Agenda
+  // e Suporte (+ sino e perfil, fora do NAV). Nada mais.
+  desenvolvedor: [
+    { href: "/desenvolvimento", label: "Painel", icon: <Icon>{ic.code}</Icon> },
+    { href: "/agenda", label: "Agenda", icon: <Icon>{ic.calendar}</Icon> },
+    { href: "/suporte", label: "Suporte", icon: <Icon>{ic.headset}</Icon>, openTickets: true },
+  ],
 };
 
 const ROLE_LABEL: Record<Role, string> = {
@@ -175,6 +189,7 @@ const ROLE_LABEL: Record<Role, string> = {
   consultor: "Consultor",
   colaborador: "Colaborador",
   gestor_trafego: "Gestor de Tráfego",
+  desenvolvedor: "Desenvolvedor",
 };
 
 function bestMatch(pathname: string, items: NavItem[]): string | null {
@@ -367,10 +382,12 @@ export default function AppShell({
         </main>
       </div>
 
-      {/* Lembrete global de timer rodando — os cargos que executam tarefas. O
-          Gestor de Tráfego não tem tarefas/tempo, então o indicador (que faz
-          poll de tempo) não roda para ele. */}
-      {user.role !== "gestor_trafego" && <ActiveTimerIndicator />}
+      {/* Lembrete global de timer rodando — SÓ os cargos que executam tarefas
+          (admin, consultor, colaborador). Gestor de Tráfego e Desenvolvedor não
+          têm tarefas/tempo, então o indicador (que faz poll de tempo) não roda. */}
+      {(user.role === "admin" ||
+        user.role === "consultor" ||
+        user.role === "colaborador") && <ActiveTimerIndicator />}
     </div>
   );
 }

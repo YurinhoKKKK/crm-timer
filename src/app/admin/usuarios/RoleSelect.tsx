@@ -10,6 +10,7 @@ const ROLES: { value: Role; label: string }[] = [
   { value: "colaborador", label: "Colaborador" },
   { value: "consultor", label: "Consultor" },
   { value: "gestor_trafego", label: "Gestor de Tráfego" },
+  { value: "desenvolvedor", label: "Desenvolvedor" },
   { value: "admin", label: "Admin" },
 ];
 

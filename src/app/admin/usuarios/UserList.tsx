@@ -20,6 +20,7 @@ const ROLE_LABEL: Record<Role, string> = {
   colaborador: "Colaborador",
   consultor: "Consultor",
   gestor_trafego: "Gestor de Tráfego",
+  desenvolvedor: "Desenvolvedor",
   admin: "Admin",
 };
 

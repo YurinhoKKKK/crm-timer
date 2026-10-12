@@ -24,6 +24,8 @@ export default async function Home() {
       redirect("/colaborador");
     case "gestor_trafego":
       redirect("/trafego");
+    case "desenvolvedor":
+      redirect("/desenvolvimento");
     default:
       redirect("/pending");
   }

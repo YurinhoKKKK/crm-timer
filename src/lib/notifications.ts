@@ -15,7 +15,16 @@ export type NotificationType =
   | "empresa_onboarding"
   | "empresa_renovacao";
 
-export type ShellRole = "admin" | "consultor" | "colaborador" | "gestor_trafego";
+// 'desenvolvedor' já é um destino VÁLIDO de roteamento (etapa 4 do
+// Desenvolvimento). O cargo em si — acesso, policies, telas — é construído na
+// etapa 4; aqui só deixamos o ponto único de decisão pronto. Nenhum usuário tem
+// esse cargo hoje, então o roteamento dos demais cargos não muda.
+export type ShellRole =
+  | "admin"
+  | "consultor"
+  | "colaborador"
+  | "gestor_trafego"
+  | "desenvolvedor";
 
 // Uma notificação pronta para exibir. body/companyName já vêm REDIGIDOS pelo
 // banco quando a pessoa perdeu o acesso (reachable=false): nesse caso não
@@ -74,6 +83,14 @@ export function notificationHref(
       // leva ao quadro de Tráfego, com o painel daquela empresa aberto (?empresa=).
       if (role === "gestor_trafego") {
         return n.companyId ? `/trafego?empresa=${n.companyId}` : "/trafego";
+      }
+      // Desenvolvedor (etapa 4): mesmo padrão — não acessa a central; menção/
+      // resposta em Atualização (área 'site') o leva ao quadro de Desenvolvimento,
+      // com o painel daquela empresa aberto (?empresa=).
+      if (role === "desenvolvedor") {
+        return n.companyId
+          ? `/desenvolvimento?empresa=${n.companyId}`
+          : "/desenvolvimento";
       }
       const suffix =
         n.type === "listagem_ajuste_solicitado" ? "?aba=listings" : "";

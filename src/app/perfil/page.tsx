@@ -9,7 +9,21 @@ import GoogleCalendarCard from "./GoogleCalendarCard";
 // requisição; o cliente ainda revalida via router.refresh após cada ação.
 export const dynamic = "force-dynamic";
 
-type ShellRole = "admin" | "consultor" | "colaborador";
+type ShellRole =
+  | "admin"
+  | "consultor"
+  | "colaborador"
+  | "gestor_trafego"
+  | "desenvolvedor";
+
+// Para onde o "Voltar" do perfil leva, por cargo (a home de cada um).
+const BACK_HREF: Record<ShellRole, string> = {
+  admin: "/admin",
+  consultor: "/consultor",
+  colaborador: "/colaborador",
+  gestor_trafego: "/trafego",
+  desenvolvedor: "/desenvolvimento",
+};
 
 export default async function PerfilPage({
   searchParams,
@@ -53,12 +67,7 @@ export default async function PerfilPage({
         ? "error"
         : null;
 
-  const backHref =
-    profile.role === "admin"
-      ? "/admin"
-      : profile.role === "consultor"
-        ? "/consultor"
-        : "/colaborador";
+  const backHref = BACK_HREF[profile.role as ShellRole] ?? "/perfil";
 
   return (
     <AppShell

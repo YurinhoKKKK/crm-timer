@@ -16,6 +16,7 @@ const ROLE_LABEL: Record<string, string> = {
   consultor: "Consultor",
   colaborador: "Colaborador",
   gestor_trafego: "Gestor de Tráfego",
+  desenvolvedor: "Desenvolvedor",
   pending: "Pendente",
 };
 

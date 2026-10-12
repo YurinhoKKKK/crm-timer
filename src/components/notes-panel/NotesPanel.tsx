@@ -14,6 +14,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import Lightbox from "@/components/Lightbox";
 import NoteBody from "@/components/company-central/NoteBody";
 import AreaChips from "@/components/company-central/AreaChips";
+import { lockedAreasForOrigin } from "@/lib/note-areas";
 import NoteRepliesSection from "@/components/replies/NoteRepliesSection";
 import { TASK_READONLY_TITLE } from "@/components/rich-text/useTaskCheckboxes";
 import { toggleNoteCheckbox } from "@/components/rich-text/task-checkbox-actions";
@@ -93,14 +94,22 @@ export default function NotesPanel({
   // Termos exibidos: "atualização(ões)" (padrão) ou "atualização(ões) do CS".
   const termS = source?.termSingular ?? "atualização";
   const termP = source?.termPlural ?? "atualizações";
-  // Contexto de @menção: no painel de Tráfego (areaFilter), usa
-  // 'atualizacao_trafego' para a LISTA incluir o Gestor de Tráfego. A gravação
-  // (syncMentions) segue 'atualizacao'/'atualizacao_resposta' (company_notes).
-  const noteMentionType: "atualizacao" | "atualizacao_trafego" | undefined = source
+  // Contexto de @menção do painel por ÁREA: 'trafego' usa 'atualizacao_trafego'
+  // (lista o Gestor de Tráfego) e 'site' usa 'atualizacao_site' (lista o
+  // Desenvolvedor); qualquer outra área segue 'atualizacao' normal (admins + quem
+  // alcança a empresa). Isso afeta só a LISTA do @; a gravação (syncMentions)
+  // continua como 'atualizacao'/'atualizacao_resposta' (são company_notes normais).
+  const noteMentionType:
+    | "atualizacao"
+    | "atualizacao_trafego"
+    | "atualizacao_site"
+    | undefined = source
     ? undefined
-    : areaFilter
+    : areaFilter === "trafego"
       ? "atualizacao_trafego"
-      : "atualizacao";
+      : areaFilter === "site"
+        ? "atualizacao_site"
+        : "atualizacao";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState<CompanyNoteView[]>([]);
@@ -404,7 +413,7 @@ export default function NotesPanel({
                         })
                       )}
                       initialAreas={n.areas}
-                      lockedAreas={n.origin === "traffic" ? ["trafego"] : []}
+                      lockedAreas={lockedAreasForOrigin(n.origin)}
                       mentionContext={{
                         sourceType: source ? source.mentionNoteType : noteMentionType!,
                         companyId,
@@ -516,7 +525,13 @@ export default function NotesPanel({
                         onChanged={() => void reload()}
                         source={source}
                         mentionSourceOverride={
-                          !source && areaFilter ? "atualizacao_trafego" : undefined
+                          source
+                            ? undefined
+                            : areaFilter === "trafego"
+                              ? "atualizacao_trafego"
+                              : areaFilter === "site"
+                                ? "atualizacao_site"
+                                : undefined
                         }
                       />
                     </>

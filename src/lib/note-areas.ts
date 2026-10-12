@@ -34,6 +34,30 @@ export function noteAreaLabel(value: NoteArea): string {
   return AREA_LABELS[value] ?? value;
 }
 
+// Correspondência origin -> área travada no FRONT — espelha a função
+// note_origin_area do banco (migration 0117). Fonte única: uma nota criada por um
+// quadro (origin 'traffic'/'site') mantém a área correspondente travada também na
+// edição, na central e no painel. Origem desconhecida/null -> sem área travada.
+const ORIGIN_LOCKED_AREA: Record<string, NoteArea> = {
+  traffic: "trafego",
+  site: "site",
+};
+
+export function lockedAreasForOrigin(
+  origin: string | null | undefined
+): NoteArea[] {
+  const area = origin ? ORIGIN_LOCKED_AREA[origin] : undefined;
+  return area ? [area] : [];
+}
+
+// Texto do chip de área TRAVADA (editor), por área: diz de qual quadro a nota
+// veio e qual área precisa manter. Só as áreas que correspondem a uma origem têm
+// trava; as demais não aparecem aqui.
+export const NOTE_AREA_LOCKED_TITLE: Partial<Record<NoteArea, string>> = {
+  trafego: "Atualizações criadas no quadro de Tráfego mantêm a área Tráfego",
+  site: "Atualizações criadas no quadro de Desenvolvimento mantêm a área Site",
+};
+
 // Ordena uma lista de áreas na ordem canônica (estável em qualquer origem).
 export function sortNoteAreas(areas: NoteArea[]): NoteArea[] {
   return [...areas].sort((a, b) => (AREA_ORDER[a] ?? 99) - (AREA_ORDER[b] ?? 99));

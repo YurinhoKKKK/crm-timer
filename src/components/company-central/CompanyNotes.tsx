@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 import { FileSpreadsheet, FileText } from "lucide-react";
 import type { CompanyNoteView, NoteAttachmentMeta } from "@/lib/notes";
 import type { NoteArea } from "@/lib/types";
-import { NOTE_AREAS } from "@/lib/note-areas";
+import { NOTE_AREAS, lockedAreasForOrigin } from "@/lib/note-areas";
 import { createClient } from "@/lib/supabase-browser";
 import { syncMentions } from "@/lib/mention-actions";
 import { formatBytes } from "@/lib/format";
@@ -375,7 +375,7 @@ export default function CompanyNotes({
                     ({ path, name, size, mime }) => ({ path, name, size, mime })
                   )}
                   initialAreas={n.areas}
-                  lockedAreas={n.origin === "traffic" ? ["trafego"] : []}
+                  lockedAreas={lockedAreasForOrigin(n.origin)}
                   mentionContext={{ sourceType: "atualizacao", companyId }}
                   saveLabel="Salvar alterações"
                   onSave={(html, vis, atts, areas) =>

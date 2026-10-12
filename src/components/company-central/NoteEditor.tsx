@@ -52,7 +52,7 @@ import { btnPrimary, btnSecondary, inputClass } from "@/lib/ui";
 import { formatBytes } from "@/lib/format";
 import type { NoteAttachmentMeta } from "@/lib/notes";
 import type { NoteArea } from "@/lib/types";
-import { NOTE_AREAS, NOTE_AREA_COLORS } from "@/lib/note-areas";
+import { NOTE_AREAS, NOTE_AREA_COLORS, NOTE_AREA_LOCKED_TITLE } from "@/lib/note-areas";
 import type { MentionContext, MentionUser } from "@/lib/mentions";
 import { fetchMentionableUsers } from "@/lib/mention-actions";
 import { buildMentionSuggestion } from "./mention-suggestion";
@@ -1056,11 +1056,7 @@ export default function NoteEditor({
                   aria-pressed={on}
                   aria-disabled={locked}
                   disabled={locked}
-                  title={
-                    locked
-                      ? "Atualizações criadas no quadro de Tráfego mantêm a área Tráfego"
-                      : undefined
-                  }
+                  title={locked ? NOTE_AREA_LOCKED_TITLE[value] : undefined}
                   onClick={() => {
                     if (locked) return; // trava: não desmarca
                     setAreas((prev) =>

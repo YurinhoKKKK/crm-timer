@@ -23,6 +23,9 @@ export default function ChipPicker<V extends string>({
   // Compacto (quadro de Tráfego): chip no tamanho das etiquetas (text-[11px]) e
   // placeholder menor/discreto — para linhas baixas.
   compact = false,
+  // Oferece a opção "Limpar" (onPick(null)). O quadro de Desenvolvimento passa
+  // false: o Status nunca é nulo (empresa sem linha = padrão lista_espera).
+  clearable = true,
 }: {
   value: V | null;
   options: ChipOption<V>[];
@@ -31,6 +34,7 @@ export default function ChipPicker<V extends string>({
   placeholder?: string;
   width?: number;
   compact?: boolean;
+  clearable?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
@@ -91,18 +95,22 @@ export default function ChipPicker<V extends string>({
                 </button>
               );
             })}
-            <div className="my-1 border-t border-line" />
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                onPick(null);
-              }}
-              className="rounded-md px-2.5 py-1.5 text-left text-sm text-fg-muted transition hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
-            >
-              Limpar
-            </button>
+            {clearable && (
+              <>
+                <div className="my-1 border-t border-line" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    onPick(null);
+                  }}
+                  className="rounded-md px-2.5 py-1.5 text-left text-sm text-fg-muted transition hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
+                >
+                  Limpar
+                </button>
+              </>
+            )}
           </div>
         </AnchoredPopover>
       )}

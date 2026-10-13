@@ -77,6 +77,11 @@ const COLLAPSE_KEY = "crm:trafego:grupos-recolhidos";
 // Dimensionada para caber na área de conteúdo a 1536px com o menu lateral aberto
 // (≈1216px) e para a opção MAIS LONGA de cada chip caber em uma linha.
 const MIN_WIDTH = 1192;
+// Espaço FIXO do balão de Atualizações no início da célula Empresa: largura igual
+// em todas as linhas (cabe o ícone + contagem de até 2 dígitos), para o balão E o
+// começo dos nomes ficarem alinhados verticalmente. O cabeçalho recua o mesmo
+// tanto + o gap até o nome (gap-2 = 8px).
+const NOTE_GUTTER_PX = 56;
 
 // --- Chip de MODO (texto CURTO sempre; a cor é só reforço) ------------------ //
 function ModeChip({ synced }: { synced: boolean }) {
@@ -216,10 +221,32 @@ function DragHandleCell({ row, ctx }: { row: TrafficBoardRow; ctx: CellCtx }) {
   );
 }
 
-// --- Célula Empresa (nome + chips à esquerda; balão à direita, centralizado) - //
+// --- Célula Empresa ([balão fixo] [nome + chips]; balão centralizado) -------- //
 function EmpresaCell({ row, ctx }: { row: TrafficBoardRow; ctx: CellCtx }) {
   return (
     <div className="flex min-w-0 items-center gap-2">
+      {/* Espaço FIXO do balão no início da célula (depois da alça, antes do
+          nome): alinha o balão e o começo dos nomes em todas as linhas. Fica na
+          coluna Empresa fixa (sticky), então segue visível na rolagem horizontal.
+          Atualizações FILTRADAS pela área Tráfego; nova nota nasce com a área
+          travada (origin='traffic'). */}
+      <div style={{ width: NOTE_GUTTER_PX }} className="flex shrink-0 justify-start">
+        <NotesButton
+          companyId={row.id}
+          companyName={row.name}
+          userId={ctx.userId}
+          isAdmin={ctx.canOpenCompany}
+          notesHref={`/admin/empresas/${row.id}?aba=notes`}
+          initialCount={row.trafficNoteCount}
+          className="shrink-0"
+          areaFilter="trafego"
+          lockedArea="trafego"
+          origin="traffic"
+          showFullTab={ctx.canOpenCompany}
+          defaultOpen={ctx.autoOpenNotesId === row.id}
+        />
+      </div>
+
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         {ctx.canOpenCompany ? (
           <button
@@ -247,24 +274,6 @@ function EmpresaCell({ row, ctx }: { row: TrafficBoardRow; ctx: CellCtx }) {
           {row.labels.length > 0 && <LabelChips labels={row.labels} nowrap />}
         </div>
       </div>
-
-      {/* Balão das Atualizações FILTRADAS pela área Tráfego — junto da empresa,
-          centralizado na vertical, como nas linhas do quadro de Empresas. Nova
-          nota nasce com a área Tráfego travada (origin='traffic'). */}
-      <NotesButton
-        companyId={row.id}
-        companyName={row.name}
-        userId={ctx.userId}
-        isAdmin={ctx.canOpenCompany}
-        notesHref={`/admin/empresas/${row.id}?aba=notes`}
-        initialCount={row.trafficNoteCount}
-        className="shrink-0"
-        areaFilter="trafego"
-        lockedArea="trafego"
-        origin="traffic"
-        showFullTab={ctx.canOpenCompany}
-        defaultOpen={ctx.autoOpenNotesId === row.id}
-      />
     </div>
   );
 }
@@ -433,6 +442,8 @@ const COLUMNS: TrafficColumn[] = [
     align: "left",
     stickyLeft: 24,
     borderRight: true,
+    // Recua o rótulo pelo espaço do balão + gap, alinhando com o início dos nomes.
+    labelIndent: NOTE_GUTTER_PX + 8,
     cell: (row, ctx) => <EmpresaCell row={row} ctx={ctx} />,
   },
   {

@@ -237,6 +237,9 @@ function PersonChip({ row, person, ctx }: { row: CsRow; person: Responsible; ctx
     : " · Sem NPS";
   return (
     <>
+      {/* Chip 100% da largura da célula: nome (flex, reticências) | papel | NPS
+          individual (mini-chip à direita, largura mínima = maior rótulo), para
+          os status alinharem numa coluna visual entre pessoas e linhas. */}
       <button
         ref={ref}
         type="button"
@@ -244,14 +247,15 @@ function PersonChip({ row, person, ctx }: { row: CsRow; person: Responsible; ctx
         aria-haspopup="menu"
         aria-expanded={open}
         title={`${person.name} — ${rl}${statusTitle}`}
-        className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-line bg-surface-2 px-2 py-0.5 text-xs text-fg transition hover:ring-2 hover:ring-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
+        className="flex w-full min-w-0 items-center gap-2 rounded-full border border-line bg-surface-2 px-2 py-0.5 text-xs text-fg transition hover:ring-2 hover:ring-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
       >
-        <span className="truncate font-medium">{person.name}</span>
-        <span className="shrink-0 rounded-full bg-surface px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">
+        <span className="min-w-0 flex-1 truncate text-left font-medium">{person.name}</span>
+        <span className="shrink-0 whitespace-nowrap text-[10px] font-medium uppercase tracking-wide text-fg-subtle">
           {rl}
         </span>
         <span
-          className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${
+          style={{ minWidth: "4.5rem" }}
+          className={`shrink-0 whitespace-nowrap rounded-full border px-1.5 py-0.5 text-center text-[10px] font-medium ${
             person.status ? CS_STATUS_META[person.status].chipClass : "border-line text-fg-subtle"
           }`}
         >
@@ -278,8 +282,11 @@ function ResponsiblesCell({ row, ctx }: { row: CsRow; ctx: CellCtx }) {
   if (row.responsibles.length === 0) {
     return <span className="text-xs italic text-fg-subtle">Sem responsável</span>;
   }
+  // Chips empilhados na vertical, cada um 100% da largura da célula. A coluna é
+  // recortada (clip) no BoardGrid: nada invade a coluna NPS Geral. O `pr-1` dá o
+  // respiro horizontal até a coluna vizinha.
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex w-full min-w-0 flex-col gap-1 pr-1">
       {row.responsibles.map((p) => (
         <PersonChip key={`${p.role}:${p.id}`} row={row} person={p} ctx={ctx} />
       ))}
@@ -355,6 +362,7 @@ const COLUMNS: CsColumn[] = [
     label: "Responsáveis",
     width: "minmax(260px, 1.6fr)",
     align: "left",
+    clip: true,
     cell: (row, ctx) => <ResponsiblesCell row={row} ctx={ctx} />,
   },
   {

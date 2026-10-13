@@ -30,6 +30,13 @@ export type BoardColumn<Row, Ctx> = {
   borderRight?: boolean;
   // Padding horizontal menor (px-2 em vez de px-3) — colunas apertadas (Ações).
   tight?: boolean;
+  // Recorta a célula (min-width 0 + overflow: clip): nada do conteúdo invade a
+  // coluna vizinha em nenhuma largura de tela (ex.: Responsáveis do CS). O
+  // popover ancorado sai por portal, então NÃO é recortado.
+  clip?: boolean;
+  // Recuo (px) do RÓTULO no cabeçalho — alinha o título com o início do conteúdo
+  // da célula quando esta começa com um espaço fixo (ex.: balão + nome).
+  labelIndent?: number;
   cell: (row: Row, ctx: Ctx) => ReactNode;
 };
 
@@ -91,7 +98,11 @@ export default function BoardGrid<Row extends { id: string }, Ctx>({
                 compact ? "whitespace-nowrap" : ""
               } ${alignClass(col.align)} ${s.className}`}
             >
-              {col.label}
+              {col.labelIndent ? (
+                <span style={{ marginInlineStart: col.labelIndent }}>{col.label}</span>
+              ) : (
+                col.label
+              )}
             </div>
           );
         })}
@@ -111,7 +122,7 @@ export default function BoardGrid<Row extends { id: string }, Ctx>({
                 style={s.style}
                 className={`flex items-center ${col.tight ? "px-2" : "px-3"} ${padY} text-sm ${alignClass(
                   col.align
-                )} ${s.className}`}
+                )} ${s.className} ${col.clip ? "min-w-0 overflow-clip" : ""}`}
               >
                 {col.cell(row, ctx)}
               </div>

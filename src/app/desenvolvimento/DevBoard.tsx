@@ -77,6 +77,11 @@ const COLLAPSE_KEY = "crm:desenvolvimento:grupos-recolhidos";
 // Soma das larguras MÍNIMAS das colunas: abaixo disso aparece a rolagem única.
 // alça(24) + Empresa(290) + Prazo(200) + Status(180) + Ações(88).
 const MIN_WIDTH = 782;
+// Espaço FIXO do balão de Atualizações no início da célula Empresa: largura igual
+// em todas as linhas (cabe o ícone + contagem de até 2 dígitos), para o balão E o
+// começo dos nomes ficarem alinhados verticalmente. O cabeçalho recua o mesmo
+// tanto + o gap até o nome (gap-2 = 8px).
+const NOTE_GUTTER_PX = 56;
 
 // --- Contexto de célula ----------------------------------------------------- //
 type CellCtx = {
@@ -175,12 +180,32 @@ function DragHandleCell({ row, ctx }: { row: DevBoardRow; ctx: CellCtx }) {
   );
 }
 
-// --- Célula Empresa (nome + chips à esquerda; balão à direita, centralizado) - //
+// --- Célula Empresa ([balão fixo] [nome + chips]; balão centralizado) -------- //
 // O balão mostra SÓ as Atualizações da empresa com a área 'site' (inclusive as
 // criadas fora do quadro). Nova nota nasce com a área Site travada e origin='site'.
 function EmpresaCell({ row, ctx }: { row: DevBoardRow; ctx: CellCtx }) {
   return (
     <div className="flex min-w-0 items-center gap-2">
+      {/* Espaço FIXO do balão no início da célula (depois da alça, antes do
+          nome): alinha o balão e o começo dos nomes em todas as linhas. Fica na
+          coluna Empresa fixa (sticky), então segue visível na rolagem horizontal. */}
+      <div style={{ width: NOTE_GUTTER_PX }} className="flex shrink-0 justify-start">
+        <NotesButton
+          companyId={row.id}
+          companyName={row.name}
+          userId={ctx.userId}
+          isAdmin={ctx.canOpenCompany}
+          notesHref={`/admin/empresas/${row.id}?aba=notes`}
+          initialCount={row.siteNoteCount}
+          className="shrink-0"
+          areaFilter="site"
+          lockedArea="site"
+          origin="site"
+          showFullTab={ctx.canOpenCompany}
+          defaultOpen={ctx.autoOpenNotesId === row.id}
+        />
+      </div>
+
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         {ctx.canOpenCompany ? (
           <button
@@ -207,23 +232,6 @@ function EmpresaCell({ row, ctx }: { row: DevBoardRow; ctx: CellCtx }) {
           </div>
         )}
       </div>
-
-      {/* Atualizações FILTRADAS pela área Site. Nova nota nasce com a área Site
-          travada (origin='site'); o gatilho da 0117 garante a área. */}
-      <NotesButton
-        companyId={row.id}
-        companyName={row.name}
-        userId={ctx.userId}
-        isAdmin={ctx.canOpenCompany}
-        notesHref={`/admin/empresas/${row.id}?aba=notes`}
-        initialCount={row.siteNoteCount}
-        className="shrink-0"
-        areaFilter="site"
-        lockedArea="site"
-        origin="site"
-        showFullTab={ctx.canOpenCompany}
-        defaultOpen={ctx.autoOpenNotesId === row.id}
-      />
     </div>
   );
 }
@@ -517,6 +525,8 @@ const COLUMNS: DevColumn[] = [
     align: "left",
     stickyLeft: 24,
     borderRight: true,
+    // Recua o rótulo pelo espaço do balão + gap, alinhando com o início dos nomes.
+    labelIndent: NOTE_GUTTER_PX + 8,
     cell: (row, ctx) => <EmpresaCell row={row} ctx={ctx} />,
   },
   {

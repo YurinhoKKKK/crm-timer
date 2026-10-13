@@ -323,6 +323,7 @@ export type Database = {
       }
       company_groups: {
         Row: {
+          churn_type: string | null
           color: string
           created_at: string
           created_by: string | null
@@ -331,6 +332,7 @@ export type Database = {
           position: number
         }
         Insert: {
+          churn_type?: string | null
           color: string
           created_at?: string
           created_by?: string | null
@@ -339,6 +341,7 @@ export type Database = {
           position: number
         }
         Update: {
+          churn_type?: string | null
           color?: string
           created_at?: string
           created_by?: string | null
@@ -2125,7 +2128,7 @@ export type Database = {
         }[]
       }
       set_companies_group: {
-        Args: { p_company_ids: string[]; p_group_id: string }
+        Args: { p_group_id: string | null; p_items: Json }
         Returns: number
       }
       set_meeting_client_hidden: {

@@ -3,6 +3,7 @@
 import { guardRole } from "@/components/guardRole";
 import { resolvePeople } from "@/lib/creator";
 import { CS_AUDIT_PAGE, type CsNpsStatus } from "@/lib/cs-status";
+import { CHURN_AUDIT_FIELDS } from "@/lib/churn";
 
 // Escrita e leitura do histórico do quadro "Sucesso do Cliente". Admin-only: as
 // RPCs recusam não-admin por dentro (e a RLS das tabelas é a barreira real); as
@@ -104,15 +105,19 @@ export type CsAuditEntry = {
 
 export async function fetchCsAudit(
   companyId: string,
-  offset: number
+  offset: number,
+  // Controle de Churn: restringe aos campos de churn (captura + edições da aba).
+  onlyChurn = false
 ): Promise<{ entries: CsAuditEntry[]; hasMore: boolean }> {
   const { supabase } = await guardRole(["admin"]);
 
   // Pede 1 a mais para saber se há próxima página.
-  const { data, error } = await supabase
+  let query = supabase
     .from("cs_audit")
     .select("id, field, old_value, new_value, subject_user_id, changed_by, changed_at")
-    .eq("company_id", companyId)
+    .eq("company_id", companyId);
+  if (onlyChurn) query = query.in("field", [...CHURN_AUDIT_FIELDS]);
+  const { data, error } = await query
     .order("changed_at", { ascending: false })
     .order("id", { ascending: false })
     .range(offset, offset + CS_AUDIT_PAGE);

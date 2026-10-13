@@ -330,6 +330,82 @@ export function dashboardQuery(p: DashboardPeriod): string {
   return new URLSearchParams(p.params).toString();
 }
 
+// =====================================================================
+// PERÍODO DO CONTROLE DE CHURN (2ª aba do Sucesso do Cliente) — atalhos de MÊS
+// (mês atual / mês anterior), "Todos" (sem filtro) e um intervalo personalizado.
+// Modelo SEPARADO do dashboard: aqui os atalhos de mês usam ?periodo=mes_atual|
+// mes_anterior|todos; o calendário (dia-a-dia ou grade de meses) materializa em
+// ?de/?ate. start/end são DATAS puras BRT (YYYY-MM-DD); "todos" tem ambos null
+// (inclui registros SEM data); os demais filtram churned_on BETWEEN start AND end
+// (sem data fica de fora). Padrão (nada/ inválido) = MÊS ATUAL.
+// =====================================================================
+
+export type ChurnPreset = "mes_atual" | "mes_anterior" | "todos" | "custom";
+
+export type ChurnPeriod = {
+  preset: ChurnPreset;
+  // Datas puras BRT. Ambas null só em "todos".
+  start: string | null;
+  end: string | null;
+  // Rótulo SEMPRE visível: "Outubro/2026", "01/09/2026 a 30/09/2026", "Todos".
+  label: string;
+  // Ida-e-volta na URL (?periodo=... OU ?de=...&ate=...).
+  params: Record<string, string>;
+};
+
+// "outubro/2026" → "Outubro/2026" (rótulo autônomo do filtro, não em frase).
+function capitalizeFirst(s: string): string {
+  return s.length ? s[0].toUpperCase() + s.slice(1) : s;
+}
+
+function churnMonth(ym: string, preset: "mes_atual" | "mes_anterior"): ChurnPeriod {
+  return {
+    preset,
+    start: `${ym}-01`,
+    end: lastDayOfMonth(ym),
+    label: capitalizeFirst(monthYearLabel(ym)),
+    params: { periodo: preset },
+  };
+}
+
+// Resolve os parâmetros de URL do Controle de Churn num período validado. de/ate
+// têm precedência (calendário/ grade de meses). Entrada corrompida → mês atual.
+export function resolveChurnPeriod(input: {
+  periodo?: string | string[];
+  de?: string | string[];
+  ate?: string | string[];
+}): ChurnPeriod {
+  const mesAtual = () => churnMonth(brtToday().slice(0, 7), "mes_atual");
+
+  const de = firstOf(input.de);
+  const ate = firstOf(input.ate);
+  if (de != null || ate != null) {
+    if (de && ate && isRealDate(de) && isRealDate(ate) && de <= ate) {
+      const ym = de.slice(0, 7);
+      // Intervalo que cobre um mês inteiro (ex.: escolha na grade de meses) ganha
+      // o rótulo "Outubro/2026"; os demais, "01/09/2026 a 30/09/2026".
+      const label =
+        de === `${ym}-01` && ate === lastDayOfMonth(ym)
+          ? capitalizeFirst(monthYearLabel(ym))
+          : de === ate
+            ? brDate(de)
+            : `${brDate(de)} a ${brDate(ate)}`;
+      return { preset: "custom", start: de, end: ate, label, params: { de, ate } };
+    }
+    return mesAtual(); // intervalo corrompido cai no padrão
+  }
+
+  const p = firstOf(input.periodo);
+  if (p === "todos") {
+    return { preset: "todos", start: null, end: null, label: "Todos", params: { periodo: "todos" } };
+  }
+  if (p === "mes_anterior") {
+    return churnMonth(shiftMonth(brtToday().slice(0, 7), -1), "mes_anterior");
+  }
+  // mes_atual, vazio ou desconhecido → mês atual (padrão).
+  return mesAtual();
+}
+
 // Fragmento humano para a frase "Visão geral · {...}".
 export function dashboardPhrase(p: DashboardPeriod): string {
   if (p.preset === "tudo") return "em todo o período";

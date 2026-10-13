@@ -37,6 +37,9 @@ export type BoardColumn<Row, Ctx> = {
   // Recuo (px) do RÓTULO no cabeçalho — alinha o título com o início do conteúdo
   // da célula quando esta começa com um espaço fixo (ex.: balão + nome).
   labelIndent?: number;
+  // Tooltip do cabeçalho (nome completo) quando o rótulo visível é abreviado
+  // (ex.: "Projeto" → title "Tempo de Projeto").
+  labelTitle?: string;
   cell: (row: Row, ctx: Ctx) => ReactNode;
 };
 
@@ -94,6 +97,7 @@ export default function BoardGrid<Row extends { id: string }, Ctx>({
             <div
               key={col.id}
               style={s.style}
+              title={col.labelTitle}
               className={`flex ${col.tight ? "px-2" : "px-3"} py-2 text-xs font-semibold uppercase tracking-wide text-fg-subtle ${
                 compact ? "whitespace-nowrap" : ""
               } ${alignClass(col.align)} ${s.className}`}

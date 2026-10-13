@@ -71,7 +71,7 @@ export async function createGroup(input: {
       position: nextPosition,
       created_by: user.id,
     })
-    .select("id, name, color, position, kind, traffic_group_id")
+    .select("id, name, color, position, kind, traffic_group_id, churn_type")
     .single();
 
   if (error || !data) {
@@ -149,24 +149,31 @@ export async function deleteGroup(
   return { error: null };
 }
 
-// Move um conjunto de empresas para um grupo (groupId null = "Sem grupo"), em
-// UMA chamada só (RPC set_companies_group). Devolve quantas linhas foram REALMENTE
-// afetadas junto do que foi pedido, para a tela avisar (e reverter o otimista) se
-// o RLS barrou parte da seleção em vez de mentir sucesso.
+// Move um conjunto de empresas para um grupo (groupId null = "Sem grupo"), em UMA
+// chamada só (RPC set_companies_group). Cada item carrega o MOTIVO do churn quando
+// o destino é um grupo 'cancelado' (obrigatório — o gatilho BEFORE do banco recusa
+// sem ele); fora de cancelados o motivo é ignorado. Devolve quantas linhas foram
+// REALMENTE afetadas junto do que foi pedido, para a tela avisar (e reverter o
+// otimista) se o RLS barrou parte da seleção em vez de mentir sucesso.
 export async function moveCompanies(
-  companyIds: string[],
+  items: { companyId: string; reason?: string | null }[],
   groupId: string | null
 ): Promise<{ error: string | null; moved: number; requested: number }> {
-  const requested = companyIds.length;
+  const requested = items.length;
   if (requested === 0) return { error: null, moved: 0, requested: 0 };
 
   const { supabase, user } = await requireUser();
   if (!user) return { error: SESSION_MSG, moved: 0, requested };
 
   const { data, error } = await supabase.rpc("set_companies_group", {
-    p_company_ids: companyIds,
     p_group_id: groupId,
+    p_items: items.map((i) => ({
+      company_id: i.companyId,
+      ...(i.reason ? { reason: i.reason } : {}),
+    })),
   });
+  // A RPC levanta mensagens já amigáveis em pt-BR (falta de motivo, requisitos de
+  // grupo ativo). Repassa o texto; nada é movido quando a transação falha.
   if (error) return { error: error.message, moved: 0, requested };
 
   const moved = typeof data === "number" ? data : 0;

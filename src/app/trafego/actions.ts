@@ -8,10 +8,12 @@ import type {
   TrafficPlatform,
   TrafficStatus,
 } from "@/lib/traffic-options";
+import { TRAFFIC_BOARD_ROLES } from "@/lib/board-permissions";
 
-// Escrita e leitura do quadro "Tráfego". Admin-only: as RPCs recusam não-admin
-// por dentro (e a RLS das tabelas é a barreira real); as leituras passam por
-// guardRole(["admin"]). A fatia 4 (Gestor de Tráfego) amplia estes dois pontos.
+// Escrita e leitura do quadro "Tráfego". Quem gere o quadro = admin e Gestor de
+// Tráfego (TRAFFIC_BOARD_ROLES — a MESMA lista usada pela página), espelhando a
+// regra das RPCs no banco: elas recusam quem não pode por dentro e a RLS das
+// tabelas é a barreira real. Ações exclusivas do admin ficam fora daqui.
 
 export type TrafficWriteResult = {
   error: string | null;
@@ -38,7 +40,7 @@ export async function setTrafficFocus(
   companyId: string,
   value: TrafficFocus | null
 ): Promise<TrafficWriteResult> {
-  const { supabase } = await guardRole(["admin", "gestor_trafego"]);
+  const { supabase } = await guardRole([...TRAFFIC_BOARD_ROLES]);
   const { error } = await supabase.rpc("traffic_set_focus", {
     p_company_id: companyId,
     p_value: value,
@@ -50,7 +52,7 @@ export async function setTrafficPlatform(
   companyId: string,
   value: TrafficPlatform | null
 ): Promise<TrafficWriteResult> {
-  const { supabase } = await guardRole(["admin", "gestor_trafego"]);
+  const { supabase } = await guardRole([...TRAFFIC_BOARD_ROLES]);
   const { error } = await supabase.rpc("traffic_set_platform", {
     p_company_id: companyId,
     p_value: value,
@@ -62,7 +64,7 @@ export async function setTrafficStatus(
   companyId: string,
   value: TrafficStatus | null
 ): Promise<TrafficWriteResult> {
-  const { supabase } = await guardRole(["admin", "gestor_trafego"]);
+  const { supabase } = await guardRole([...TRAFFIC_BOARD_ROLES]);
   const { error } = await supabase.rpc("traffic_set_status", {
     p_company_id: companyId,
     p_value: value,
@@ -76,7 +78,7 @@ export async function setTrafficBudget(
   companyId: string,
   budget: string | null
 ): Promise<TrafficWriteResult> {
-  const { supabase } = await guardRole(["admin", "gestor_trafego"]);
+  const { supabase } = await guardRole([...TRAFFIC_BOARD_ROLES]);
   const { error } = await supabase.rpc("traffic_set_budget", {
     p_company_id: companyId,
     p_budget: budget,
@@ -90,7 +92,7 @@ export async function moveTrafficCompany(
   companyId: string,
   trafficGroupId: string
 ): Promise<TrafficWriteResult> {
-  const { supabase } = await guardRole(["admin", "gestor_trafego"]);
+  const { supabase } = await guardRole([...TRAFFIC_BOARD_ROLES]);
   const { error } = await supabase.rpc("traffic_move_company", {
     p_company_id: companyId,
     p_traffic_group_id: trafficGroupId,
@@ -113,7 +115,7 @@ export async function fetchTrafficAudit(
   companyId: string,
   offset: number
 ): Promise<{ entries: TrafficAuditEntry[]; hasMore: boolean }> {
-  const { supabase } = await guardRole(["admin", "gestor_trafego"]);
+  const { supabase } = await guardRole([...TRAFFIC_BOARD_ROLES]);
 
   // Pede 1 a mais para saber se há próxima página.
   const { data, error } = await supabase

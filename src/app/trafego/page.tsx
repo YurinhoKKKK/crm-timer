@@ -3,6 +3,7 @@ import AppShell from "@/components/AppShell";
 import { loadCompanyGroups, resolveCompanyGroupId } from "@/lib/company-groups";
 import type { Label } from "@/lib/labels";
 import { loadTrafficGroups, asCompanyGroup } from "@/lib/traffic";
+import { TRAFFIC_BOARD_ROLES } from "@/lib/board-permissions";
 import TrafficBoard, { type TrafficBoardRow } from "./TrafficBoard";
 
 // Quadro "Tráfego" — admin + Gestor de Tráfego (Fatia 4). VISÃO sobre as MESMAS
@@ -42,7 +43,10 @@ type RpcRow = {
 };
 
 export default async function TrafegoPage() {
-  const { supabase, profile } = await guardRole(["admin", "gestor_trafego"]);
+  const { supabase, profile } = await guardRole([...TRAFFIC_BOARD_ROLES]);
+  // Ações exclusivas do admin dentro do quadro (nome clicável → central, aviso de
+  // correspondência de grupos, voltar). A GESTÃO do quadro é de todos em
+  // TRAFFIC_BOARD_ROLES.
   const isAdmin = profile.role === "admin";
 
   const [rpc, trafficGroups] = await Promise.all([

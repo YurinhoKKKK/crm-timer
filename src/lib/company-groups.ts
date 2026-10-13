@@ -29,6 +29,10 @@ export type CompanyGroup = {
   // correspondência" (as empresas deste grupo caem em "Sem grupo" no Tráfego).
   // Só o admin usa (edição de grupo + quadro /trafego).
   traffic_group_id?: string | null;
+  // Classificação de churn do grupo (migration 0120): 'finalizado' | 'cancelado'
+  // | null. Dirige o Controle de Churn (CS) e o diálogo de motivo ao mover uma
+  // empresa para um grupo 'cancelado'. É DADO — nunca identificado pelo nome.
+  churn_type?: "finalizado" | "cancelado" | null;
 };
 
 // Chave do balde "Sem grupo" (empresas com group_id nulo). Não é um grupo real:
@@ -81,7 +85,7 @@ export async function loadCompanyGroups(
 ): Promise<CompanyGroup[]> {
   const { data } = await supabase
     .from("company_groups")
-    .select("id, name, color, position, kind, traffic_group_id")
+    .select("id, name, color, position, kind, traffic_group_id, churn_type")
     .order("position", { ascending: true })
     .order("name", { ascending: true });
   return (data as CompanyGroup[]) ?? [];

@@ -2,6 +2,7 @@ import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import { loadCompanyGroups, resolveCompanyGroupId } from "@/lib/company-groups";
 import CsBoard, { type CsRow, type Responsible } from "./CsBoard";
+import CsTabs from "./CsTabs";
 
 // Quadro "Sucesso do Cliente" (CS) — FATIA 1, admin-only e somente leitura. É uma
 // VISÃO sobre as MESMAS empresas do quadro /admin/empresas (nada é copiado): a
@@ -64,6 +65,7 @@ export default async function SucessoDoClientePage() {
       subtitle="Visão sobre as empresas: responsáveis, entrada e contrato. As seções e os dados acompanham o quadro de Empresas."
       back={{ href: "/admin", label: "Dashboard" }}
     >
+      <CsTabs active="clientes" />
       <CsBoard companies={companies} groups={groups} userId={profile.id} />
     </AppShell>
   );

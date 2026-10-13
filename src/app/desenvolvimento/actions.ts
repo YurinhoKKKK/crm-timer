@@ -4,11 +4,13 @@ import { guardRole } from "@/components/guardRole";
 import { resolvePeople } from "@/lib/creator";
 import { DEV_AUDIT_PAGE } from "@/lib/dev-options";
 import type { DevStatus } from "@/lib/dev-options";
+import { DEV_BOARD_ROLES } from "@/lib/board-permissions";
 
-// Escrita e leitura do quadro "Desenvolvimento". Admin-only nesta etapa: as RPCs
-// recusam quem não pode por dentro (dev_can_manage) e a RLS admin-only das tabelas
-// é a barreira real; as leituras passam por guardRole(["admin"]). A Etapa 4 (cargo
-// "Desenvolvedor") amplia estes dois pontos (guardRole + dev_can_manage no banco).
+// Escrita e leitura do quadro "Desenvolvimento". Quem gere o quadro = admin e
+// Desenvolvedor (DEV_BOARD_ROLES — a MESMA lista usada pela página), espelhando
+// dev_can_manage() no banco: as RPCs recusam quem não pode por dentro e a RLS das
+// tabelas é a barreira real. As ações exclusivas do admin (abrir a central da
+// empresa, gestão de grupos) ficam fora daqui.
 
 export type DevWriteResult = {
   error: string | null;
@@ -38,7 +40,7 @@ export async function setDevStatus(
   companyId: string,
   value: DevStatus
 ): Promise<DevWriteResult> {
-  const { supabase } = await guardRole(["admin"]);
+  const { supabase } = await guardRole([...DEV_BOARD_ROLES]);
   const { error } = await supabase.rpc("dev_set_status", {
     p_company_id: companyId,
     p_status: value,
@@ -52,7 +54,7 @@ export async function moveDevCompany(
   companyId: string,
   devGroupId: string
 ): Promise<DevWriteResult> {
-  const { supabase } = await guardRole(["admin"]);
+  const { supabase } = await guardRole([...DEV_BOARD_ROLES]);
   const { error } = await supabase.rpc("dev_move_company", {
     p_company_id: companyId,
     p_dev_group_id: devGroupId,
@@ -69,7 +71,7 @@ export async function pauseDevDeadline(
   companyId: string,
   reason: string
 ): Promise<DevWriteResult> {
-  const { supabase } = await guardRole(["admin"]);
+  const { supabase } = await guardRole([...DEV_BOARD_ROLES]);
   const { error } = await supabase.rpc("dev_pause_deadline", {
     p_company_id: companyId,
     p_reason: reason,
@@ -80,7 +82,7 @@ export async function pauseDevDeadline(
 export async function resumeDevDeadline(
   companyId: string
 ): Promise<DevWriteResult> {
-  const { supabase } = await guardRole(["admin"]);
+  const { supabase } = await guardRole([...DEV_BOARD_ROLES]);
   const { error } = await supabase.rpc("dev_resume_deadline", {
     p_company_id: companyId,
   });
@@ -102,7 +104,7 @@ export async function fetchDevAudit(
   companyId: string,
   offset: number
 ): Promise<{ entries: DevAuditEntry[]; hasMore: boolean }> {
-  const { supabase } = await guardRole(["admin"]);
+  const { supabase } = await guardRole([...DEV_BOARD_ROLES]);
 
   // Pede 1 a mais para saber se há próxima página.
   const { data, error } = await supabase

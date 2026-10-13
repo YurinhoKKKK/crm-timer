@@ -3,6 +3,7 @@ import AppShell from "@/components/AppShell";
 import type { Label } from "@/lib/labels";
 import { loadDevGroups, asCompanyGroup } from "@/lib/dev";
 import type { DevStatus } from "@/lib/dev-options";
+import { DEV_BOARD_ROLES } from "@/lib/board-permissions";
 import DevBoard, { type DevBoardRow } from "./DevBoard";
 
 // Quadro "Desenvolvimento" (Etapa 1) — admin-only. VISÃO sobre as MESMAS empresas
@@ -45,7 +46,9 @@ type RpcRow = {
 };
 
 export default async function DesenvolvimentoPage() {
-  const { supabase, profile } = await guardRole(["admin", "desenvolvedor"]);
+  const { supabase, profile } = await guardRole([...DEV_BOARD_ROLES]);
+  // Ações exclusivas do admin dentro do quadro (nome clicável → central, voltar ao
+  // Dashboard). A GESTÃO do quadro (mover/status/prazo) é de todos em DEV_BOARD_ROLES.
   const isAdmin = profile.role === "admin";
 
   const [rpc, devGroups] = await Promise.all([

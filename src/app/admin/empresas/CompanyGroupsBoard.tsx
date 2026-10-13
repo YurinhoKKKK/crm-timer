@@ -26,7 +26,9 @@ import {
 } from "@/lib/company-groups";
 import GroupSectionShell from "@/components/company-groups/GroupSection";
 import GroupDialog from "./GroupDialog";
+import ChurnReasonDialog from "./ChurnReasonDialog";
 import LabelManager from "./LabelManager";
+import type { ChurnReason } from "@/lib/churn";
 import {
   createGroup,
   updateGroup,
@@ -132,6 +134,14 @@ export default function CompanyGroupsBoard({
   >(null);
   const [deleting, setDeleting] = useState<CompanyGroup | null>(null);
 
+  // Diálogo de MOTIVO do churn (destino 'cancelado'). Guarda as empresas a mover,
+  // o grupo destino e o nome — o movimento só acontece ao concluir o diálogo.
+  const [churnDialog, setChurnDialog] = useState<{
+    companies: { id: string; name: string }[];
+    targetGroupId: string;
+    groupName: string;
+  } | null>(null);
+
   // Aviso (erro/parcial) no topo.
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -195,10 +205,14 @@ export default function CompanyGroupsBoard({
   }
 
   // --- Mover empresas (RPC em lote, otimista, revertido se falhar/parcial) ---
-  // Núcleo único usado pela seleção múltipla E pelo arrastar-soltar.
-  async function doMove(ids: string[], targetGroupId: string | null) {
-    if (ids.length === 0) return;
-    const idSet = new Set(ids);
+  // Efetiva o movimento (com motivos de churn por empresa, quando houver). Núcleo
+  // único usado pela seleção múltipla, pelo arrastar-soltar e pelo diálogo de churn.
+  async function commitMove(
+    moveItems: { companyId: string; reason?: ChurnReason }[],
+    targetGroupId: string | null
+  ) {
+    if (moveItems.length === 0) return;
+    const idSet = new Set(moveItems.map((i) => i.companyId));
     const snapshot = items;
     setNotice(null);
     // Otimista: as linhas pulam de seção na hora.
@@ -207,7 +221,7 @@ export default function CompanyGroupsBoard({
     );
     clearSelection();
 
-    const res = await moveCompanies(ids, targetGroupId);
+    const res = await moveCompanies(moveItems, targetGroupId);
     if (res.error || res.moved < res.requested) {
       setItems(snapshot); // nunca deixar a tela mostrar o que o banco não confirmou
       setNotice(
@@ -219,8 +233,39 @@ export default function CompanyGroupsBoard({
     }
     router.refresh();
   }
+
+  // Ponto único de pedido de movimento. Ignora as que já estão no destino; se o
+  // destino for um grupo 'cancelado', abre o diálogo de MOTIVO antes de efetivar
+  // (nada se move até concluir); senão move direto. 'finalizado' não pede motivo.
+  function requestMove(ids: string[], targetGroupId: string | null) {
+    const toMove = ids.filter((id) => {
+      const it = items.find((c) => c.id === id);
+      return it && it.groupId !== targetGroupId;
+    });
+    if (toMove.length === 0) return;
+
+    const target = targetGroupId
+      ? localGroups.find((g) => g.id === targetGroupId)
+      : null;
+
+    if (target?.churn_type === "cancelado") {
+      setChurnDialog({
+        companies: toMove.map((id) => {
+          const it = items.find((c) => c.id === id)!;
+          return { id, name: it.name };
+        }),
+        targetGroupId: target.id,
+        groupName: target.name,
+      });
+      return;
+    }
+    commitMove(
+      toMove.map((id) => ({ companyId: id })),
+      targetGroupId
+    );
+  }
   function moveSelected(targetGroupId: string | null) {
-    return doMove(Array.from(selected), targetGroupId);
+    requestMove(Array.from(selected), targetGroupId);
   }
 
   // Soltar sobre uma seção. Se a empresa arrastada faz parte da seleção atual,
@@ -235,11 +280,9 @@ export default function CompanyGroupsBoard({
       selected.size > 0 && selected.has(dragId)
         ? Array.from(selected)
         : [dragId];
-    const toMove = ids.filter((id) => {
-      const it = items.find((c) => c.id === id);
-      return it && it.groupId !== groupId;
-    });
-    if (toMove.length > 0) doMove(toMove, groupId);
+    // requestMove filtra as que já estão no destino e abre o diálogo de motivo se
+    // o destino for 'cancelado' (se cancelar, a empresa volta ao lugar: nada moveu).
+    requestMove(ids, groupId);
   }
 
   // --- Grupos: criar / editar / reordenar / excluir ------------------------
@@ -502,6 +545,23 @@ export default function CompanyGroupsBoard({
               ? handleCreate(input)
               : handleEdit(dialog.group, input)
           }
+        />
+      )}
+
+      {churnDialog && (
+        <ChurnReasonDialog
+          companies={churnDialog.companies}
+          groupName={churnDialog.groupName}
+          onCancel={() => setChurnDialog(null)}
+          onConfirm={(reasons) => {
+            const moveItems = churnDialog.companies.map((c) => ({
+              companyId: c.id,
+              reason: reasons[c.id],
+            }));
+            const targetGroupId = churnDialog.targetGroupId;
+            setChurnDialog(null);
+            commitMove(moveItems, targetGroupId);
+          }}
         />
       )}
 

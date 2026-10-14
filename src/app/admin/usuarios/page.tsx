@@ -17,7 +17,9 @@ export default async function UsuariosPage() {
 
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, full_name, email, role, avatar_path, created_at, updated_at");
+    .select(
+      "id, full_name, email, role, avatar_path, created_at, updated_at, attendance_timer_enabled"
+    );
 
   const users = sortProfiles((data as Profile[]) ?? []);
   const pendingCount = users.filter((u) => u.role === "pending").length;

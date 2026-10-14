@@ -11,6 +11,21 @@ import { FarolBadge } from "@/components/followup/FarolBadge";
 import NotesButton from "@/components/notes-panel/NotesButton";
 import GroupSection from "@/components/company-groups/GroupSection";
 import { groupCompanies, type CompanyGroup } from "@/lib/company-groups";
+import AttendanceCell from "@/components/attendance/AttendanceCell";
+import { seedOpenFromDb, hydratePaused } from "@/lib/attendance-store";
+
+// Config da coluna "Atendimento" (calibração, 0126): só chega aqui para quem
+// tem a flag ligada. todayByCompany = segundos de hoje por empresa (do banco);
+// open = atendimento aberto (do banco) para semear o estado compartilhado.
+export type AttendanceGridConfig = {
+  todayByCompany: Record<string, number>;
+  open: { companyId: string; companyNumber: string | null; startedAt: string } | null;
+};
+
+// Número da empresa = prefixo numérico do nome (mesmo critério do diagnóstico).
+function companyNumberOf(name: string): string | null {
+  return name.match(/^\s*(\d+)/)?.[1] ?? null;
+}
 
 export type CompanyCardItem = {
   id: string;
@@ -49,6 +64,8 @@ type RowCtx = {
   template: string; // grid-template-columns (aplica só no desktop, sm+)
   hasContact: boolean; // coluna Contato (painel do consultor)
   hasNotes: boolean; // coluna Atualizações (balão)
+  hasAttendance: boolean; // coluna Atendimento (calibração, só com a flag)
+  attendanceToday?: Record<string, number>; // segundos de hoje por empresa
   viewerId?: string;
   viewerIsAdmin: boolean;
   notesHrefSuffix: string;
@@ -57,13 +74,18 @@ type RowCtx = {
 // Larguras FIXAS por coluna (minmax: teto fixo, mas encolhem antes de estourar a
 // tela em desktops estreitos). A coluna Empresa é a flexível (1fr) e absorve a
 // sobra. A ORDEM aqui é a mesma do cabeçalho e das células da linha.
-function buildGridTemplate(hasContact: boolean, hasNotes: boolean): string {
+function buildGridTemplate(
+  hasContact: boolean,
+  hasNotes: boolean,
+  hasAttendance: boolean
+): string {
   const cols = [
     "minmax(0, 1fr)", // Empresa
     "minmax(7rem, 11rem)", // Etiquetas
     "minmax(6rem, 9rem)", // Progresso
     "minmax(6rem, 10rem)", // Pendentes
   ];
+  if (hasAttendance) cols.push("minmax(8rem, 12rem)"); // Atendimento
   if (hasContact) cols.push("minmax(7rem, 11rem)"); // Contato
   if (hasNotes) cols.push("minmax(3.5rem, 6rem)"); // Atualizações
   return cols.join(" ");
@@ -94,6 +116,9 @@ export default function CompanySummaryGrid({
   // Chave do localStorage para persistir recolhido/expandido POR USUÁRIO (uma
   // por painel). Ausente → o estado vive só na sessão.
   collapseKey,
+  // Config da coluna "Atendimento" (calibração). Ausente → sem coluna (ninguém
+  // além dos colaboradores do teste a recebe).
+  attendance,
 }: {
   items: CompanyCardItem[];
   viewerId?: string;
@@ -101,6 +126,7 @@ export default function CompanySummaryGrid({
   notesHrefSuffix?: string;
   groups?: CompanyGroup[];
   collapseKey?: string;
+  attendance?: AttendanceGridConfig;
 }) {
   const [query, setQuery] = useState("");
   // Filtro rápido "só quem precisa de atenção" (amarelo + vermelho + sem
@@ -119,16 +145,29 @@ export default function CompanySummaryGrid({
     () => !!viewerId && items.some((c) => c.noteCount !== undefined),
     [items, viewerId]
   );
+  const hasAttendance = !!attendance;
+
+  // Semeia o estado compartilhado (aberto + tarefa pausada) a partir do banco,
+  // uma vez ao montar. Depois disso, ações e o poll do indicador mantêm.
+  useEffect(() => {
+    if (!attendance) return;
+    hydratePaused();
+    seedOpenFromDb(attendance.open);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const ctx: RowCtx = useMemo(
     () => ({
-      template: buildGridTemplate(hasContact, hasNotes),
+      template: buildGridTemplate(hasContact, hasNotes, hasAttendance),
       hasContact,
       hasNotes,
+      hasAttendance,
+      attendanceToday: attendance?.todayByCompany,
       viewerId,
       viewerIsAdmin,
       notesHrefSuffix,
     }),
-    [hasContact, hasNotes, viewerId, viewerIsAdmin, notesHrefSuffix]
+    [hasContact, hasNotes, hasAttendance, attendance, viewerId, viewerIsAdmin, notesHrefSuffix]
   );
 
   const needsAttention = (c: CompanyCardItem) =>
@@ -318,6 +357,7 @@ function ColumnHeader({ ctx }: { ctx: RowCtx }) {
       <span>Etiquetas</span>
       <span>Progresso</span>
       <span>Pendentes</span>
+      {ctx.hasAttendance && <span>Atendimento</span>}
       {ctx.hasContact && <span>Contato</span>}
       {ctx.hasNotes && <span className="text-right">Atualizações</span>}
     </div>
@@ -410,6 +450,18 @@ function CompanyRow({
             </span>
           )}
         </div>
+
+        {/* Atendimento (calibração) — play/pause + tempo ao vivo. Fica ACIMA do
+            overlay (a própria célula é z-10), então o botão não navega. */}
+        {ctx.hasAttendance && (
+          <div className="min-w-0">
+            <AttendanceCell
+              companyId={c.id}
+              companyNumber={companyNumberOf(c.name)}
+              todaySeconds={ctx.attendanceToday?.[c.id] ?? 0}
+            />
+          </div>
+        )}
 
         {/* Contato (só painel do consultor) — semáforo + dias desde o contato. */}
         {ctx.hasContact && (

@@ -7,6 +7,7 @@ import { loadAllLabelsByCompany } from "@/lib/labels";
 import { loadCompanyNoteCounts } from "@/lib/notes";
 import { loadStartedOnByCompany } from "@/lib/company-details";
 import { loadCompanyGroups, loadCompanyGroupMap } from "@/lib/company-groups";
+import { loadAttendanceContext } from "@/lib/attendance";
 import { perfRoute } from "@/lib/perf";
 
 type CompanyCountRow = {
@@ -40,6 +41,7 @@ export default async function ColaboradorPage() {
     startedOnByCompany,
     groups,
     groupByCompany,
+    attendanceCtx,
   ] = await Promise.all([
     perf.timed(
       "rpc collaborator_portfolio (do usuário)",
@@ -59,6 +61,8 @@ export default async function ColaboradorPage() {
     // mapa cobre todas as empresas do portfólio (carteira ∪ tarefa em aberto).
     perf.timed("company_groups (seções)", loadCompanyGroups(supabase)),
     perf.timed("companies group_id (mapa)", loadCompanyGroupMap(supabase)),
+    // Cronômetro de atendimento (calibração): só retorna dados p/ quem tem a flag.
+    perf.timed("attendance_context", loadAttendanceContext(supabase, profile.id)),
   ]);
   perf.done();
 
@@ -100,6 +104,14 @@ export default async function ColaboradorPage() {
           notesHrefSuffix="#anotacoes"
           groups={groups}
           collapseKey="crm:colaborador:grupos-recolhidos"
+          attendance={
+            attendanceCtx.enabled
+              ? {
+                  todayByCompany: attendanceCtx.todayByCompany,
+                  open: attendanceCtx.open,
+                }
+              : undefined
+          }
           items={companies.map(
             (c): CompanyCardItem => ({
               id: c.id,

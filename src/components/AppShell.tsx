@@ -9,6 +9,7 @@ import ThemeToggle from "./ThemeToggle";
 import Avatar from "./Avatar";
 import Logo from "./Logo";
 import ActiveTimerIndicator from "./ActiveTimerIndicator";
+import ActiveAttendanceIndicator from "./attendance/ActiveAttendanceIndicator";
 import UnreadValidationsBadge from "./UnreadValidationsBadge";
 import OpenTicketsBadge from "./OpenTicketsBadge";
 import NotificationBell from "./NotificationBell";
@@ -115,6 +116,12 @@ const ic = {
       <path d="M21 16v2a4 4 0 0 1-4 4h-5" />
     </>
   ),
+  stopwatch: (
+    <>
+      <circle cx="12" cy="13" r="8" />
+      <path d="M12 9v4l2 2M9 2h6M12 5V2" />
+    </>
+  ),
 };
 
 function Icon({ children }: { children: ReactNode }) {
@@ -145,6 +152,7 @@ const NAV: Record<Role, NavItem[]> = {
     { href: "/desenvolvimento", label: "Desenvolvimento", icon: <Icon>{ic.code}</Icon> },
     { href: "/acompanhamento", label: "Acompanhamento", icon: <Icon>{ic.pulse}</Icon> },
     { href: "/admin/capacidade", label: "Capacidade", icon: <Icon>{ic.gauge}</Icon> },
+    { href: "/admin/atendimento-calibracao", label: "Calibração", icon: <Icon>{ic.stopwatch}</Icon> },
     { href: "/admin/tarefas", label: "Tarefas", icon: <Icon>{ic.tasks}</Icon> },
     { href: "/agenda", label: "Agenda", icon: <Icon>{ic.calendar}</Icon> },
     { href: "/admin/validacoes", label: "Validações", icon: <Icon>{ic.badgeCheck}</Icon>, validations: true },
@@ -388,6 +396,13 @@ export default function AppShell({
       {(user.role === "admin" ||
         user.role === "consultor" ||
         user.role === "colaborador") && <ActiveTimerIndicator />}
+
+      {/* Indicador do cronômetro de ATENDIMENTO (calibração, 0126). Faz poll do
+          próprio atendimento aberto; renderiza nada p/ quem não tem a flag. Os
+          dois indicadores nunca aparecem juntos (exclusão mútua no banco). */}
+      {(user.role === "admin" ||
+        user.role === "consultor" ||
+        user.role === "colaborador") && <ActiveAttendanceIndicator />}
     </div>
   );
 }

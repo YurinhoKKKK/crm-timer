@@ -97,6 +97,35 @@ export async function updateUserRole(
   return { error: null };
 }
 
+// Liga/desliga o "Cronômetro de atendimento" de um usuário (calibração, 0126).
+// Só admin: a RLS de profiles já impede que não-admin altere linhas de terceiros
+// (mesmo caminho do updateUserRole). Não toca em mais nada.
+export async function updateAttendanceEnabled(
+  userId: string,
+  enabled: boolean
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "Sessão expirada. Faça login novamente." };
+  }
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ attendance_timer_enabled: enabled })
+    .eq("id", userId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/admin/usuarios");
+  return { error: null };
+}
+
 // ---------------------------------------------------------------------------
 // Empresas (Passo 2.2)
 // ---------------------------------------------------------------------------

@@ -7,3 +7,6 @@ node_modules
 .env*
 
 dev.log
+
+# Diagnóstico Digisac (só leitura, fora do app; apagar ao fim)
+scripts/diagnostico-digisac/

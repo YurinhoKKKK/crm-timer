@@ -3,6 +3,11 @@
 import { useMemo, useState } from "react";
 import type { Profile, Role } from "@/lib/types";
 import RoleSelect from "./RoleSelect";
+import AttendanceToggle from "./AttendanceToggle";
+
+// A coluna attendance_timer_enabled é nova (0126) e ainda não está no tipo
+// gerado Profile; anexamos aqui para ler sem depender da regeneração.
+type UserRow = Profile & { attendance_timer_enabled?: boolean };
 import Avatar from "@/components/Avatar";
 import { avatarUrl } from "@/lib/avatar";
 import {
@@ -28,7 +33,7 @@ export default function UserList({
   users,
   selfId,
 }: {
-  users: Profile[];
+  users: UserRow[];
   selfId: string;
 }) {
   const [query, setQuery] = useState("");
@@ -113,7 +118,15 @@ export default function UserList({
                   </div>
                 </div>
 
-                <RoleSelect userId={u.id} current={u.role} />
+                <div className="flex flex-col items-start gap-2 sm:items-end">
+                  <RoleSelect userId={u.id} current={u.role} />
+                  {!isPending && (
+                    <AttendanceToggle
+                      userId={u.id}
+                      initial={u.attendance_timer_enabled ?? false}
+                    />
+                  )}
+                </div>
               </li>
             );
           })}

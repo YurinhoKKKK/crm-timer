@@ -2,7 +2,9 @@ import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import PeriodPicker from "../PeriodPicker";
 import { resolveDashboardPeriod } from "@/lib/period";
+import { loadDigisacSyncStatus } from "@/lib/digisac-sync";
 import AttendanceReport, { type ReportRow, type Grouping } from "./AttendanceReport";
+import DigisacSyncCard from "./DigisacSyncCard";
 
 // Tela admin-only da CALIBRAÇÃO (0126): tempo real de atendimento por pessoa e
 // empresa, com agrupamento Dia/Semana/Mês e período reaproveitado do Dashboard.
@@ -21,11 +23,14 @@ export default async function AtendimentoCalibracaoPage({
     ? searchParams!.group
     : "day") as Grouping;
 
-  const { data, error } = await supabase.rpc("attendance_admin_report", {
-    p_start: period.start,
-    p_end: period.end,
-    p_bucket: group,
-  });
+  const [{ data, error }, syncStatus] = await Promise.all([
+    supabase.rpc("attendance_admin_report", {
+      p_start: period.start,
+      p_end: period.end,
+      p_bucket: group,
+    }),
+    loadDigisacSyncStatus(supabase),
+  ]);
 
   return (
     <AppShell
@@ -34,6 +39,8 @@ export default async function AtendimentoCalibracaoPage({
       subtitle="Tempo real de atendimento por pessoa e empresa (teste). Separado do cronômetro de tarefas."
       back={{ href: "/admin", label: "Dashboard" }}
     >
+      <DigisacSyncCard status={syncStatus} />
+
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <PeriodPicker value={period} />
       </div>

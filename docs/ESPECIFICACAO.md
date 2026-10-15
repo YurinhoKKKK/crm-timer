@@ -129,6 +129,13 @@ Regra do projeto: **sem `service_role`** — todo acesso passa pela RLS, e as in
 - A porta é estreita: o client só chama duas RPCs `SECURITY DEFINER` (`crm_intake_create`, `crm_intake_check_duplicate`) concedidas **só a `service_role`**; a autenticação é por **segredo compartilhado** conferido na rota (tempo constante), com rate limit e auditoria no banco.
 - A regra antiga (sem service_role) **continua valendo** para todo o resto do sistema.
 
+#### Exceção controlada 2: service_role na sincronização Digisac
+**Segunda exceção**, aprovada pelo Mauricio: a **Edge Function `digisac-sync`** (migration `0128`, etapa 1 do contador de atendimento) usa a `service_role` **somente dentro dela**, e **somente** para gravar nas tabelas `digisac_users` / `digisac_messages` / `digisac_sync_cursor` / `digisac_sync_runs` e inserir a notificação de alerta (RPC `digisac_alert`). Também é server-to-server (cron/pg_net), sem sessão de usuário. Contenção:
+- A `service_role` **nunca** aparece no código do site (Next); vive só no runtime da Edge Function (segredos das Edge Functions). As tabelas `digisac_*` têm RLS com **SELECT só admin** e **nenhuma policy de escrita** — a função grava por bypass de RLS, de dentro dela.
+- A função tem `verify_jwt = false` e é protegida por um **segredo próprio** `DIGISAC_SYNC_SECRET` (cabeçalho `x-sync-secret`, comparado em tempo constante). O mesmo valor fica no **Vault** (`digisac_sync_secret`) para o pg_cron ler. Nunca no repositório, nunca impresso.
+- Reusa `DIGISAC_DOMAIN`/`DIGISAC_TOKEN` (os mesmos do `send-whatsapp`). Qualquer novo uso de service_role continua exigindo decisão explícita do dono.
+- A regra geral (sem service_role) **continua valendo** para todo o resto do sistema.
+
 #### ⚠️ Armadilha: policy de SELECT que relê a própria tabela quebra `INSERT ... RETURNING`
 Uma função de visibilidade `SECURITY DEFINER` usada como policy de **SELECT** **não pode buscar a linha nova pela própria PK na própria tabela**. Foi o bug que impedia criar reunião (migration 0047 corrigiu).
 

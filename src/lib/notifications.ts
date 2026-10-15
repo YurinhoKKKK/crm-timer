@@ -13,7 +13,13 @@ export type NotificationType =
   // Fluxo de grupos (admin): empresa entrou em On Boarding / foi para Aguardando
   // Renovação por vencimento de contrato. Ambas levam à empresa.
   | "empresa_onboarding"
-  | "empresa_renovacao";
+  | "empresa_renovacao"
+  // Alertas da sincronização Digisac (etapa 1): só para admins; levam à tela de
+  // calibração. auth = token inválido/vencido; error = falha geral; stalled =
+  // watchdog (sem execução recente).
+  | "digisac_sync_auth"
+  | "digisac_sync_error"
+  | "digisac_sync_stalled";
 
 // 'desenvolvedor' já é um destino VÁLIDO de roteamento (etapa 4 do
 // Desenvolvimento). O cargo em si — acesso, policies, telas — é construído na
@@ -69,6 +75,11 @@ export function notificationHref(
     case "empresa_renovacao":
       // Vão para os administradores; a notificação leva à empresa.
       return n.companyId ? `/admin/empresas/${n.companyId}` : null;
+    case "digisac_sync_auth":
+    case "digisac_sync_error":
+    case "digisac_sync_stalled":
+      // Alertas da sincronização Digisac (admins) → tela de calibração.
+      return "/admin/atendimento-calibracao";
     default: {
       // mencionado / resposta_recebida / listagem — PONTO ÚNICO de decisão do
       // destino. As Atualizações do Tráfego são company_notes normais (source_type

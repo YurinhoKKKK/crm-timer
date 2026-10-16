@@ -55,18 +55,37 @@ export default function ActiveAttendanceIndicator() {
   }, []);
 
   useEffect(() => {
+    // Poll de 45s PAUSADO com a aba oculta: um único intervalo por vez (nunca
+    // dois), parado em document.hidden e religado (com busca imediata) ao voltar.
     hydratePaused();
-    fetchCurrent();
-    const id = window.setInterval(fetchCurrent, POLL_MS);
+    let intervalId: number | undefined;
+    const stop = () => {
+      if (intervalId !== undefined) {
+        window.clearInterval(intervalId);
+        intervalId = undefined;
+      }
+    };
+    const start = () => {
+      if (intervalId === undefined) {
+        intervalId = window.setInterval(fetchCurrent, POLL_MS);
+      }
+    };
     const onVisible = () => {
-      if (document.visibilityState === "visible") fetchCurrent();
+      if (document.visibilityState === "visible") {
+        fetchCurrent();
+        start();
+      } else {
+        stop();
+      }
     };
     const onSync = () => fetchCurrent();
+    fetchCurrent();
+    if (document.visibilityState === "visible") start();
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("online", fetchCurrent);
     window.addEventListener(ATTENDANCE_SYNC_EVENT, onSync);
     return () => {
-      window.clearInterval(id);
+      stop();
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("online", fetchCurrent);
       window.removeEventListener(ATTENDANCE_SYNC_EVENT, onSync);

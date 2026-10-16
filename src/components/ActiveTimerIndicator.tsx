@@ -174,17 +174,37 @@ export default function ActiveTimerIndicator() {
   // Busca ao montar (o AppShell remonta a cada rota, então isso também cobre a
   // troca de tela), poll leve e refetch ao voltar o foco para a aba.
   useEffect(() => {
-    fetchOpen();
-    const id = window.setInterval(fetchOpen, POLL_MS);
-    const onVisible = () => {
-      if (document.visibilityState === "visible") fetchOpen();
+    // Poll leve de 45s, PAUSADO com a aba oculta: um único intervalo por vez
+    // (nunca dois — o guard em `start` garante), parado em document.hidden e
+    // religado ao voltar o foco, que também força uma busca imediata.
+    let intervalId: number | undefined;
+    const stop = () => {
+      if (intervalId !== undefined) {
+        window.clearInterval(intervalId);
+        intervalId = undefined;
+      }
     };
+    const start = () => {
+      if (intervalId === undefined) {
+        intervalId = window.setInterval(fetchOpen, POLL_MS);
+      }
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        fetchOpen();
+        start();
+      } else {
+        stop();
+      }
+    };
+    fetchOpen();
+    if (document.visibilityState === "visible") start();
     document.addEventListener("visibilitychange", onVisible);
     // Ao reconectar, ressincroniza: durante a queda o timer pode ter sido
     // pausado/finalizado em outro lugar.
     window.addEventListener("online", fetchOpen);
     return () => {
-      window.clearInterval(id);
+      stop();
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("online", fetchOpen);
     };

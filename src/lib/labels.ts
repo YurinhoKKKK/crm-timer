@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { createClient } from "@/lib/supabase-server";
 
 // Etiquetas de empresa (Passo 20). As tarefas HERDAM as etiquetas da empresa em
@@ -34,7 +35,12 @@ export type Label = {
 
 // Catálogo completo de etiquetas (ordenado por nome). Usado na gestão e nos
 // seletores de atribuição da empresa. Traz a marcação de calculada.
-export async function loadLabelCatalog(
+// `cache()` memoiza por REQUISIÇÃO: todas as funções de etiqueta desta tela
+// (loadAllLabelsByCompany, loadCompanyLabels, loadInUseLabels…) partilham uma
+// única leitura do catálogo em vez de uma cada. Chave = o client do Supabase, que
+// é o MESMO em toda a requisição (vem do guardRole). Entre requisições, clients
+// diferentes ⇒ sem cache velho.
+export const loadLabelCatalog = cache(async function loadLabelCatalog(
   supabase: SupabaseServer
 ): Promise<Label[]> {
   const { data } = await supabase
@@ -42,7 +48,7 @@ export async function loadLabelCatalog(
     .select("id, name, bg_color, text_color, highlight, derived_kind, derived_value")
     .order("name", { ascending: true });
   return (data as Label[]) ?? [];
-}
+});
 
 // Catálogo indexado por id — usado para juntar os label_id da view aos detalhes
 // da etiqueta (nome/cores). labels é legível por qualquer autenticado.
@@ -112,7 +118,9 @@ export async function loadLabelsByCompany(
 // O escopo NÃO é enfraquecido: a view é security_invoker e as policies das
 // tabelas de base (cl_select/cd_select/ccc_select) já restringem às empresas de
 // admin/consultor/colaborador. Quem recorta é a RLS, não o filtro da query.
-export async function loadAllLabelsByCompany(
+// Memoizada por requisição (React.cache): como a tela de Empresas também deriva
+// as etiquetas EM USO desta mesma função, a segunda chamada não relê a view.
+export const loadAllLabelsByCompany = cache(async function loadAllLabelsByCompany(
   supabase: SupabaseServer
 ): Promise<Map<string, Label[]>> {
   const map = new Map<string, Label[]>();
@@ -131,24 +139,21 @@ export async function loadAllLabelsByCompany(
   }
   map.forEach((list, key) => map.set(key, sortLabels(list)));
   return map;
-}
+});
 
 // Etiquetas EM USO por alguma empresa ALCANÇÁVEL pelo usuário — para o filtro da
-// tela de Empresas não oferecer opção que retornaria vazio. Agora inclui as
-// calculadas (ex.: TRÁFEGO) quando em uso. Escopo da RLS via view.
+// tela de Empresas não oferecer opção que retornaria vazio. Inclui as calculadas
+// (ex.: TRÁFEGO) quando em uso. DERIVADA de loadAllLabelsByCompany (não relê a
+// view): como aquela função é memoizada por requisição, quando a tela já a chamou
+// isto não custa consulta. Mesmo escopo (a view é security_invoker).
 export async function loadInUseLabels(
   supabase: SupabaseServer
 ): Promise<Label[]> {
-  const [{ data }, byId] = await Promise.all([
-    supabase.from("company_effective_labels").select("label_id"),
-    catalogById(supabase),
-  ]);
-
+  const byCompany = await loadAllLabelsByCompany(supabase);
   const seen = new Map<string, Label>();
-  for (const row of (data as { label_id: string }[]) ?? []) {
-    const l = byId.get(row.label_id);
-    if (l && !seen.has(l.id)) seen.set(l.id, l);
-  }
+  byCompany.forEach((list) => {
+    for (const l of list) if (!seen.has(l.id)) seen.set(l.id, l);
+  });
   return sortLabels(Array.from(seen.values()));
 }
 

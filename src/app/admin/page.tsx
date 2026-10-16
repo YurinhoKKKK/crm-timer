@@ -4,9 +4,8 @@ import { perfRoute } from "@/lib/perf";
 import AppShell from "@/components/AppShell";
 import type { TaskStatus } from "@/lib/types";
 import PeriodPicker from "./PeriodPicker";
-import CategoryTimeByCompanyChart, {
-  type CompanyCategoryTime,
-} from "./CategoryTimeByCompanyChart";
+import { type CompanyCategoryTime } from "./CategoryTimeByCompanyChart";
+import CategoryTimeByCompanyChartLazy from "./CategoryTimeByCompanyChartLazy";
 import { STANDARD_KEY } from "@/lib/task-category";
 import CollaboratorSummary, {
   type CollaboratorRow,
@@ -350,7 +349,7 @@ export default async function AdminPage({
             <h3 className="mb-4 text-sm font-semibold text-fg">
               Tempo por empresa
             </h3>
-            <CategoryTimeByCompanyChart
+            <CategoryTimeByCompanyChartLazy
               data={categoryChartData}
               dataWithStandard={categoryChartDataWithStandard}
               start={start}

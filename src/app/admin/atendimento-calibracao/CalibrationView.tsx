@@ -1,13 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Wrench, SlidersHorizontal, X, ChevronDown } from "lucide-react";
 import { addDays, brtToday, brtYesterday, brDate } from "@/lib/period";
 import { loadCompanyTimeline } from "./actions";
 import { CALIB_START } from "./constants";
+
+// O gráfico (recharts) do bloco "Por dia" carrega sob demanda, fora do First Load
+// JS da rota de calibração. Placeholder com a mesma altura (h-64) do gráfico, para
+// a tela não pular enquanto o chunk carrega.
+const CalibrationDailyBars = dynamic(() => import("./CalibrationDailyBars"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-64 w-full rounded-2xl border border-line bg-surface" aria-hidden="true" />
+  ),
+});
 
 // Tela de calibração do contador de atendimento. Objetivo único: a estimativa está
 // acertando? Três blocos — cartão por pessoa, gráfico por dia, e por empresa — sobre
@@ -332,22 +342,7 @@ function DailyChart({ byPerson, rows }: { byPerson: Agg[]; rows: ComparisonRow[]
     return Array.from(m.values()).sort((a, b) => a.key.localeCompare(b.key));
   }, [rows, activeId, group]);
 
-  const grid = dark ? "#2A313A" : "#E4E2DF";
-  const axis = dark ? "#9AA2AC" : "#5B636C";
   const personNames = byPerson.map((p) => p.name);
-
-  function tooltip({ active, payload, label }: { active?: boolean; payload?: { dataKey?: string; value?: number }[]; label?: string }) {
-    if (!active || !payload?.length) return null;
-    const cron = payload.find((p) => p.dataKey === "cron")?.value ?? 0;
-    const est = payload.find((p) => p.dataKey === "est")?.value ?? 0;
-    return (
-      <div className="rounded-xl border border-line bg-surface p-3 text-xs shadow-pop">
-        <p className="mb-1 font-semibold text-fg">{label}</p>
-        <p className="text-fg-muted">Cronometrado: <span className="tabular-nums text-fg">{fmtMin(cron)}</span></p>
-        <p className="text-fg-muted">Estimado fora de tarefa: <span className="tabular-nums text-fg">{fmtMin(est)}</span></p>
-      </div>
-    );
-  }
 
   return (
     <section className="rounded-2xl border border-line bg-surface p-5 shadow-card">
@@ -379,20 +374,7 @@ function DailyChart({ byPerson, rows }: { byPerson: Agg[]; rows: ComparisonRow[]
       {data.length === 0 ? (
         <p className="py-10 text-center text-sm text-fg-subtle">Nenhum atendimento no período.</p>
       ) : (
-        <div className="h-64 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={grid} vertical={false} />
-              <XAxis dataKey="label" tick={{ fill: axis, fontSize: 11 }} tickLine={false} axisLine={{ stroke: grid }} />
-              <YAxis tick={{ fill: axis, fontSize: 11 }} tickLine={false} axisLine={false} width={40}
-                label={{ value: "minutos", angle: -90, position: "insideLeft", fill: axis, fontSize: 11 }} />
-              <Tooltip cursor={{ fill: dark ? "rgba(120,140,255,0.14)" : "rgba(49,69,255,0.08)" }}
-                content={tooltip as unknown as ComponentProps<typeof Tooltip>["content"]} />
-              <Bar dataKey="cron" fill="#0ea5e9" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="est" fill="#4f46e5" radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        <CalibrationDailyBars data={data} dark={dark} />
       )}
     </section>
   );

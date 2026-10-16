@@ -12,9 +12,8 @@ import AdjustableTaskList, {
   type AdjustItem,
   type Adjustment,
 } from "./AdjustableTaskList";
-import CategoryTimeByCompanyChart, {
-  type CompanyCategoryTime,
-} from "../../CategoryTimeByCompanyChart";
+import { type CompanyCategoryTime } from "../../CategoryTimeByCompanyChart";
+import CategoryTimeByCompanyChartLazy from "../../CategoryTimeByCompanyChartLazy";
 import PeriodPicker from "../../PeriodPicker";
 import {
   resolveDashboardPeriod,
@@ -451,7 +450,7 @@ export default async function CollaboratorDetailPage({
             <h3 className="mb-4 text-sm font-semibold text-fg">
               Tempo por empresa
             </h3>
-            <CategoryTimeByCompanyChart
+            <CategoryTimeByCompanyChartLazy
               data={categoryChartData}
               dataWithStandard={categoryChartDataWithStandard}
               start={start}

@@ -248,6 +248,19 @@ export default function TaskDetailSheet({
                 </div>
               )}
 
+              {/* Cancelamento automático (rotina de expiração 0135) */}
+              {detail.status === "cancelada" && detail.autoExpiredAt && (
+                <div className="rounded-lg border border-line bg-surface-2 p-3">
+                  <p className="text-xs font-semibold text-fg-muted">
+                    Cancelamento automático
+                  </p>
+                  <p className="mt-1.5 text-sm text-fg">
+                    Expirada automaticamente em {formatDiaMes(detail.autoExpiredAt)} às
+                    11h30: tarefa padrão não finalizada até 11h30 do dia seguinte.
+                  </p>
+                </div>
+              )}
+
               {/* Listagem de marcas: o que foi pedido + o que foi entregue */}
               {detail.listing && (
                 <div>
@@ -511,5 +524,14 @@ function formatDateTime(value: string): string {
     year: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+  });
+}
+
+// DD/MM (BRT) — usado no aviso de cancelamento automático.
+function formatDiaMes(value: string): string {
+  return new Date(value).toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
   });
 }

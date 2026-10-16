@@ -72,6 +72,9 @@ export type TaskDetail = {
   // deve mostrar o toggle (tarefa elegível ao feed + cargo admin/consultor).
   clientHidden: boolean;
   canToggleClientHidden: boolean;
+  // Cancelada pela rotina de expiração automática (0135)? Timestamp (ISO) de
+  // quando ocorreu — a leitura usa para exibir o motivo. null = não foi.
+  autoExpiredAt: string | null;
 };
 
 type InstanceRow = {
@@ -227,6 +230,16 @@ export async function getTaskDetail(
   const canToggleClientHidden =
     feedEligible && (role === "admin" || role === "consultor");
 
+  // Motivo de expiração automática (0135): só para canceladas. Lido via RPC
+  // DEFINER escopada à visibilidade da tarefa (a auditoria é admin-only, então
+  // consultor/colaborador que alcançam a tarefa veem o motivo sem abri-la).
+  const autoExpiredAt =
+    task.status === "cancelada"
+      ? (((await supabase.rpc("task_auto_expired_at", { p_task: task.id })).data as
+          | string
+          | null) ?? null)
+      : null;
+
   return {
     error: null,
     detail: {
@@ -254,6 +267,7 @@ export async function getTaskDetail(
       actions,
       clientHidden: task.client_hidden,
       canToggleClientHidden,
+      autoExpiredAt,
     },
   };
 }

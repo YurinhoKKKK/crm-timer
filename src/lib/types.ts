@@ -1466,6 +1466,7 @@ export type Database = {
           description: string | null
           due_time: string | null
           end_date: string | null
+          from_standard: boolean
           id: string
           instructions: string | null
           kind: Database["public"]["Enums"]["task_kind"]
@@ -1489,6 +1490,7 @@ export type Database = {
           description?: string | null
           due_time?: string | null
           end_date?: string | null
+          from_standard?: boolean
           id?: string
           instructions?: string | null
           kind: Database["public"]["Enums"]["task_kind"]
@@ -1512,6 +1514,7 @@ export type Database = {
           description?: string | null
           due_time?: string | null
           end_date?: string | null
+          from_standard?: boolean
           id?: string
           instructions?: string | null
           kind?: Database["public"]["Enums"]["task_kind"]
@@ -2109,6 +2112,15 @@ export type Database = {
       my_unread_messages: { Args: never; Returns: number }
       my_unread_total: { Args: never; Returns: number }
       my_unread_validations: { Args: never; Returns: number }
+      expire_overdue_standard_tasks: {
+        Args: never
+        Returns: {
+          cancelled: number
+          run_id: string
+          skipped_open_timer: number
+        }[]
+      }
+      task_auto_expired_at: { Args: { p_task: string }; Returns: string }
       reorder_company_groups: { Args: { p_ids: string[] }; Returns: undefined }
       schedule_conflicts: {
         Args: {

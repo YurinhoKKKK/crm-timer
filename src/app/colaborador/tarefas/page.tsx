@@ -5,7 +5,7 @@ import TaskInstanceList, {
   type TaskInstanceItem,
 } from "@/components/TaskInstanceList";
 import type { SelectOption } from "@/components/ListControls";
-import { loadLabelsByCompany, type Label } from "@/lib/labels";
+import { loadAllLabelsByCompany, type Label } from "@/lib/labels";
 
 type Joined<T> = T | T[] | null;
 
@@ -45,7 +45,7 @@ export default async function ColaboradorTarefasPage() {
 
   // Escopo explícito ao próprio colaborador (a RLS ti_select já garante, mas
   // deixamos a query clara). Nunca vê tarefas de outros colaboradores.
-  const [openRes, closedRes, statsRes] = await Promise.all([
+  const [openRes, closedRes, statsRes, labelsMap] = await Promise.all([
     supabase
       .from("task_instances")
       .select(INSTANCE_SELECT)
@@ -61,6 +61,9 @@ export default async function ColaboradorTarefasPage() {
       .order("task_date", { ascending: false })
       .limit(CAP + 1),
     supabase.rpc("task_group_stats", { p_collaborator_id: profile.id }),
+    // Etiquetas herdadas por empresa, em LOTE, nesta MESMA onda: não depende dos
+    // company_id das tarefas, então não espera a lista (antes era um waterfall).
+    loadAllLabelsByCompany(supabase),
   ]);
 
   const error = openRes.error ?? closedRes.error;
@@ -90,11 +93,6 @@ export default async function ColaboradorTarefasPage() {
 
   const companies = dedupe(items.map((i) => [i.companyId, i.companyName]));
 
-  // Etiquetas herdadas por empresa (uma consulta em lote para toda a lista).
-  const labelsMap = await loadLabelsByCompany(
-    supabase,
-    items.map((i) => i.companyId)
-  );
   const labelsByCompany = Object.fromEntries(labelsMap) as Record<
     string,
     Label[]

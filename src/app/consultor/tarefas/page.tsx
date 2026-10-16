@@ -5,7 +5,7 @@ import TaskInstanceList, {
   type TaskInstanceItem,
 } from "@/components/TaskInstanceList";
 import type { SelectOption } from "@/components/ListControls";
-import { loadLabelsByCompany, type Label } from "@/lib/labels";
+import { loadAllLabelsByCompany, type Label } from "@/lib/labels";
 import { avatarUrl } from "@/lib/avatar";
 
 type Joined<T> = T | T[] | null;
@@ -46,7 +46,7 @@ export default async function ConsultorTarefasPage() {
   // consultor — de todos os colaboradores dessas empresas. Três leituras:
   // abertas (todas, até o teto), fechadas recentes (viram grupos) e as
   // contagens agregadas por template (banco, para os cabeçalhos dos grupos).
-  const [openRes, closedRes, statsRes] = await Promise.all([
+  const [openRes, closedRes, statsRes, labelsMap] = await Promise.all([
     supabase
       .from("task_instances")
       .select(INSTANCE_SELECT)
@@ -60,6 +60,9 @@ export default async function ConsultorTarefasPage() {
       .order("task_date", { ascending: false })
       .limit(CAP + 1),
     supabase.rpc("task_group_stats", {}),
+    // Etiquetas herdadas por empresa, em LOTE, nesta MESMA onda: não depende dos
+    // company_id das tarefas, então não espera a lista (antes era um waterfall).
+    loadAllLabelsByCompany(supabase),
   ]);
 
   const error = openRes.error ?? closedRes.error;
@@ -96,11 +99,6 @@ export default async function ConsultorTarefasPage() {
     items.map((i) => [i.collaboratorId, i.collaboratorName])
   );
 
-  // Etiquetas herdadas por empresa (uma consulta em lote para toda a lista).
-  const labelsMap = await loadLabelsByCompany(
-    supabase,
-    items.map((i) => i.companyId)
-  );
   const labelsByCompany = Object.fromEntries(labelsMap) as Record<
     string,
     Label[]

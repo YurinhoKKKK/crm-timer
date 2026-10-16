@@ -14,8 +14,11 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 // existentes DIGISAC_DOMAIN / DIGISAC_TOKEN (os mesmos do send-whatsapp).
 //
 // PRIVACIDADE: grava só metadados. Nunca texto, `data`, fromId/toId, telefone ou
-// nome de contato. text_hash = SHA-256 do texto normalizado só p/ isFromMe=true.
-// Não grava type 'ticket'/'reaction'.
+// nome de contato. Não grava type 'ticket'/'reaction'. (A etapa 2 removeu qualquer
+// leitura de texto: o antigo text_hash não existe mais.)
+//
+// PERFIL: o vínculo digisac_user -> perfil é feito no banco (gatilho por e-mail,
+// com trava p/ ligação manual). Aqui só gravamos id/nome/e-mail do usuário.
 // =====================================================================
 
 const BUDGET_MS = 100_000; // para com folga antes do limite de execução
@@ -41,23 +44,6 @@ function constantTimeEqual(a: string, b: string): boolean {
     diff |= (ba[i] ?? 0) ^ (bb[i] ?? 0);
   }
   return diff === 0;
-}
-
-function normalizeText(s: string): string {
-  return (s || "").toLowerCase().trim().replace(/\s+/g, " ");
-}
-function extractText(m: Record<string, unknown>): string {
-  const d = m?.data;
-  if (!d || typeof d !== "object") return "";
-  const parts: string[] = [];
-  for (const [k, v] of Object.entries(d as Record<string, unknown>)) {
-    if (typeof v === "string" && /text|caption|body/i.test(k)) parts.push(v);
-  }
-  return parts.join(" ");
-}
-async function sha256Hex(s: string): Promise<string> {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 function json(body: unknown, status = 200): Response {
@@ -143,13 +129,10 @@ Deno.serve(async (req) => {
   try {
     if (!domain || !token) throw new Error("DIGISAC_DOMAIN/DIGISAC_TOKEN ausentes");
 
-    // ---- 1) Usuários do Digisac (id -> nome/email -> profile por e-mail) ----
+    // ---- 1) Usuários do Digisac (id -> nome/e-mail). O vínculo com o perfil é
+    //      feito no banco (gatilho digisac_users_match por e-mail, com trava p/
+    //      ligação manual) — aqui NÃO mexemos em profile_id. ----
     {
-      const { data: profs } = await supabase.from("profiles").select("id, email");
-      const emailToProfile = new Map<string, string>();
-      for (const p of profs ?? []) {
-        if (p.email) emailToProfile.set(String(p.email).trim().toLowerCase(), p.id);
-      }
       let page = 1, last = 1;
       do {
         const r = await getWithBackoff(`${domain}/api/v1/users?perPage=100&page=${page}`, token, stats.inc);
@@ -165,7 +148,6 @@ Deno.serve(async (req) => {
               id: String(u.id),
               name: u.name ?? null,
               email: email || null,
-              profile_id: email ? emailToProfile.get(email.toLowerCase()) ?? null : null,
               updated_at: new Date().toISOString(),
             };
           });
@@ -233,11 +215,6 @@ Deno.serve(async (req) => {
           const sentMs = ts ? Date.parse(ts) : NaN;
           if (!Number.isFinite(sentMs)) continue;
 
-          let textHash: string | null = null;
-          if (m.isFromMe === true) {
-            const norm = normalizeText(extractText(m));
-            if (norm) textHash = await sha256Hex(norm);
-          }
           rows.push({
             id: String(m.id),
             contact_id: cid,
@@ -250,7 +227,6 @@ Deno.serve(async (req) => {
             origin: m.origin ?? null,
             type,
             sent_at: new Date(sentMs).toISOString(),
-            text_hash: textHash,
           });
           if (pageMaxSent === null || sentMs > pageMaxSent) pageMaxSent = sentMs;
         }

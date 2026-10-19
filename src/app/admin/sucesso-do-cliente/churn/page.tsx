@@ -24,6 +24,7 @@ type BoardRpcRow = {
   mrr: string | null;
   months_contracted: number | null;
   months_stayed: number | null;
+  paused_days: number | null;
   lost_revenue: string | null;
   cs_note_count: number | null;
 };
@@ -70,6 +71,7 @@ export default async function ControleDeChurnPage({
     mrr: r.mrr,
     monthsContracted: r.months_contracted,
     monthsStayed: r.months_stayed,
+    pausedDays: r.paused_days ?? 0,
     lostRevenue: r.lost_revenue,
     csNoteCount: r.cs_note_count ?? 0,
   }));

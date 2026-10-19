@@ -10,6 +10,7 @@ export const TASK_CATEGORIES: { value: TaskCategory; label: string }[] = [
   { value: "cadastro", label: "Cadastro" },
   { value: "precificacao", label: "Precificação" },
   { value: "anuncio", label: "Anúncio" },
+  { value: "ads", label: "ADS" },
   { value: "estudo", label: "Estudo" },
   { value: "listagem", label: "Listagem" },
   { value: "integracao", label: "Integração" },
@@ -45,6 +46,8 @@ const CATEGORY_COLORS: Record<TaskCategory, { light: string; dark: string }> = {
   cadastro: { light: "#3145FF", dark: "#8090FF" },
   precificacao: { light: "#0E9F6E", dark: "#34D399" },
   anuncio: { light: "#EA580C", dark: "#FB923C" },
+  // Vermelho — cor própria, distinta das demais categorias nos dois temas.
+  ads: { light: "#DC2626", dark: "#F87171" },
   estudo: { light: "#9333EA", dark: "#C084FC" },
   listagem: { light: "#0891B2", dark: "#22D3EE" },
   integracao: { light: "#B45309", dark: "#FBBF24" },

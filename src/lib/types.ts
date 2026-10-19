@@ -329,6 +329,7 @@ export type Database = {
           created_by: string | null
           id: string
           name: string
+          pauses_contract: boolean
           position: number
         }
         Insert: {
@@ -338,6 +339,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           name: string
+          pauses_contract?: boolean
           position: number
         }
         Update: {
@@ -347,6 +349,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           name?: string
+          pauses_contract?: boolean
           position?: number
         }
         Relationships: [
@@ -355,6 +358,50 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      company_pause_periods: {
+        Row: {
+          id: string
+          company_id: string
+          started_on: string | null
+          ended_on: string | null
+          source: string
+          created_at: string
+          created_by: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          id?: string
+          company_id: string
+          started_on?: string | null
+          ended_on?: string | null
+          source: string
+          created_at?: string
+          created_by?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          id?: string
+          company_id?: string
+          started_on?: string | null
+          ended_on?: string | null
+          source?: string
+          created_at?: string
+          created_by?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_pause_periods_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]
@@ -1696,6 +1743,10 @@ export type Database = {
         Args: { p_company_id: string; p_status: string | null }
         Returns: undefined
       }
+      cs_set_company_label: {
+        Args: { p_company_id: string; p_label_id: string; p_on: boolean }
+        Returns: undefined
+      }
       cs_set_meeting_on: {
         Args: { p_company_id: string; p_date: string | null }
         Returns: undefined
@@ -2121,6 +2172,10 @@ export type Database = {
         }[]
       }
       task_auto_expired_at: { Args: { p_task: string }; Returns: string }
+      pause_period_set_dates: {
+        Args: { p_id: string; p_started: string | null; p_ended: string | null }
+        Returns: undefined
+      }
       reorder_company_groups: { Args: { p_ids: string[] }; Returns: undefined }
       schedule_conflicts: {
         Args: {
@@ -2241,6 +2296,7 @@ export type Database = {
         | "cadastro"
         | "precificacao"
         | "anuncio"
+        | "ads"
         | "estudo"
         | "listagem"
         | "integracao"
@@ -2397,6 +2453,7 @@ export const Constants = {
         "cadastro",
         "precificacao",
         "anuncio",
+        "ads",
         "estudo",
         "listagem",
         "integracao",

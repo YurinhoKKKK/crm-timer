@@ -6,6 +6,7 @@ import {
   formatPureDate,
   todayBRT,
 } from "@/lib/company-details";
+import { shiftIso } from "@/lib/date-picker";
 
 // Barra visual do período do contrato — MESMO componente na lista de empresas
 // (compact) e no cabeçalho da página da empresa. No espírito da coluna Timeline
@@ -19,14 +20,25 @@ import {
 const dayWord = (n: number) => (Math.abs(n) === 1 ? "dia" : "dias");
 
 // Texto do tooltip (detalhe completo): início, fim, total e restante/encerrado.
-function buildTitle(startedOn: string, endsOn: string): string {
-  const info = computePeriodInfo(startedOn, endsOn, todayBRT());
+// `effEnd` é o fim EFETIVO (com a pausa somada); quando há pausa, mostra também o
+// fim contratado e os dias pausados.
+function buildTitle(
+  startedOn: string,
+  effEnd: string,
+  originalEnd: string,
+  pausedDays: number
+): string {
+  const info = computePeriodInfo(startedOn, effEnd, todayBRT());
   if (info.state !== "full") return "";
-  const parts = [
-    `Início: ${formatPureDate(info.startedOn)}`,
-    `Fim: ${formatPureDate(info.endsOn)}`,
-    `${info.totalDays} ${dayWord(info.totalDays)} no total`,
-  ];
+  const parts = [`Início: ${formatPureDate(info.startedOn)}`];
+  if (pausedDays > 0) {
+    parts.push(`Fim efetivo: ${formatPureDate(info.endsOn)}`);
+    parts.push(`Contratado: ${formatPureDate(originalEnd)}`);
+    parts.push(`+${pausedDays} ${dayWord(pausedDays)} de pausa`);
+  } else {
+    parts.push(`Fim: ${formatPureDate(info.endsOn)}`);
+  }
+  parts.push(`${info.totalDays} ${dayWord(info.totalDays)} no total`);
   if (info.ended) parts.push("Encerrado");
   else if (info.remaining === 0) parts.push("Encerra hoje");
   else parts.push(`Faltam ${info.remaining} ${dayWord(info.remaining)}`);
@@ -42,15 +54,25 @@ export default function ContractBar({
   // opcional ("12 meses") + o texto de dias: "12 meses · faltam 364 dias".
   board = false,
   prefix,
+  // Dias pausados (contrato em pausa). Quando > 0 e há endsOn, a barra passa a
+  // refletir o FIM EFETIVO (endsOn + pausa); o tooltip mostra contratado + pausa.
+  pausedDays = 0,
 }: {
   startedOn: string | null;
   endsOn: string | null;
   compact?: boolean;
   board?: boolean;
   prefix?: string;
+  pausedDays?: number;
 }) {
-  const bar = computeContractBar(startedOn, endsOn, todayBRT());
+  const effEnd =
+    endsOn && pausedDays > 0 ? shiftIso(endsOn, pausedDays) : endsOn;
+  const bar = computeContractBar(startedOn, effEnd, todayBRT());
   if (!bar) return null;
+  const title =
+    startedOn && effEnd
+      ? buildTitle(startedOn, effEnd, endsOn as string, pausedDays)
+      : "";
 
   let percent = 0;
   let fillClass = "bg-risd";
@@ -88,7 +110,7 @@ export default function ContractBar({
   // "Contrato", sem quebra).
   if (board) {
     return (
-      <div title={buildTitle(startedOn as string, endsOn as string)} className="min-w-0">
+      <div title={title} className="min-w-0">
         <div
           className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2"
           role="progressbar"
@@ -111,7 +133,7 @@ export default function ContractBar({
 
   return (
     <div
-      title={buildTitle(startedOn as string, endsOn as string)}
+      title={title}
       className={compact ? "max-w-[240px]" : "max-w-sm"}
     >
       <div className={`mb-1 flex items-center justify-between gap-2 ${labelSize}`}>

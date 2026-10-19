@@ -171,7 +171,11 @@ export default function CompanyCentral({
               systemLabel="Cadastrada"
             />
             {/* Barra do período do contrato — só aparece com as duas datas. */}
-            <ContractBar startedOn={company.startedOn} endsOn={company.endsOn} />
+            <ContractBar
+              startedOn={company.startedOn}
+              endsOn={company.endsOn}
+              pausedDays={company.pausedDays}
+            />
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
             <Link href={infoHref} className={btnSecondary}>

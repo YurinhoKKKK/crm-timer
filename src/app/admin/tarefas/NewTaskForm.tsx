@@ -7,6 +7,7 @@ import type { TaskCategory } from "@/lib/types";
 import { TASK_CATEGORIES } from "@/lib/task-category";
 import Combobox from "@/components/Combobox";
 import { DateField } from "@/components/DateField";
+import { todayBRT, shiftIso } from "@/lib/date-picker";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import PausedCompanyBanner from "@/components/company-groups/PausedCompanyBanner";
 import ListingFields, {
@@ -68,8 +69,9 @@ export default function NewTaskForm({
   // Quando definido, a empresa vem pré-selecionada e travada (uso dentro da
   // tela de detalhe da empresa). O usuário não escolhe a empresa.
   lockedCompany?: Option;
-  // Só o admin escolhe o tipo (única/diária). Consultor: o campo não aparece e
-  // a tarefa nasce ÚNICA (o servidor também garante isso).
+  // Admin: pode designar QUALQUER colaborador (mesmo fora da carteira) e vê o
+  // aviso "fora da carteira". Consultor: só os responsáveis da empresa. NÃO
+  // controla mais o campo Tipo — admin e consultor escolhem única/diária.
   isAdmin?: boolean;
 }) {
   const router = useRouter();
@@ -128,6 +130,9 @@ export default function NewTaskForm({
   // Pontual quando: listagem (sempre), ou tipo "única" (consultor sempre cai
   // aqui, pois o campo de tipo nem aparece).
   const isPunctual = isListing || kind === "unica";
+  // "Encerra em" (diária) é OBRIGATÓRIO na criação e só aceita datas FUTURAS (a
+  // partir de amanhã, BRT) — nunca hoje nem passado.
+  const minEndDate = shiftIso(todayBRT(), 1);
 
   function reset() {
     setCategory("");
@@ -162,10 +167,28 @@ export default function NewTaskForm({
       setError("Selecione a categoria da tarefa.");
       return;
     }
+    // Descrição obrigatória ao CRIAR (espaços em branco não contam). O servidor
+    // também valida (validateTemplateInput). Vale para toda categoria.
+    if (!description.trim()) {
+      setError("Informe a descrição da tarefa.");
+      return;
+    }
     // O seletor de data do projeto não valida no navegador — garantimos aqui.
     if (isPunctual && !startDate.trim()) {
       setError("Informe a data da tarefa.");
       return;
+    }
+    // Diária: "Encerra em" é obrigatório e precisa ser futuro (a partir de
+    // amanhã). O servidor reforça (validateTemplateInput).
+    if (!isPunctual) {
+      if (!endDate.trim()) {
+        setError("Informe a data em que a tarefa diária encerra.");
+        return;
+      }
+      if (endDate < minEndDate) {
+        setError("A data de encerramento deve ser futura (a partir de amanhã).");
+        return;
+      }
     }
     // Cliente em grupo PARADO: confirma antes de criar (só aviso, nada bloqueia).
     // A validação já passou, então o diálogo não reaparece por erro de preenchimento.
@@ -188,8 +211,9 @@ export default function NewTaskForm({
         instructions,
         companyId,
         collaboratorId,
-        // Só o admin gera diária; o servidor reforça (consultor → única).
-        kind: isAdmin && !isListing && kind === "diaria" ? "diaria" : "unica",
+        // Admin e consultor escolhem única/diária; listagem é sempre pontual. O
+        // servidor (validateTemplateInput) e o trigger do banco reforçam.
+        kind: !isListing && kind === "diaria" ? "diaria" : "unica",
         startDate,
         dueTime,
         weekdays: Array.from(weekdays),
@@ -275,7 +299,10 @@ export default function NewTaskForm({
           <>
             <div>
               <label htmlFor="task-description" className={labelClass}>
-                Descrição <span className={hintClass}>(opcional)</span>
+                Descrição{" "}
+                <span className="text-red-600 dark:text-red-400" aria-hidden="true">
+                  *
+                </span>
               </label>
               <textarea
                 id="task-description"
@@ -379,8 +406,8 @@ export default function NewTaskForm({
             </div>
           </div>
 
-          {/* Tipo (única/diária) — só admin, e não se aplica a Listagem. */}
-          {isAdmin && !isListing && (
+          {/* Tipo (única/diária) — admin e consultor; não se aplica a Listagem. */}
+          {!isListing && (
             <fieldset>
               <legend className={labelClass}>Tipo</legend>
               <div className="flex flex-wrap gap-2">
@@ -407,11 +434,11 @@ export default function NewTaskForm({
           {isPunctual ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className={labelClass}>Data</label>
+                <label className={labelClass}>Prazo de entrega</label>
                 <DateField
                   value={startDate}
                   onChange={setStartDate}
-                  ariaLabel="Data da tarefa"
+                  ariaLabel="Prazo de entrega da tarefa"
                 />
               </div>
               <div>
@@ -463,12 +490,16 @@ export default function NewTaskForm({
                 </div>
                 <div>
                   <label className={labelClass}>
-                    Encerra em <span className={hintClass}>(opcional)</span>
+                    Encerra em{" "}
+                    <span className="text-red-600 dark:text-red-400" aria-hidden="true">
+                      *
+                    </span>
                   </label>
                   <DateField
                     value={endDate}
                     onChange={setEndDate}
                     ariaLabel="Data em que a tarefa diária encerra"
+                    minIso={minEndDate}
                   />
                 </div>
               </div>

@@ -11,6 +11,7 @@ import type {
   TablesInsert,
 } from "@/lib/types";
 import { CATEGORY_LABEL } from "@/lib/task-category";
+import { todayBRT, isValidIso } from "@/lib/date-picker";
 import {
   applyCompanyStandards,
   type CompanyStandardAssignment,
@@ -20,6 +21,7 @@ const VALID_CATEGORIES: TaskCategory[] = [
   "cadastro",
   "precificacao",
   "anuncio",
+  "ads",
   "estudo",
   "listagem",
   "integracao",
@@ -576,11 +578,13 @@ type TemplateFields = {
   listing_marketplaces: ListingMarketplace[];
 };
 
-// Contexto que a validação precisa além do input: o cargo (define o tipo
-// permitido) e, na EDIÇÃO, os campos preservados do molde existente (categoria,
-// título, template_type e kind NÃO são recategorizados/trocados na edição).
+// Contexto que a validação precisa além do input: se o cargo pode escolher o
+// TIPO (admin e consultor) e, na EDIÇÃO, os campos preservados do molde existente
+// (categoria, título, template_type e kind NÃO são recategorizados na edição).
 type ValidateCtx = {
-  isAdmin: boolean;
+  // Admin e consultor escolhem única/diária; os demais criam sempre 'unica'. A
+  // empresa segue restrita pela RLS (tt_insert) e o trigger do banco reforça.
+  canChooseKind: boolean;
   existing?: {
     category: TaskCategory | null;
     title: string;
@@ -612,6 +616,12 @@ function validateTemplateInput(
   if (!input.collaboratorId) return { error: "Selecione o colaborador." };
 
   const isUpdate = !!ctx.existing;
+
+  // Descrição obrigatória ao CRIAR (qualquer categoria). Na EDIÇÃO não se exige
+  // — tarefas antigas podem não ter descrição. Espaços em branco não contam.
+  if (!isUpdate && normalize(input.description) === null) {
+    return { error: "Informe a descrição da tarefa." };
+  }
 
   // Categoria efetiva: na edição preserva a do molde; na criação vem do input
   // e é obrigatória.
@@ -692,10 +702,11 @@ function validateTemplateInput(
   }
 
   // ---- Tarefa comum (única/diária) ---------------------------------------
-  // TIPO: só o admin escolhe. Consultor cria 'unica'; ao editar, preserva o que
-  // já era. Aplicado NO SERVIDOR — não há caminho para consultor gerar diária.
+  // TIPO: admin e consultor escolhem (consultor só nas empresas dele, pela RLS).
+  // Os demais cargos criam 'unica' e, ao editar, preservam o que já era. Aplicado
+  // NO SERVIDOR; o trigger enforce_task_kind_admin_only reforça no banco.
   let kind: TaskKind;
-  if (ctx.isAdmin) {
+  if (ctx.canChooseKind) {
     if (input.kind !== "unica" && input.kind !== "diaria") {
       return { error: "Tipo de tarefa inválido." };
     }
@@ -714,6 +725,21 @@ function validateTemplateInput(
   }
   if (weekdays.some((d) => d < 0 || d > 6)) {
     return { error: "Dia da semana inválido." };
+  }
+
+  // Diária: "Encerra em" é OBRIGATÓRIO e FUTURO (a partir de amanhã) na CRIAÇÃO.
+  // Na edição não se exige — diárias antigas podem ter end_date vazio ou já no
+  // passado e precisam continuar editáveis.
+  if (!isUpdate && kind === "diaria") {
+    const end = normalize(input.endDate);
+    if (!end) {
+      return { error: "Informe a data em que a tarefa diária encerra." };
+    }
+    if (!isValidIso(end) || end <= todayBRT()) {
+      return {
+        error: "A data de encerramento deve ser futura (a partir de amanhã).",
+      };
+    }
   }
 
   const fields: TemplateFields = {
@@ -754,10 +780,12 @@ export async function createTaskTemplate(
     return { error: "Sessão expirada. Faça login novamente." };
   }
 
-  // O cargo decide o TIPO permitido (consultor só cria 'unica'). Fronteira no
-  // servidor — o formulário só esconde o campo.
-  const isAdmin = (await currentRole(supabase, user.id)) === "admin";
-  const result = validateTemplateInput(input, { isAdmin });
+  // O cargo decide o TIPO permitido (admin e consultor escolhem única/diária;
+  // os demais criam 'unica'). Fronteira no servidor; o trigger do banco reforça.
+  const role = await currentRole(supabase, user.id);
+  const isAdmin = role === "admin";
+  const canChooseKind = role === "admin" || role === "consultor";
+  const result = validateTemplateInput(input, { canChooseKind });
   if ("error" in result) {
     return { error: result.error };
   }
@@ -855,8 +883,10 @@ export async function updateTaskTemplate(
     collaborator_id: string;
   };
 
-  const isAdmin = (await currentRole(supabase, user.id)) === "admin";
-  const result = validateTemplateInput(input, { isAdmin, existing });
+  const role = await currentRole(supabase, user.id);
+  const isAdmin = role === "admin";
+  const canChooseKind = role === "admin" || role === "consultor";
+  const result = validateTemplateInput(input, { canChooseKind, existing });
   if ("error" in result) {
     return { error: result.error };
   }

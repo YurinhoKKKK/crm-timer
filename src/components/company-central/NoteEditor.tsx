@@ -50,6 +50,7 @@ import {
 import { createClient } from "@/lib/supabase-browser";
 import { btnPrimary, btnSecondary, inputClass } from "@/lib/ui";
 import { formatBytes } from "@/lib/format";
+import { ATTACHMENT_ACCEPT, checkAttachment } from "@/lib/attachments";
 import type { NoteAttachmentMeta } from "@/lib/notes";
 import type { NoteArea } from "@/lib/types";
 import { NOTE_AREAS, NOTE_AREA_COLORS, NOTE_AREA_LOCKED_TITLE } from "@/lib/note-areas";
@@ -59,7 +60,6 @@ import { buildMentionSuggestion } from "./mention-suggestion";
 import { ResizableImage } from "./resizable-image";
 
 const MAX_IMAGE_MB = 5;
-const MAX_DOC_MB = 20;
 
 // Onde os anexos deste editor vivem. Atualizações normais: buckets PÚBLICOS
 // (note-images/note-files) com URL pública. Atualizações do CS: bucket PRIVADO
@@ -81,9 +81,9 @@ const DEFAULT_STORAGE: EditorStorage = {
 // persiste). ~10 anos.
 const SIGNED_IMAGE_TTL = 315360000;
 
-// Formatos de documento aceitos como anexo (além das imagens, que vão inline).
-const DOC_EXTS = ["pdf", "doc", "docx", "xls", "xlsx", "csv", "txt"];
-const DOC_ACCEPT = DOC_EXTS.map((e) => `.${e}`).join(",");
+// Os formatos aceitos como anexo (documentos, áudio e comprimidos, além das
+// imagens que vão inline), o `accept` do input e a validação de tipo/tamanho
+// vivem em @/lib/attachments (fonte única com a exibição).
 
 // Paletas discretas, coerentes com a marca (risd como primeiro acento).
 const TEXT_COLORS = [
@@ -388,20 +388,16 @@ export default function NoteEditor({
     }
   }
 
-  // Anexa um documento: valida formato/tamanho, sobe no bucket note-files e
-  // adiciona aos metadados da anotação (gravados no salvar).
+  // Anexa um arquivo (documento, áudio ou comprimido): valida tipo/tamanho (por
+  // extensão + MIME tolerante), sobe no bucket de arquivos e adiciona aos
+  // metadados da anotação (gravados no salvar).
   async function uploadAttachment(file: File) {
+    const check = checkAttachment(file);
+    if (!check.ok) {
+      setImgError(check.message);
+      return;
+    }
     const ext = (file.name.split(".").pop() || "").toLowerCase();
-    if (!DOC_EXTS.includes(ext)) {
-      setImgError(
-        `Formato não suportado. Aceitos: ${DOC_EXTS.join(", ").toUpperCase()}.`
-      );
-      return;
-    }
-    if (file.size > MAX_DOC_MB * 1024 * 1024) {
-      setImgError(`O documento deve ter no máximo ${MAX_DOC_MB} MB.`);
-      return;
-    }
     setUploading((n) => n + 1);
     try {
       const supabase = createClient();
@@ -901,14 +897,14 @@ export default function NoteEditor({
         <TBtn
           onClick={() => docRef.current?.click()}
           disabled={uploading > 0}
-          label={`Anexar documento (${DOC_EXTS.join(", ").toUpperCase()})`}
+          label="Anexar arquivo (documentos, áudio ou .zip/.rar/.7z)"
         >
           <Paperclip size={16} />
         </TBtn>
         <input
           ref={docRef}
           type="file"
-          accept={DOC_ACCEPT}
+          accept={ATTACHMENT_ACCEPT}
           multiple
           className="hidden"
           onChange={(e) => {

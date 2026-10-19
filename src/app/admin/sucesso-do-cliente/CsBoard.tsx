@@ -27,6 +27,7 @@ import {
   setMeetingOn,
   setPersonNps,
   setContractValues,
+  setCompanyLabel,
 } from "./actions";
 import CsHistoryPanel from "./CsHistoryPanel";
 import NotesButton from "@/components/notes-panel/NotesButton";
@@ -57,7 +58,17 @@ export type CsRow = {
   meetingOn: string | null; // 'AAAA-MM-DD' | null
   responsibles: Responsible[];
   csNoteCount: number; // Atualizações do CS (tabelas próprias, admin-only).
+  // Etiquetas ALERTA/RISCO (manuais) — editáveis aqui; refletem em Empresas.
+  alerta: boolean;
+  risco: boolean;
+  // Pausa de contrato: fim EFETIVO (ends_on + dias pausados), dias pausados e se
+  // o período aberto está sem data de entrada.
+  effectiveEnd: string | null; // 'AAAA-MM-DD' | null
+  pausedDays: number;
+  pauseNoDate: boolean;
 };
+
+type LabelKey = "alerta" | "risco";
 
 const COLLAPSE_KEY = "crm:cs:grupos-recolhidos";
 
@@ -149,6 +160,10 @@ type CellCtx = {
     total: string | null,
     monthly: string | null
   ) => void;
+  setLabel: (row: CsRow, which: LabelKey, on: boolean) => void;
+  // ids das etiquetas ALERTA/RISCO (null = catálogo sem a etiqueta → toggle off).
+  alertaId: string | null;
+  riscoId: string | null;
   openHistory: (row: CsRow) => void;
 };
 
@@ -343,6 +358,62 @@ function MeetingCell({ row, ctx }: { row: CsRow; ctx: CellCtx }) {
   );
 }
 
+// Toggle de uma etiqueta de alerta (ALERTA/RISCO): aceso = vermelho preenchido,
+// apagado = contorno. O texto vai SEMPRE junto (nunca só a cor).
+function LabelToggle({
+  label,
+  on,
+  disabled,
+  onToggle,
+}: {
+  label: string;
+  on: boolean;
+  disabled?: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={disabled}
+      aria-pressed={on}
+      title={
+        disabled
+          ? `Etiqueta "${label}" indisponível no catálogo`
+          : on
+            ? `Remover ${label}`
+            : `Adicionar ${label}`
+      }
+      className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd disabled:cursor-not-allowed disabled:opacity-40 ${
+        on
+          ? "border-transparent bg-red-700 text-white shadow-sm"
+          : "border-line text-fg-subtle hover:border-red-600/50 hover:text-red-700 dark:hover:text-red-300"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function LabelsCell({ row, ctx }: { row: CsRow; ctx: CellCtx }) {
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-1">
+      <LabelToggle
+        label="ALERTA"
+        on={row.alerta}
+        disabled={!ctx.alertaId}
+        onToggle={() => ctx.setLabel(row, "alerta", !row.alerta)}
+      />
+      <LabelToggle
+        label="RISCO"
+        on={row.risco}
+        disabled={!ctx.riscoId}
+        onToggle={() => ctx.setLabel(row, "risco", !row.risco)}
+      />
+    </div>
+  );
+}
+
 // --- Colunas (fonte única; ordem final da fatia 2) -------------------------- //
 
 type CsColumn = BoardColumn<CsRow, CellCtx>;
@@ -371,6 +442,13 @@ const COLUMNS: CsColumn[] = [
     width: "170px",
     align: "center",
     cell: (row, ctx) => <NpsGeralCell row={row} ctx={ctx} />,
+  },
+  {
+    id: "labels",
+    label: "Etiquetas",
+    width: "150px",
+    align: "center",
+    cell: (row, ctx) => <LabelsCell row={row} ctx={ctx} />,
   },
   {
     id: "started",
@@ -404,21 +482,36 @@ const COLUMNS: CsColumn[] = [
   {
     id: "time",
     label: "Tempo de Projeto",
-    width: "170px",
+    width: "190px",
     align: "center",
-    // Somente leitura no CS — deriva do período, editável em "Editar empresa".
+    // Somente leitura no CS — duração CONTRATADA (deriva do período). Com pausa,
+    // mostra o FIM EFETIVO abaixo ("Fim: DD/MM, +N dias de pausa"); período aberto
+    // sem data vira um aviso discreto.
     cell: (row) => (
-      <span
-        className={row.monthsTotal != null ? "text-fg" : "text-fg-subtle"}
-        title="Editável em Editar empresa > Informações do cliente."
-      >
-        {formatProjectTime(row.monthsTotal, row.periodDays)}
-      </span>
+      <div className="flex flex-col items-center gap-0.5">
+        <span
+          className={row.monthsTotal != null ? "text-fg" : "text-fg-subtle"}
+          title="Editável em Editar empresa > Informações do cliente."
+        >
+          {formatProjectTime(row.monthsTotal, row.periodDays)}
+        </span>
+        {row.pausedDays > 0 && row.effectiveEnd && (
+          <span className="text-[11px] text-amber-700 dark:text-amber-400">
+            Fim: {formatDateBR(row.effectiveEnd)} · +{row.pausedDays}{" "}
+            {row.pausedDays === 1 ? "dia" : "dias"} de pausa
+          </span>
+        )}
+        {row.pauseNoDate && (
+          <span className="text-[11px] text-fg-subtle" title="Defina a data em Editar empresa > Informações do cliente.">
+            Pausa sem data de entrada
+          </span>
+        )}
+      </div>
     ),
   },
 ];
 
-const MIN_WIDTH = 1280;
+const MIN_WIDTH = 1450;
 
 // Editor do Valor Mensal: parcelas + alternância total/mensal + prévia. Converte
 // o BR para decimal em texto (sem float) e delega ao onSubmit (que chama a RPC).
@@ -620,10 +713,14 @@ export default function CsBoard({
   companies,
   groups,
   userId,
+  alertaId,
+  riscoId,
 }: {
   companies: CsRow[];
   groups: CompanyGroup[];
   userId: string;
+  alertaId: string | null;
+  riscoId: string | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -734,6 +831,19 @@ export default function CsBoard({
     }
   }
 
+  async function doSetLabel(row: CsRow, which: LabelKey, on: boolean) {
+    const labelId = which === "alerta" ? alertaId : riscoId;
+    if (!labelId || row[which] === on) return;
+    const snapshot = rows;
+    setNotice(null);
+    setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, [which]: on } : r)));
+    const res = await setCompanyLabel(row.id, labelId, on);
+    if (res.error) {
+      setRows(snapshot);
+      setNotice(res.error);
+    }
+  }
+
   const [search, setSearch] = useState("");
   const filtersActive = !!search.trim();
 
@@ -779,6 +889,9 @@ export default function CsBoard({
     setPersonNps: doSetPersonNps,
     setMeeting: doSetMeeting,
     setContract: doSetContract,
+    setLabel: doSetLabel,
+    alertaId,
+    riscoId,
     openHistory: setHistory,
   };
 

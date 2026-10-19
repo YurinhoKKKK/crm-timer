@@ -4,6 +4,7 @@ import { formatDuration } from "@/lib/format";
 import { avatarUrl } from "@/lib/avatar";
 import { withSelf } from "@/lib/people";
 import { loadCompanyLabels, type Label } from "@/lib/labels";
+import { loadPausedDaysByCompany } from "@/lib/company-pause";
 import type { GroupStats } from "@/lib/task-grouping";
 import type {
   ClientAccessAuditEntry,
@@ -62,6 +63,9 @@ export type CentralCompany = {
   // Nome do grupo quando a empresa está num grupo PARADO (kind='paused'); null
   // caso contrário. Alimenta a faixa discreta de "cliente parado" na central.
   pausedGroupName: string | null;
+  // Dias pausados (contrato) até hoje — alimenta o fim efetivo na barra do
+  // cabeçalho. 0 quando não há pausa.
+  pausedDays: number;
 };
 
 export type CentralPerson = { name: string; avatarUrl: string | null };
@@ -326,6 +330,9 @@ export async function loadCompanyCentral(
   const groupRow = first(company.group);
   const pausedGroupName =
     groupRow?.kind === "paused" ? groupRow.name : null;
+  // Dias pausados do contrato (fim efetivo na barra do cabeçalho).
+  const pausedDays =
+    (await loadPausedDaysByCompany(supabase, [companyId])).get(companyId) ?? 0;
 
   if (overviewError) return { notFound: false, error: overviewError.message };
   const tasksError = openError ?? closedError;
@@ -527,6 +534,7 @@ export async function loadCompanyCentral(
         startedOn: details?.started_on ?? null,
         endsOn: details?.ends_on ?? null,
         pausedGroupName,
+        pausedDays,
       },
       consultants,
       overview,

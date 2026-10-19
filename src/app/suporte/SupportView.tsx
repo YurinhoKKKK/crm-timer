@@ -15,14 +15,12 @@ import { createPortal } from "react-dom";
 import {
   ChevronDown,
   ChevronRight,
-  FileSpreadsheet,
-  FileText,
   MessageSquare,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase-browser";
-import { formatBytes } from "@/lib/format";
-import type { NoteAttachmentMeta, NoteAttachmentView } from "@/lib/notes";
+import type { NoteAttachmentMeta } from "@/lib/notes";
 import Avatar from "@/components/Avatar";
+import AttachmentList from "@/components/rich-text/Attachments";
 import Combobox from "@/components/Combobox";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import Lightbox from "@/components/Lightbox";
@@ -84,41 +82,6 @@ function formatDateTime(iso: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function AttachmentIcon({ name }: { name: string }) {
-  const ext = (name.split(".").pop() || "").toLowerCase();
-  if (["xls", "xlsx", "csv"].includes(ext)) {
-    return <FileSpreadsheet size={15} className="shrink-0 text-fg-muted" />;
-  }
-  return <FileText size={15} className="shrink-0 text-fg-muted" />;
-}
-
-// Anexos (note-files) do contexto do chamado ou de uma resposta: abrem/baixam
-// em nova aba, com ícone por tipo e tamanho.
-function AttachmentList({ items }: { items: NoteAttachmentView[] }) {
-  if (items.length === 0) return null;
-  return (
-    <ul className="flex flex-wrap gap-2">
-      {items.map((a) => (
-        <li key={a.path} className="max-w-full">
-          <a
-            href={a.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            title={`Abrir/baixar ${a.name}`}
-            className="flex items-center gap-2 rounded-lg border border-line bg-surface-2 px-2.5 py-1.5 text-sm text-fg transition hover:border-risd/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
-          >
-            <AttachmentIcon name={a.name} />
-            <span className="min-w-0 truncate">{a.name}</span>
-            <span className="shrink-0 text-xs text-fg-subtle">
-              {formatBytes(a.size)}
-            </span>
-          </a>
-        </li>
-      ))}
-    </ul>
-  );
 }
 
 // Chip colorido com o texto SEMPRE junto da cor (nunca a cor sozinha).
@@ -725,7 +688,10 @@ function DetailModal({
 
         {ticket.attachments.length > 0 && (
           <div className="border-t border-line pt-4">
-            <AttachmentList items={ticket.attachments} />
+            <AttachmentList
+              items={ticket.attachments}
+              className="flex flex-wrap gap-2"
+            />
           </div>
         )}
 

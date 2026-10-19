@@ -45,6 +45,9 @@ export type ChurnRow = {
   mrr: string | null; // decimal em texto "digits.dd" | null
   monthsContracted: number | null;
   monthsStayed: number | null;
+  // Dias pausados até o churn (Permanência já DESCONTA esses dias). Exibido ao
+  // lado como "+N dias pausado" quando > 0.
+  pausedDays: number;
   lostRevenue: string | null; // decimal em texto (cancelados calculáveis) | null
   csNoteCount: number; // Atualizações do CS da empresa (balão), vindo do churn_board.
 };
@@ -525,13 +528,23 @@ const COLUMNS: ChurnColumn[] = [
     id: "permanecido",
     label: "Permanência",
     labelTitle: "Tempo Permanecido",
-    width: "100px",
+    width: "120px",
     align: "center",
     cell: (row) =>
       row.monthsStayed != null ? (
-        <span className="whitespace-nowrap text-fg" title="Meses completos entre a entrada e o churn.">
-          {monthsLabel(row.monthsStayed)}
-        </span>
+        <div className="flex flex-col items-center gap-0.5">
+          <span
+            className="whitespace-nowrap text-fg"
+            title="Meses ativos entre a entrada e o churn, descontados os dias pausados."
+          >
+            {monthsLabel(row.monthsStayed)}
+          </span>
+          {row.pausedDays > 0 && (
+            <span className="whitespace-nowrap text-[11px] text-amber-700 dark:text-amber-400">
+              +{row.pausedDays} {row.pausedDays === 1 ? "dia" : "dias"} pausado
+            </span>
+          )}
+        </div>
       ) : (
         <span className="text-fg-subtle" title="Tempo Permanecido: não informado (sem entrada ou sem data).">
           —

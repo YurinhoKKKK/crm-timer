@@ -312,11 +312,11 @@ export default function TaskEditor({
       {isPunctual ? (
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className={labelClass}>Data</label>
+            <label className={labelClass}>Prazo de entrega</label>
             <DateField
               value={startDate}
               onChange={setStartDate}
-              ariaLabel="Data da tarefa"
+              ariaLabel="Prazo de entrega da tarefa"
             />
           </div>
           <div>

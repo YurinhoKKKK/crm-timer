@@ -256,7 +256,7 @@ export default function TaskDetailSheet({
                   </p>
                   <p className="mt-1.5 text-sm text-fg">
                     Expirada automaticamente em {formatDiaMes(detail.autoExpiredAt)} às
-                    11h30: tarefa padrão não finalizada até 11h30 do dia seguinte.
+                    11h30: tarefa padrão não finalizada até 11h30 do próximo dia útil.
                   </p>
                 </div>
               )}

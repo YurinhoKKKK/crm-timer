@@ -3,6 +3,7 @@ import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import CompanyDetailsView from "@/components/company-central/CompanyDetailsView";
 import { loadCompanyDetails } from "@/lib/company-details";
+import { loadCompanyPauseInfo } from "@/lib/company-pause";
 
 // Informações do cliente — página própria da empresa. Admin EDITA.
 export default async function AdminCompanyInfoPage({
@@ -12,9 +13,10 @@ export default async function AdminCompanyInfoPage({
 }) {
   const { supabase, profile } = await guardRole(["admin"]);
 
-  const [{ data: company }, details] = await Promise.all([
+  const [{ data: company }, details, pauseInfo] = await Promise.all([
     supabase.from("companies").select("id, name").eq("id", params.id).maybeSingle(),
     loadCompanyDetails(supabase, params.id),
+    loadCompanyPauseInfo(supabase, params.id),
   ]);
   if (!company) notFound();
 
@@ -24,7 +26,12 @@ export default async function AdminCompanyInfoPage({
       title={(company as { name: string }).name}
       back={{ href: `/admin/empresas/${params.id}`, label: "Empresa" }}
     >
-      <CompanyDetailsView companyId={params.id} initial={details} canEdit />
+      <CompanyDetailsView
+        companyId={params.id}
+        initial={details}
+        canEdit
+        pauseInfo={pauseInfo}
+      />
     </AppShell>
   );
 }

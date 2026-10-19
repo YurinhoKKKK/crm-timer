@@ -59,19 +59,26 @@ function useCoarsePointer(): boolean {
 }
 
 // Input de data NATIVO (fallback mobile). value/onChange em "AAAA-MM-DD".
+// `minIso` (opcional): data mínima selecionável — o picker nativo bloqueia antes.
 function NativeDate({
   value,
   onChange,
   ariaLabel,
+  minIso,
+  maxIso,
 }: {
   value: string;
   onChange: (iso: string) => void;
   ariaLabel?: string;
+  minIso?: string;
+  maxIso?: string;
 }) {
   return (
     <input
       type="date"
       value={value}
+      min={minIso}
+      max={maxIso}
       aria-label={ariaLabel}
       onChange={(e) => onChange(e.target.value)}
       className={`${inputBase} tabular-nums`}
@@ -89,6 +96,8 @@ function Calendar({
   setHover,
   onPick,
   autoFocus,
+  minIso,
+  maxIso,
 }: {
   view: View;
   setView: (v: View) => void;
@@ -99,8 +108,14 @@ function Calendar({
   setHover: (iso: string | null) => void;
   onPick: (iso: string) => void;
   autoFocus: boolean;
+  // Faixa selecionável (opcional): dias fora de [minIso, maxIso] ficam desabilitados.
+  minIso?: string;
+  maxIso?: string;
 }) {
   const today = todayBRT();
+  const hasMin = !!minIso || !!maxIso;
+  const isDisabled = (iso: string) =>
+    (!!minIso && iso < minIso) || (!!maxIso && iso > maxIso);
   const weeks = monthMatrix(view.year, view.month);
 
   // Dia "rovingtabindex": só ele é tabbable; as setas movem o foco.
@@ -139,7 +154,7 @@ function Calendar({
     else if (e.key === "PageDown") next = shiftIso(focusIso, 28);
     else if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      onPick(focusIso);
+      if (!isDisabled(focusIso)) onPick(focusIso);
       return;
     } else return;
     e.preventDefault();
@@ -223,6 +238,33 @@ function Calendar({
           const ranged = inRange(cell.iso);
           const isToday = cell.iso === today;
           const tabbable = cell.iso === focusIso;
+          const disabled = isDisabled(cell.iso);
+
+          // Hierarquia visual (prioridade): selecionado > desabilitado (passado)
+          // > em intervalo > HOJE (anel da marca) > dia possível de escolher (em
+          // destaque; com min, vira "ladrilho" p/ saltar dos passados) > dia de
+          // outro mês. "Hoje" mantém um anel suave mesmo quando desabilitado, para
+          // orientar quem olha o calendário.
+          let cellState: string;
+          if (selected) {
+            cellState = "bg-risd font-semibold text-white shadow-sm";
+          } else if (disabled) {
+            cellState = `cursor-not-allowed text-fg-subtle/30 ${
+              isToday ? "ring-1 ring-inset ring-risd/40" : ""
+            }`;
+          } else if (ranged) {
+            cellState = "bg-brand-tint text-fg";
+          } else if (isToday) {
+            cellState =
+              "font-semibold text-risd ring-2 ring-inset ring-risd hover:bg-brand-tint";
+          } else if (cell.inMonth) {
+            cellState = hasMin
+              ? "bg-surface-2/60 font-medium text-fg hover:bg-brand-tint hover:text-risd"
+              : "font-medium text-fg hover:bg-brand-tint hover:text-risd";
+          } else {
+            cellState = "text-fg-subtle/50 hover:bg-surface-2";
+          }
+
           return (
             <button
               key={cell.iso}
@@ -230,23 +272,15 @@ function Calendar({
               role="gridcell"
               data-iso={cell.iso}
               tabIndex={tabbable ? 0 : -1}
+              disabled={disabled}
               aria-label={formatPureDate(cell.iso)}
               aria-pressed={selected}
+              aria-disabled={disabled}
               aria-current={isToday ? "date" : undefined}
               onClick={() => onPick(cell.iso)}
               onMouseEnter={() => setHover(cell.iso)}
               onFocus={() => setFocusIso(cell.iso)}
-              className={`grid h-9 place-items-center rounded-lg text-sm tabular-nums transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd ${
-                selected
-                  ? "bg-risd font-semibold text-white"
-                  : ranged
-                  ? "bg-brand-tint text-fg"
-                  : cell.inMonth
-                  ? "text-fg hover:bg-surface-2"
-                  : "text-fg-subtle/60 hover:bg-surface-2"
-              } ${
-                isToday && !selected ? "ring-1 ring-inset ring-risd/50" : ""
-              }`}
+              className={`grid h-9 place-items-center rounded-lg text-sm tabular-nums transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd ${cellState}`}
             >
               {cell.day}
             </button>
@@ -314,12 +348,17 @@ function DateTextInput({
   onFocusOpen,
   placeholder = "DD/MM/AAAA",
   ariaLabel,
+  minIso,
+  maxIso,
 }: {
   iso: string | null;
   onCommit: (iso: string | null) => void;
   onFocusOpen: () => void;
   placeholder?: string;
   ariaLabel?: string;
+  // Faixa aceita (opcional): digitar fora de [minIso, maxIso] é rejeitado.
+  minIso?: string;
+  maxIso?: string;
 }) {
   const [text, setText] = useState(iso ? formatPureDate(iso) : "");
   const [bad, setBad] = useState(false);
@@ -338,7 +377,7 @@ function DateTextInput({
       return;
     }
     const parsed = parseBRToIso(t);
-    if (parsed) {
+    if (parsed && !(minIso && parsed < minIso) && !(maxIso && parsed > maxIso)) {
       setBad(false);
       onCommit(parsed);
     } else {
@@ -378,10 +417,16 @@ export function DateField({
   value,
   onChange,
   ariaLabel,
+  minIso,
+  maxIso,
 }: {
   value: string;
   onChange: (iso: string) => void;
   ariaLabel?: string;
+  // Faixa selecionável (opcional, "AAAA-MM-DD"): calendário desabilita e o texto
+  // rejeita datas fora de [minIso, maxIso]. Ausente = sem restrição.
+  minIso?: string;
+  maxIso?: string;
 }) {
   const iso = value && isValidIso(value) ? value : null;
   const coarse = useCoarsePointer();
@@ -403,7 +448,15 @@ export function DateField({
 
   // Mobile (toque): picker nativo. Desktop: calendário do projeto.
   if (coarse) {
-    return <NativeDate value={value} onChange={onChange} ariaLabel={ariaLabel} />;
+    return (
+      <NativeDate
+        value={value}
+        onChange={onChange}
+        ariaLabel={ariaLabel}
+        minIso={minIso}
+        maxIso={maxIso}
+      />
+    );
   }
 
   return (
@@ -425,6 +478,8 @@ export function DateField({
           ariaLabel={ariaLabel}
           onCommit={(v) => onChange(v ?? "")}
           onFocusOpen={() => setOpen(true)}
+          minIso={minIso}
+          maxIso={maxIso}
         />
         <CalendarToggle open={open} onToggle={() => setOpen((v) => !v)} />
       </div>
@@ -439,6 +494,8 @@ export function DateField({
           setHover={setHover}
           onPick={pick}
           autoFocus
+          minIso={minIso}
+          maxIso={maxIso}
         />
       </Popover>
     </div>

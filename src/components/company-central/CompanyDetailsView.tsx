@@ -1,12 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { btnPrimary, btnSecondary, inputClass, labelClass } from "@/lib/ui";
-import { DateRangeField } from "@/components/DateField";
+import { DateRangeField, DateField } from "@/components/DateField";
 import {
   saveCompanyDetails,
   fetchCompanyDetails,
+  setPausedSince,
 } from "@/app/company-details-actions";
+import { effectiveEndOf, type CompanyPauseInfo } from "@/lib/company-pause";
 import {
   CADENCES,
   CADENCE_LABEL,
@@ -565,16 +568,166 @@ function EditView({
   );
 }
 
+// "Pausado desde" (PASSO 4a) — só aparece quando a empresa está num grupo que
+// pausa o contrato. Lê/grava o started_on do período ABERTO (RPC gate is_admin,
+// cs_audit). Ao lado, só leitura: dias pausados e fim efetivo. Sem painel de
+// períodos; sem adicionar/excluir aqui.
+function PausedSinceSection({
+  companyId,
+  pauseInfo,
+  endsOn,
+  canEdit,
+}: {
+  companyId: string;
+  pauseInfo: CompanyPauseInfo;
+  endsOn: string | null;
+  canEdit: boolean;
+}) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(pauseInfo.pausedSince ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const effEnd = effectiveEndOf(endsOn, pauseInfo.pausedDays);
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    const res = await setPausedSince(companyId, value || null);
+    setSaving(false);
+    if (res.error) {
+      setError(res.error);
+      return;
+    }
+    setEditing(false);
+    router.refresh();
+  }
+
+  return (
+    <div className="mt-6 rounded-xl border border-amber-300/50 bg-amber-50/60 p-4 dark:border-amber-500/25 dark:bg-amber-500/5">
+      <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+        Contrato pausado
+      </p>
+
+      {editing ? (
+        <div className="mt-2 space-y-2">
+          <div className="max-w-[260px]">
+            <DateField
+              value={value}
+              onChange={setValue}
+              ariaLabel="Data de entrada em Pausados"
+              minIso={pauseInfo.prevEnd ?? undefined}
+              maxIso={todayBRT()}
+            />
+          </div>
+          {error && (
+            <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving}
+              className={btnPrimary}
+            >
+              {saving ? "Salvando…" : "Salvar"}
+            </button>
+            {value && (
+              <button
+                type="button"
+                onClick={() => setValue("")}
+                disabled={saving}
+                className="text-xs text-fg-subtle underline underline-offset-2 hover:text-risd"
+              >
+                limpar data
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setValue(pauseInfo.pausedSince ?? "");
+                setError(null);
+                setEditing(false);
+              }}
+              disabled={saving}
+              className={btnSecondary}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+          {pauseInfo.pausedSince ? (
+            <>
+              <span className="text-fg">
+                Pausado desde{" "}
+                <strong className="font-semibold tabular-nums">
+                  {formatPureDate(pauseInfo.pausedSince)}
+                </strong>
+              </span>
+              <span className="text-fg-subtle">·</span>
+              <span className="text-fg-muted">
+                <strong className="font-semibold text-fg tabular-nums">
+                  {pauseInfo.pausedDays}
+                </strong>{" "}
+                {dayWord(pauseInfo.pausedDays)} pausado
+              </span>
+              {effEnd && (
+                <>
+                  <span className="text-fg-subtle">·</span>
+                  <span className="text-fg-muted">
+                    Fim efetivo:{" "}
+                    <strong className="font-semibold text-fg tabular-nums">
+                      {formatPureDate(effEnd)}
+                    </strong>{" "}
+                    <span className="text-fg-subtle">
+                      (contratado: {formatPureDate(endsOn as string)})
+                    </span>
+                  </span>
+                </>
+              )}
+            </>
+          ) : (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
+              Data de entrada em Pausados pendente
+            </span>
+          )}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="text-xs font-medium text-risd underline underline-offset-2 hover:opacity-80"
+            >
+              {pauseInfo.pausedSince ? "Alterar" : "Definir data"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {canEdit && !editing && (
+        <p className="mt-2 text-xs text-fg-subtle">
+          A data de entrada define o início da pausa. O fim contratado NÃO muda — o
+          sistema soma os dias pausados e calcula o fim efetivo.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // Tela "Informações do cliente" — modo leitura por padrão; admin edita.
 // A carga vem já escopada pela RLS; canEdit reflete o cargo (admin).
 export default function CompanyDetailsView({
   companyId,
   initial,
   canEdit,
+  pauseInfo,
 }: {
   companyId: string;
   initial: CompanyDetails;
   canEdit: boolean;
+  pauseInfo: CompanyPauseInfo;
 }) {
   // companyId anexado ao data para as sub-ações (evita passar em todo lugar).
   const [data, setData] = useState<CompanyDetails & { companyId: string }>({
@@ -628,6 +781,15 @@ export default function CompanyDetailsView({
         />
       ) : (
         <ReadView data={data} />
+      )}
+
+      {pauseInfo.pausesGroup && (
+        <PausedSinceSection
+          companyId={companyId}
+          pauseInfo={pauseInfo}
+          endsOn={data.endsOn}
+          canEdit={canEdit}
+        />
       )}
     </section>
   );

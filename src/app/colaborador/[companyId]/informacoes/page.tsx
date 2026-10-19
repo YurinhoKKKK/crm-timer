@@ -3,6 +3,7 @@ import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import CompanyDetailsView from "@/components/company-central/CompanyDetailsView";
 import { loadCompanyDetails } from "@/lib/company-details";
+import { loadCompanyPauseInfo } from "@/lib/company-pause";
 
 // Informações do cliente — página própria da empresa. Colaborador apenas
 // VISUALIZA (canEdit=false; a RLS barra a escrita). A empresa só é alcançável
@@ -18,13 +19,14 @@ export default async function ColaboradorCompanyInfoPage({
     "consultor",
   ]);
 
-  const [{ data: company }, details] = await Promise.all([
+  const [{ data: company }, details, pauseInfo] = await Promise.all([
     supabase
       .from("companies")
       .select("id, name")
       .eq("id", params.companyId)
       .maybeSingle(),
     loadCompanyDetails(supabase, params.companyId),
+    loadCompanyPauseInfo(supabase, params.companyId),
   ]);
   if (!company) notFound();
 
@@ -42,6 +44,7 @@ export default async function ColaboradorCompanyInfoPage({
         companyId={params.companyId}
         initial={details}
         canEdit={false}
+        pauseInfo={pauseInfo}
       />
     </AppShell>
   );

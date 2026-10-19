@@ -3,13 +3,12 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
-import { FileSpreadsheet, FileText } from "lucide-react";
+import AttachmentList from "@/components/rich-text/Attachments";
 import type { CompanyNoteView, NoteAttachmentMeta } from "@/lib/notes";
 import type { NoteArea } from "@/lib/types";
 import { NOTE_AREAS, lockedAreasForOrigin } from "@/lib/note-areas";
 import { createClient } from "@/lib/supabase-browser";
 import { syncMentions } from "@/lib/mention-actions";
-import { formatBytes } from "@/lib/format";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import Lightbox from "@/components/Lightbox";
 import Avatar from "@/components/Avatar";
@@ -54,14 +53,6 @@ function formatDateTime(iso: string | null): string {
 // Texto puro da anotação (para a busca por conteúdo).
 function stripTags(html: string): string {
   return html.replace(/<[^>]+>/g, " ");
-}
-
-function AttachmentIcon({ name }: { name: string }) {
-  const ext = (name.split(".").pop() || "").toLowerCase();
-  if (["xls", "xlsx", "csv"].includes(ext)) {
-    return <FileSpreadsheet size={15} className="shrink-0 text-fg-muted" />;
-  }
-  return <FileText size={15} className="shrink-0 text-fg-muted" />;
 }
 
 type SortKey = "recentes" | "antigas";
@@ -450,27 +441,7 @@ export default function CompanyNotes({
                     }
                   />
 
-                  {n.attachments.length > 0 && (
-                    <ul className="mt-3 flex flex-wrap gap-2">
-                      {n.attachments.map((a) => (
-                        <li key={a.path} className="max-w-full">
-                          <a
-                            href={a.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title={`Abrir/baixar ${a.name}`}
-                            className="flex items-center gap-2 rounded-lg border border-line bg-surface-2 px-2.5 py-1.5 text-sm text-fg transition hover:border-risd/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
-                          >
-                            <AttachmentIcon name={a.name} />
-                            <span className="min-w-0 truncate">{a.name}</span>
-                            <span className="shrink-0 text-xs text-fg-subtle">
-                              {formatBytes(a.size)}
-                            </span>
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  <AttachmentList items={n.attachments} />
 
                   {n.updatedAtISO && (
                     <p className="mt-2 flex items-center gap-1 text-xs italic text-fg-subtle">

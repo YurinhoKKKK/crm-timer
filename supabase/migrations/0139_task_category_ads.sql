@@ -1,0 +1,11 @@
+-- =====================================================================
+-- 0139_task_category_ads :: CRM/Timer - Monvatti
+-- =====================================================================
+-- Nova categoria de tarefa "ADS" (valor 'ads' no enum task_category),
+-- posicionada logo depois de 'anuncio' na ordem do enum — espelha a posição no
+-- seletor do formulário (lib/task-category.ts).
+--
+-- Migration SOZINHA (só o ADD VALUE): ALTER TYPE ... ADD VALUE não pode ser
+-- usado na MESMA transação em que o valor é criado, então nada mais aqui.
+-- =====================================================================
+alter type public.task_category add value if not exists 'ads' after 'anuncio';

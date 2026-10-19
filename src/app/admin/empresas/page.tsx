@@ -10,6 +10,7 @@ import { loadLabelCatalog, loadAllLabelsByCompany, loadInUseLabels } from "@/lib
 import { loadCompanyGroups, resolveCompanyGroupId } from "@/lib/company-groups";
 import { loadTrafficGroups } from "@/lib/traffic";
 import { loadCompanyNoteCounts } from "@/lib/notes";
+import { loadPausedDaysByCompany } from "@/lib/company-pause";
 import { avatarUrl } from "@/lib/avatar";
 
 type ConsultantOption = {
@@ -112,6 +113,12 @@ export default async function EmpresasPage() {
   const total = companiesRes.count ?? rows.length;
   const truncated = total > rows.length;
 
+  // Dias pausados por empresa (fim efetivo na barra de contrato). Uma consulta.
+  const pausedDaysByCompany = await loadPausedDaysByCompany(
+    supabase,
+    rows.map((r) => r.id)
+  );
+
   // O admin pode se incluir como consultor responsável de uma empresa (Passo 14)
   // e como responsável de uma tarefa padrão.
   const consultores = withSelf((consultoresData as ConsultantOption[]) ?? [], profile);
@@ -153,6 +160,7 @@ export default async function EmpresasPage() {
     noteCount: noteCounts.get(c.id) ?? 0,
     startedOn: det?.started_on ?? null,
     endsOn: det?.ends_on ?? null,
+    pausedDays: pausedDaysByCompany.get(c.id) ?? 0,
     };
   });
 

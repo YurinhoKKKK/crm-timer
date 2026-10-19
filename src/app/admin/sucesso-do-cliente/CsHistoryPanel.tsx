@@ -36,6 +36,12 @@ function describe(e: CsAuditEntry): string {
   if (e.field === "churn") {
     return `${by}: ${e.newValue ?? ""}`;
   }
+  // Etiqueta (ALERTA/RISCO): adicionar = new_value com o nome; remover = old_value.
+  if (e.field === "etiqueta") {
+    if (e.newValue && !e.oldValue) return `${by} adicionou a etiqueta ${e.newValue}`;
+    if (e.oldValue && !e.newValue) return `${by} removeu a etiqueta ${e.oldValue}`;
+    return `${by} alterou a etiqueta`;
+  }
   const isDate =
     e.field === "data_reuniao" ||
     e.field === "data_entrada" ||

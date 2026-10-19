@@ -8,14 +8,14 @@ import {
   type MouseEvent,
 } from "react";
 import dynamic from "next/dynamic";
-import { CornerUpLeft, FileSpreadsheet, FileText, Reply, X } from "lucide-react";
+import { CornerUpLeft, Reply, X } from "lucide-react";
 import type { NoteAttachmentMeta, NoteAttachmentView } from "@/lib/notes";
 import type { MentionContext } from "@/lib/mentions";
 import type { TaskToggleResult } from "@/lib/task-checkbox";
 import type { EditorStorage } from "@/components/company-central/NoteEditor";
-import { formatBytes } from "@/lib/format";
 import { btnPrimary } from "@/lib/ui";
 import Avatar from "@/components/Avatar";
+import AttachmentList from "@/components/rich-text/Attachments";
 import Lightbox from "@/components/Lightbox";
 import {
   useTaskCheckboxes,
@@ -100,39 +100,6 @@ function snippet(html: string, max = 46): string {
     .trim();
   if (!text) return "mensagem";
   return text.length > max ? `${text.slice(0, max).trimEnd()}…` : text;
-}
-
-function AttachmentIcon({ name }: { name: string }) {
-  const ext = (name.split(".").pop() || "").toLowerCase();
-  if (["xls", "xlsx", "csv"].includes(ext)) {
-    return <FileSpreadsheet size={15} className="shrink-0 text-fg-muted" />;
-  }
-  return <FileText size={15} className="shrink-0 text-fg-muted" />;
-}
-
-function AttachmentList({ items }: { items: NoteAttachmentView[] }) {
-  if (items.length === 0) return null;
-  return (
-    <ul className="mt-3 flex flex-wrap gap-2">
-      {items.map((a) => (
-        <li key={a.path} className="max-w-full">
-          <a
-            href={a.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            title={`Abrir/baixar ${a.name}`}
-            className="flex items-center gap-2 rounded-lg border border-line bg-surface-2 px-2.5 py-1.5 text-sm text-fg transition hover:border-risd/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
-          >
-            <AttachmentIcon name={a.name} />
-            <span className="min-w-0 truncate">{a.name}</span>
-            <span className="shrink-0 text-xs text-fg-subtle">
-              {formatBytes(a.size)}
-            </span>
-          </a>
-        </li>
-      ))}
-    </ul>
-  );
 }
 
 // Corpo de UMA resposta (HTML já sanitizado no servidor). Componente próprio

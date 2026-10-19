@@ -14,6 +14,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import Lightbox from "@/components/Lightbox";
 import NoteBody from "@/components/company-central/NoteBody";
 import AreaChips from "@/components/company-central/AreaChips";
+import AttachmentList from "@/components/rich-text/Attachments";
 import { lockedAreasForOrigin } from "@/lib/note-areas";
 import NoteRepliesSection from "@/components/replies/NoteRepliesSection";
 import { TASK_READONLY_TITLE } from "@/components/rich-text/useTaskCheckboxes";
@@ -492,23 +493,7 @@ export default function NotesPanel({
                         }
                       />
 
-                      {n.attachments.length > 0 && (
-                        <ul className="mt-3 flex flex-wrap gap-2">
-                          {n.attachments.map((a) => (
-                            <li key={a.path} className="max-w-full">
-                              <a
-                                href={a.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title={`Abrir/baixar ${a.name}`}
-                                className="flex items-center gap-2 rounded-lg border border-line bg-surface-2 px-2.5 py-1.5 text-xs text-fg transition hover:border-risd/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
-                              >
-                                <span className="min-w-0 truncate">{a.name}</span>
-                              </a>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
+                      <AttachmentList items={n.attachments} compact />
 
                       {n.updatedAtISO && (
                         <p className="mt-2 flex items-center gap-1 text-xs italic text-fg-subtle">

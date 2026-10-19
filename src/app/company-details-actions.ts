@@ -6,11 +6,14 @@ import {
   CONTRACTED_SERVICES,
   isValidCnpj,
   onlyDigits,
+  formatPureDate,
+  todayBRT,
   type CompanyDetails,
   type Cadence,
   type ContractedService,
   type ProjectModel,
 } from "@/lib/company-details";
+import { loadCompanyPauseInfo } from "@/lib/company-pause";
 
 // Informações do cliente — lado INTERNO. A gravação passa pela RPC
 // company_details_save (SECURITY INVOKER): a RLS é a fronteira real — só admin
@@ -154,5 +157,55 @@ export async function saveCompanyDetails(
   // A RLS recusa (42501) se o usuário não for admin; o check de datas também
   // pode barrar no banco (rede de segurança além da validação acima).
   if (error) return { error: "Não foi possível salvar as informações." };
+  return { error: null };
+}
+
+// "Pausado desde" (PASSO 4a): grava o started_on do período ABERTO da empresa via
+// a RPC pause_period_set_dates (gate is_admin, registro em cs_audit). Valida que a
+// data não é futura nem anterior ao fim do período anterior. `date` vazio/null =
+// volta a "pendente" (sem data de entrada).
+export async function setPausedSince(
+  companyId: string,
+  date: string | null
+): Promise<{ error: string | null }> {
+  const { supabase, user } = await requireUser();
+  if (!user) return { error: "Sessão expirada. Faça login novamente." };
+
+  const info = await loadCompanyPauseInfo(supabase, companyId);
+  if (!info.pausesGroup) {
+    return { error: "A empresa não está num grupo que pausa o contrato." };
+  }
+  if (!info.openPeriodId) {
+    return { error: "Não há período de pausa aberto para esta empresa." };
+  }
+
+  const d = (date ?? "").trim();
+  if (d) {
+    if (!DATE_RE.test(d)) {
+      return { error: "Data inválida — use o formato AAAA-MM-DD." };
+    }
+    if (d > todayBRT()) {
+      return { error: "A data de entrada em Pausados não pode ser futura." };
+    }
+    if (info.prevEnd && d < info.prevEnd) {
+      return {
+        error: `A data não pode ser anterior ao fim do período anterior (${formatPureDate(
+          info.prevEnd
+        )}).`,
+      };
+    }
+  }
+
+  const { error } = await supabase.rpc("pause_period_set_dates", {
+    p_id: info.openPeriodId,
+    p_started: d === "" ? null : d,
+    p_ended: null,
+  });
+  if (error) {
+    if (error.code === "42501") {
+      return { error: "Apenas administradores podem alterar a pausa." };
+    }
+    return { error: "Não foi possível salvar a data da pausa." };
+  }
   return { error: null };
 }

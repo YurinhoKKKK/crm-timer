@@ -3,6 +3,7 @@ import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import CompanyDetailsView from "@/components/company-central/CompanyDetailsView";
 import { loadCompanyDetails } from "@/lib/company-details";
+import { loadCompanyPauseInfo } from "@/lib/company-pause";
 
 // Informações do cliente — página própria da empresa. Consultor apenas
 // VISUALIZA (a RLS barra a escrita; canEdit=false esconde a edição). A empresa
@@ -14,13 +15,14 @@ export default async function ConsultorCompanyInfoPage({
 }) {
   const { supabase, profile } = await guardRole(["consultor"]);
 
-  const [{ data: company }, details] = await Promise.all([
+  const [{ data: company }, details, pauseInfo] = await Promise.all([
     supabase
       .from("companies")
       .select("id, name")
       .eq("id", params.companyId)
       .maybeSingle(),
     loadCompanyDetails(supabase, params.companyId),
+    loadCompanyPauseInfo(supabase, params.companyId),
   ]);
   if (!company) notFound();
 
@@ -38,6 +40,7 @@ export default async function ConsultorCompanyInfoPage({
         companyId={params.companyId}
         initial={details}
         canEdit={false}
+        pauseInfo={pauseInfo}
       />
     </AppShell>
   );

@@ -89,6 +89,23 @@ export async function setContractValues(
   return error ? classify(error) : { error: null };
 }
 
+// Adiciona/remove ALERTA ou RISCO na empresa (quadro de CS, admin-only). Reusa
+// company_labels (reflete em Empresas) e registra em cs_audit — tudo na RPC
+// DEFINER cs_set_company_label, que só aceita essas duas etiquetas manuais.
+export async function setCompanyLabel(
+  companyId: string,
+  labelId: string,
+  on: boolean
+): Promise<CsWriteResult> {
+  const { supabase } = await guardRole(["admin"]);
+  const { error } = await supabase.rpc("cs_set_company_label", {
+    p_company_id: companyId,
+    p_label_id: labelId,
+    p_on: on,
+  });
+  return error ? classify(error) : { error: null };
+}
+
 // --- Histórico (cs_audit), paginado, mais recente primeiro --------------- //
 
 export type CsAuditEntry = {

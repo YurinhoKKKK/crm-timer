@@ -50,6 +50,8 @@ export type CompanyItem = {
   // null quando não há as duas datas (a barra não aparece).
   startedOn: string | null;
   endsOn: string | null;
+  // Dias pausados (contrato) — a barra mostra o fim efetivo quando > 0.
+  pausedDays: number;
 };
 
 const COLLAPSE_KEY = "crm:empresas:grupos-recolhidos";
@@ -840,6 +842,7 @@ function CompanyRow({
           <ContractBar
             startedOn={company.startedOn}
             endsOn={company.endsOn}
+            pausedDays={company.pausedDays}
             compact
           />
         </div>

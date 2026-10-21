@@ -31,6 +31,8 @@ const CADENCES = new Set<string>([
   "quinzenal_semanal",
 ]);
 const TEXT_CAP = 5000;
+// Closer: texto livre curto. Mesmo teto do intake do CRM comercial (0097).
+const CLOSER_CAP = 200;
 // Data pura "AAAA-MM-DD". O dia cobre 01–09, 10–29 e 30–31.
 // (O regex antigo tinha `0[12]\d` — só casava strings de 3 dígitos como "010",
 // nunca um dia real 10–29 — e por isso rejeitava todo contrato começando entre
@@ -55,6 +57,18 @@ export async function fetchCompanyDetails(
   return loadCompanyDetails(supabase, companyId);
 }
 
+// Sugestões de Closer (vendedor) para o autocomplete do formulário: nomes
+// distintos já cadastrados, para evitar o mesmo closer em grafias diferentes.
+// É só sugestão — nome novo é aceito. A RPC roda SECURITY INVOKER (respeita a
+// RLS cd_select; o admin, único que edita, vê todos). Falha → lista vazia.
+export async function fetchCloserNames(): Promise<string[]> {
+  const { supabase, user } = await requireUser();
+  if (!user) return [];
+  const { data, error } = await supabase.rpc("closer_names_list");
+  if (error || !data) return [];
+  return (data as string[]).filter(Boolean);
+}
+
 export type SaveDetailsInput = {
   projectModel: string; // "" | ProjectModel
   cnpj: string; // "" | com ou sem máscara (normalizado aqui p/ dígitos)
@@ -64,6 +78,7 @@ export type SaveDetailsInput = {
   systemUsed: string;
   mainPain: string;
   about: string;
+  closerName: string; // "" | nome do closer (vendedor). Vazio → null.
   services: string[]; // serviços contratados
 };
 
@@ -119,6 +134,14 @@ export async function saveCompanyDetails(
     return { error: `Cada texto pode ter no máximo ${TEXT_CAP} caracteres.` };
   }
 
+  // Closer: trim + teto de 200 (mesmo do intake). Vazio → null (gravado na RPC).
+  const closer = input.closerName.trim();
+  if (closer.length > CLOSER_CAP) {
+    return {
+      error: `O Closer pode ter no máximo ${CLOSER_CAP} caracteres.`,
+    };
+  }
+
   const services = input.services.filter((s) => SERVICE_VALUES.has(s));
 
   // CNPJ mora em companies (não em company_details). Gravamos ANTES de salvar o
@@ -153,6 +176,7 @@ export async function saveCompanyDetails(
     p_main_pain: input.mainPain,
     p_about: input.about,
     p_channels: services as ContractedService[],
+    p_closer_name: closer === "" ? null : closer,
   });
   // A RLS recusa (42501) se o usuário não for admin; o check de datas também
   // pode barrar no banco (rede de segurança além da validação acima).

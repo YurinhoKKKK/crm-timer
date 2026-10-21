@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { btnPrimary, btnSecondary, inputClass, labelClass } from "@/lib/ui";
 import { DateRangeField, DateField } from "@/components/DateField";
 import {
   saveCompanyDetails,
   fetchCompanyDetails,
+  fetchCloserNames,
   setPausedSince,
 } from "@/app/company-details-actions";
 import { effectiveEndOf, type CompanyPauseInfo } from "@/lib/company-pause";
@@ -197,7 +198,7 @@ function ReadView({ data }: { data: CompanyDetails }) {
 
         <Field
           label="Closer"
-          hint="Somente leitura — vem do CRM comercial e não é editável aqui."
+          hint="Preenchido automaticamente pelo CRM comercial na criação da empresa. Pode ser corrigido aqui."
         >
           {data.closerName ? data.closerName : <Empty />}
         </Field>
@@ -270,11 +271,25 @@ function EditView({
   const [systemUsed, setSystemUsed] = useState(data.systemUsed ?? "");
   const [mainPain, setMainPain] = useState(data.mainPain ?? "");
   const [about, setAbout] = useState(data.about ?? "");
+  const [closerName, setCloserName] = useState(data.closerName ?? "");
   const [services, setServices] = useState<Set<ContractedService>>(
     () => new Set(data.contractedServices)
   );
+  const [closerSuggestions, setCloserSuggestions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Sugestões do Closer: nomes já cadastrados, carregados uma vez ao abrir a
+  // edição. Só alimentam o datalist (autocomplete) — nome novo continua válido.
+  useEffect(() => {
+    let active = true;
+    fetchCloserNames().then((names) => {
+      if (active) setCloserSuggestions(names);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const previewInfo = useMemo(
     () => computePeriodInfo(startedOn || null, endsOn || null, todayBRT()),
@@ -312,6 +327,7 @@ function EditView({
       systemUsed,
       mainPain,
       about,
+      closerName,
       services: Array.from(services),
     });
     if (res.error) {
@@ -405,16 +421,28 @@ function EditView({
         </div>
 
         <div>
-          <label className={labelClass}>Closer</label>
-          <div className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-fg">
-            {data.closerName ? (
-              data.closerName
-            ) : (
-              <span className="text-fg-subtle">não informado</span>
-            )}
-          </div>
+          <label className={labelClass} htmlFor="cd-closer">
+            Closer
+          </label>
+          <input
+            id="cd-closer"
+            type="text"
+            list="cd-closer-suggestions"
+            value={closerName}
+            onChange={(e) => setCloserName(e.target.value)}
+            maxLength={200}
+            autoComplete="off"
+            placeholder="Nome do vendedor"
+            className={inputClass}
+          />
+          <datalist id="cd-closer-suggestions">
+            {closerSuggestions.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
           <p className="mt-1 text-xs text-fg-subtle">
-            Somente leitura — vem do CRM comercial e não é editável aqui.
+            Preenchido automaticamente pelo CRM comercial na criação da empresa.
+            Pode ser corrigido aqui.
           </p>
         </div>
 

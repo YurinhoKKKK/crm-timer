@@ -9,8 +9,10 @@ import MarketplaceBadge from "@/components/MarketplaceBadge";
 import {
   TIMER_SYNC_EVENT,
   emitTimerSync,
+  emitMeetingTimerSync,
   type TimerSyncDetail,
 } from "@/lib/timer-sync";
+import { fetchMyOpenMeetingTimer } from "@/app/meeting-timer-actions";
 // Mesmos helpers do indicador global: uma fonte de verdade só (passo 28.1).
 import { formatClock, parseStartedAt, taskElapsedSeconds } from "@/lib/timer";
 import {
@@ -62,6 +64,9 @@ export default function Timer({
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  // Decisão 5 / ajuste 4: iniciar a tarefa encerra o timer de reunião aberto —
+  // guarda o título da reunião para pedir confirmação antes.
+  const [pendingMeeting, setPendingMeeting] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   // Estado da captura de links da listagem (uma entrada por marca × marketplace).
@@ -117,7 +122,8 @@ export default function Timer({
   const finalized = localStatus === "finalizada";
   const canceled = localStatus === "cancelada";
 
-  async function handleStart() {
+  async function proceedStart() {
+    setPendingMeeting(null);
     setError(null);
     setBusy(true);
     const { error: err, startedAt } = await startTimer(taskId);
@@ -129,7 +135,21 @@ export default function Timer({
     setStartedAtMs(parseStartedAt(startedAt) ?? Date.now());
     setLocalStatus("iniciada");
     emitTimerSync({ taskId, action: "start", source: "page" });
+    // Iniciar a tarefa encerrou o timer de reunião aberto (decisão 5) — avisa o
+    // indicador global para soltá-lo na hora.
+    emitMeetingTimerSync();
     startTransition(() => router.refresh());
+  }
+
+  async function handleStart() {
+    setError(null);
+    // Se houver timer de reunião aberto, confirma antes (ele será encerrado).
+    const open = await fetchMyOpenMeetingTimer();
+    if (open) {
+      setPendingMeeting(open.title ?? "reunião em andamento");
+      return;
+    }
+    await proceedStart();
   }
 
   async function handlePause() {
@@ -291,6 +311,32 @@ export default function Timer({
       </div>
 
       <div className="border-t border-line p-6">
+        {pendingMeeting !== null && (
+          <div className="mb-4 rounded-xl border border-amber-300/60 bg-amber-50 p-3 text-sm dark:border-amber-500/30 dark:bg-amber-500/10">
+            <p className="text-amber-800 dark:text-amber-200">
+              Isso vai encerrar o timer da reunião{" "}
+              <strong>{pendingMeeting}</strong>. Continuar?
+            </p>
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={proceedStart}
+                disabled={busy}
+                className="rounded-lg bg-risd px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-chrysler disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Continuar
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingMeeting(null)}
+                disabled={busy}
+                className="rounded-lg px-3 py-1.5 text-xs text-fg-muted transition hover:text-fg"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
         {!finishing ? (
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-center">
             {!running ? (

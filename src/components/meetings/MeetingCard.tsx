@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Avatar from "@/components/Avatar";
 import CopyLinkButton from "@/components/CopyLinkButton";
+import MeetingTimerControl from "./MeetingTimerControl";
 import MeetingForm, { type MeetingInitial } from "./MeetingForm";
 import {
   deleteMeeting,
@@ -95,6 +96,15 @@ export default function MeetingCard({
 
   const isCreator = m.creator.id === ctx.currentUserId;
   const isParticipant = m.participants.some((p) => p.id === ctx.currentUserId);
+
+  // Nome por id para o controle de timer mostrar "em andamento por Fulano".
+  const nameById = useMemo(() => {
+    const map = new Map<string, string>();
+    map.set(m.creator.id, m.creator.name);
+    for (const p of m.participants) map.set(p.id, p.name);
+    for (const u of ctx.directory) map.set(u.id, u.name);
+    return map;
+  }, [m.creator, m.participants, ctx.directory]);
 
   // Status a exibir: a própria resposta recém-enviada (myResp) vence para o
   // usuário atual; senão o vivo (após "Atualizar status"); senão o do props.
@@ -356,6 +366,17 @@ export default function MeetingCard({
           </div>
         )}
       </div>
+
+      {/* Timer de reunião (0145): só o criador inicia/encerra/retoma; os demais
+          veem o andamento. O tempo conta para o criador + participantes. */}
+      <MeetingTimerControl
+        kind="meeting"
+        meetingId={m.id}
+        scheduledStart={m.startsAt}
+        currentUserId={ctx.currentUserId}
+        canStart={isCreator}
+        nameById={nameById}
+      />
 
       {/* Quadro de status dos convites (Fatia B/C). Google é a verdade; aqui é o
           espelho lido por quem criou. As bolinhas nos participantes acima dão o

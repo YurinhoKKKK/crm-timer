@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Avatar from "@/components/Avatar";
 import { avatarUrl } from "@/lib/avatar";
 import { FilterBar, SearchBox, norm } from "@/components/ListControls";
+import { formatDurationBR } from "@/lib/timer";
 import {
   CAPACITY_PERIODS,
   PERIOD_LABEL,
@@ -130,9 +131,13 @@ export default function CapacityView({
           </li>
           <li>
             <strong>Parados</strong> (mais de 15 dias desde o último registro) é o
-            sinal de alerta. <strong>Sem registro</strong> não quer dizer cliente
-            abandonado: quase sempre é contato feito pela Digisac que não foi ao
-            CRM — ausência de registro no sistema, não de atendimento.
+            sinal de alerta.
+          </li>
+          <li>
+            <strong>Horas em reunião</strong> soma o tempo cronometrado em reuniões
+            com clientes no período (reuniões do CRM e eventos do Google), contando
+            para quem conduziu e para os participantes internos marcados. Clique no
+            número para ver as reuniões.
           </li>
         </ul>
       </div>
@@ -157,7 +162,7 @@ type ConsultKey =
   | "shared"
   | "alerta"
   | "stalled"
-  | "noRecord";
+  | "meeting";
 
 type OpenDrill = (r: CapacityRow, scope: AnyDrilldownScope, count: number) => void;
 
@@ -190,8 +195,8 @@ function ConsultoresTable({
           return r.carteiraAlerta;
         case "stalled":
           return r.carteiraStalled;
-        case "noRecord":
-          return r.carteiraNoRecord;
+        case "meeting":
+          return r.meetingSeconds;
       }
     };
     return [...rows].sort((a, b) => {
@@ -243,8 +248,8 @@ function ConsultoresTable({
               <Th align="right" active={sort.key === "stalled"} desc={sort.desc} onClick={() => toggle("stalled")} title="Clientes ativos parados: mais de 15 dias desde o último registro de contato (mesmo critério da tela de Acompanhamento)">
                 Parados
               </Th>
-              <Th align="right" active={sort.key === "noRecord"} desc={sort.desc} onClick={() => toggle("noRecord")} title="Clientes ativos sem nenhum registro de contato no sistema — quase sempre contato feito pela Digisac que não foi ao CRM, não cliente abandonado">
-                Sem registro
+              <Th align="right" active={sort.key === "meeting"} desc={sort.desc} onClick={() => toggle("meeting")} title="Horas em reunião com clientes no período (timer manual de reunião). Soma as reuniões — do CRM e do Google — em que a pessoa conta, com início no período.">
+                Horas em reunião
               </Th>
             </tr>
           </thead>
@@ -278,10 +283,12 @@ function ConsultoresTable({
                   </Clickable>
                 </td>
                 <td className="px-3 py-2.5 text-right tabular-nums">
-                  <Clickable value={r.carteiraNoRecord} onOpen={() => onOpen(r, "sem_registro", r.carteiraNoRecord)}>
-                    <span className={r.carteiraNoRecord === 0 ? "text-fg-subtle" : "text-fg-muted"}>
-                      {r.carteiraNoRecord}
-                    </span>
+                  <Clickable value={r.meetingSeconds} onOpen={() => onOpen(r, "reunioes", r.meetingSeconds)}>
+                    {r.meetingSeconds <= 0 ? (
+                      <span className="text-fg-subtle">—</span>
+                    ) : (
+                      <span className="font-medium text-fg">{formatDurationBR(r.meetingSeconds)}</span>
+                    )}
                   </Clickable>
                 </td>
               </tr>

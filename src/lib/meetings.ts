@@ -103,6 +103,10 @@ export type ImportedEventRow = {
   startsAt: string; // ISO (UTC)
   endsAt: string; // ISO (UTC)
   isPrivate: boolean;
+  // Para o timer de reunião (0145): o id do evento no Google e se ESTE evento é,
+  // na verdade, uma reunião do CRM (então o timer é o da reunião, não o do evento).
+  googleEventId: string | null;
+  isCrmMeeting: boolean;
 };
 
 // A grade do calendário renderiza os dois: reuniões do sistema e eventos
@@ -411,6 +415,8 @@ export async function loadImportedEvents(
           starts_at: string;
           ends_at: string;
           is_private: boolean;
+          google_event_id: string | null;
+          is_crm_meeting: boolean;
         }[]
       | null) ?? [];
   return rows.map((r) => ({
@@ -421,6 +427,8 @@ export async function loadImportedEvents(
     startsAt: r.starts_at,
     endsAt: r.ends_at,
     isPrivate: r.is_private,
+    googleEventId: r.google_event_id ?? null,
+    isCrmMeeting: r.is_crm_meeting ?? false,
   }));
 }
 

@@ -18,3 +18,13 @@ export function emitTimerSync(detail: TimerSyncDetail) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent<TimerSyncDetail>(TIMER_SYNC_EVENT, { detail }));
 }
+
+// Timer de REUNIÃO (0145): avisa o indicador global para reler imediatamente
+// (iniciar/encerrar/retomar numa reunião), sem esperar o poll. Sem payload — o
+// indicador apenas refaz a leitura de my_open_meeting_timer.
+export const MEETING_TIMER_SYNC_EVENT = "crm-meeting-timer-sync";
+
+export function emitMeetingTimerSync() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(MEETING_TIMER_SYNC_EVENT));
+}

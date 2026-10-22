@@ -54,21 +54,32 @@ export type DrilldownScope =
   | "compartilhados"
   | "alerta"
   | "parados"
-  | "sem_registro"
   | "empresas"
   | "fora_da_carteira"
   | "colab_ativos";
+
+// Recorte que abre a lista de REUNIÕES cronometradas da pessoa no período
+// (decisão 10 — substitui o antigo "sem registro"). Dado próprio (horas de
+// reunião), via capacity_person_meetings; não é empresa nem tarefa.
+export type MeetingsDrilldownScope = "reunioes";
 
 // Recortes que abrem uma lista de TAREFAS (colunas de atividade — contam
 // tarefa/tempo, não empresa; a lista de tarefas casa exata com a célula).
 export const TASK_DRILLDOWN_SCOPES = ["horas", "pontuais", "atrasadas"] as const;
 export type TaskDrilldownScope = (typeof TASK_DRILLDOWN_SCOPES)[number];
 
-// União usada pelos handlers de clique da tela (empresa OU tarefa).
-export type AnyDrilldownScope = DrilldownScope | TaskDrilldownScope;
+// União usada pelos handlers de clique da tela (empresa OU tarefa OU reuniões).
+export type AnyDrilldownScope =
+  | DrilldownScope
+  | TaskDrilldownScope
+  | MeetingsDrilldownScope;
 
 export function isTaskScope(s: AnyDrilldownScope): s is TaskDrilldownScope {
   return (TASK_DRILLDOWN_SCOPES as readonly string[]).includes(s);
+}
+
+export function isMeetingsScope(s: AnyDrilldownScope): s is MeetingsDrilldownScope {
+  return s === "reunioes";
 }
 
 export type CapacityRow = {
@@ -82,7 +93,7 @@ export type CapacityRow = {
   carteiraShared: number;
   carteiraAlerta: number;
   carteiraStalled: number; // PARADOS: > 15 dias desde o último registro (o alerta)
-  carteiraNoRecord: number; // SEM REGISTRO de contato nenhum (informativo, não é abandono)
+  meetingSeconds: number; // HORAS EM REUNIÃO no período (decisão 10) — segundos somados
   hasCarteira: boolean; // tem carteira → entra na tabela de consultores
   isExecutor: boolean; // tem execução (qualquer tempo) → tabela de colaboradores
   // CARTEIRA DO COLABORADOR (vínculo declarado — company_collaborators, 0090).
@@ -161,7 +172,7 @@ export async function loadCapacity(
           carteira_shared: number;
           carteira_alerta: number;
           carteira_stalled: number;
-          carteira_no_record: number;
+          meeting_seconds: number | string;
           is_executor: boolean;
           act_seconds: number;
           act_seconds_pontual: number;
@@ -187,7 +198,7 @@ export async function loadCapacity(
     carteiraShared: r.carteira_shared,
     carteiraAlerta: r.carteira_alerta,
     carteiraStalled: r.carteira_stalled,
-    carteiraNoRecord: r.carteira_no_record,
+    meetingSeconds: Number(r.meeting_seconds),
     hasCarteira: (r.carteira_by_group ?? []).length > 0,
     isExecutor: r.is_executor,
     actSeconds: Number(r.act_seconds),

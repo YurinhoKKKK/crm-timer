@@ -1,6 +1,12 @@
 "use client";
 
-import { formatMeetingRange, type ImportedEventRow } from "@/lib/meetings";
+import MeetingTimerControl from "@/components/meetings/MeetingTimerControl";
+import {
+  formatMeetingRange,
+  type DirectoryUser,
+  type ImportedEventRow,
+  type ReachableCompany,
+} from "@/lib/meetings";
 
 const TZ = "America/Sao_Paulo";
 
@@ -23,13 +29,25 @@ export default function ImportedEventDetail({
   event,
   ownerName,
   isOwn,
+  currentUserId,
+  companies,
+  directory,
+  nameById,
 }: {
   event: ImportedEventRow;
   ownerName: string;
   isOwn: boolean;
+  currentUserId: string;
+  companies: ReachableCompany[];
+  directory: DirectoryUser[];
+  nameById: Map<string, string>;
 }) {
   const title = event.title ?? "Ocupado";
   const whose = isOwn ? "Sua agenda do Google" : `Agenda de ${ownerName}`;
+
+  // Só o dono da agenda inicia (decisão 3); evento particular não cronometra; e
+  // se o evento é, na verdade, uma reunião do CRM, o timer é o da reunião (ajuste 2).
+  const canStart = isOwn && !event.isPrivate && !event.isCrmMeeting;
 
   return (
     <div className="space-y-4">
@@ -64,6 +82,27 @@ export default function ImportedEventDetail({
           Este compromisso está marcado como particular na agenda de {ownerName}.
           Você vê apenas que o horário está ocupado.
         </p>
+      )}
+
+      {/* Timer de reunião (0145). Para eventos importados, só o dono inicia e
+          escolhe a empresa + consultores presentes. Reunião do CRM que chegou
+          como evento importado cronometra pela reunião, não aqui. */}
+      {event.isCrmMeeting ? (
+        <p className="rounded-lg border border-line bg-surface-2/50 px-3 py-2 text-xs text-fg-muted">
+          Esta reunião foi criada pelo CRM — cronometre pelo card da reunião, não
+          por este evento importado.
+        </p>
+      ) : event.isPrivate ? null : (
+        <MeetingTimerControl
+          kind="imported"
+          googleEventId={event.googleEventId}
+          scheduledStart={event.startsAt}
+          currentUserId={currentUserId}
+          canStart={canStart}
+          companies={companies}
+          directory={directory}
+          nameById={nameById}
+        />
       )}
 
       <p className="rounded-lg border border-line bg-surface-2/40 px-3 py-2 text-xs text-fg-subtle">

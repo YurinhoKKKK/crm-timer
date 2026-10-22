@@ -7,13 +7,18 @@ import { createClient } from "@/lib/supabase-browser";
 import { pauseTimer } from "@/app/colaborador/actions";
 import {
   TIMER_SYNC_EVENT,
+  MEETING_TIMER_SYNC_EVENT,
   emitTimerSync,
+  emitMeetingTimerSync,
   type TimerSyncDetail,
 } from "@/lib/timer-sync";
 import {
+  formatClock,
   formatElapsedCompact,
   parseStartedAt,
   taskElapsedSeconds,
+  meetingLiveSeconds,
+  clockSkewMs,
 } from "@/lib/timer";
 
 /* -------------------------------------------------------------------------- */
@@ -36,6 +41,19 @@ type OpenTimer = {
   startedAtMs: number;
   // Tempo já fechado no banco, antes do intervalo aberto.
   totalSeconds: number;
+};
+
+// Timer de REUNIÃO aberto do próprio usuário (0145). Mutuamente exclusivo com os
+// timers de tarefa — mas tratado à parte para não mexer na lógica de multi-tarefa.
+type OpenMeeting = {
+  timerId: string;
+  title: string | null;
+  startedAtMs: number;
+  // Base que NÃO corre (soma dos trechos fechados) + defasagem de relógio; o total
+  // ao vivo é baseSeconds + (agora+skew − início do aberto) — MESMA conta do card
+  // e da linha da empresa (lib/timer.ts meetingLiveSeconds).
+  baseSeconds: number;
+  skewMs: number;
 };
 
 const COLLAPSE_KEY = "crm-timer-indicator-collapsed";
@@ -107,6 +125,7 @@ function PulseDot({ warn }: { warn: boolean }) {
 export default function ActiveTimerIndicator() {
   const router = useRouter();
   const [timers, setTimers] = useState<OpenTimer[]>([]);
+  const [meeting, setMeeting] = useState<OpenMeeting | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [collapsed, setCollapsed] = useState(false);
   const [listOpen, setListOpen] = useState(false);
@@ -114,6 +133,7 @@ export default function ActiveTimerIndicator() {
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const uidRef = useRef<string | null>(null);
+  const meetingSkewRef = useRef<number | null>(null); // defasagem servidor−navegador, uma vez
 
   // Busca os time_entries abertos do usuário logado. Escopo ESTRITO: filtra
   // por collaborator_id = auth.uid() no time_entry E confere o responsável da
@@ -131,6 +151,36 @@ export default function ActiveTimerIndicator() {
       uidRef.current = user.id;
     }
     const uid = uidRef.current;
+
+    // Timer de REUNIÃO aberto (0145) — leitura própria, independente das tarefas.
+    const { data: mt } = await supabase.rpc("my_open_meeting_timer");
+    const mtRow = ((mt as {
+      timer_id: string;
+      title: string | null;
+      started_at: string;
+      base_seconds: number | string;
+      server_now: string;
+    }[]) ?? [])[0];
+    if (mtRow) {
+      const sMs = parseStartedAt(mtRow.started_at);
+      if (sMs === null) {
+        setMeeting(null);
+      } else {
+        if (meetingSkewRef.current === null) {
+          meetingSkewRef.current = clockSkewMs(mtRow.server_now);
+        }
+        setMeeting({
+          timerId: mtRow.timer_id,
+          title: mtRow.title,
+          startedAtMs: sMs,
+          baseSeconds: Number(mtRow.base_seconds),
+          skewMs: meetingSkewRef.current,
+        });
+      }
+    } else {
+      setMeeting(null);
+    }
+
     const { data, error: err } = await supabase
       .from("time_entries")
       .select(
@@ -221,8 +271,15 @@ export default function ActiveTimerIndicator() {
     return () => window.removeEventListener(TIMER_SYNC_EVENT, onSync);
   }, [fetchOpen]);
 
+  // O card de reunião avisa ao iniciar/encerrar/retomar (mesma aba).
+  useEffect(() => {
+    const onMeetingSync = () => fetchOpen();
+    window.addEventListener(MEETING_TIMER_SYNC_EVENT, onMeetingSync);
+    return () => window.removeEventListener(MEETING_TIMER_SYNC_EVENT, onMeetingSync);
+  }, [fetchOpen]);
+
   // Tique de 1s no cliente enquanto houver timer rodando (nada de query/s).
-  const active = timers.length > 0;
+  const active = timers.length > 0 || meeting !== null;
   useEffect(() => {
     if (!active) return;
     setNowMs(Date.now());
@@ -248,9 +305,11 @@ export default function ActiveTimerIndicator() {
   const multi = timers.length > 1;
   const tabTitle = !active
     ? null
-    : multi
-      ? `▶ ${timers.length} tarefas ativas`
-      : `▶ ${display(timers[0], nowMs)} · ${timers[0].title}`;
+    : timers.length === 0 && meeting
+      ? `▶ Reunião · ${meeting.title ?? ""}`
+      : multi
+        ? `▶ ${timers.length} tarefas ativas`
+        : `▶ ${display(timers[0], nowMs)} · ${timers[0].title}`;
   useEffect(() => {
     applyDocTitle(tabTitle);
   }, [tabTitle]);
@@ -270,9 +329,37 @@ export default function ActiveTimerIndicator() {
     startTransition(() => router.refresh());
   }
 
+  async function handleStopMeeting() {
+    if (!meeting) return;
+    setError(null);
+    setPausingId("meeting");
+    const supabase = createClient();
+    const { error: err } = await supabase.rpc("meeting_timer_stop", {
+      p_timer: meeting.timerId,
+    });
+    setPausingId(null);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    setMeeting(null);
+    emitMeetingTimerSync();
+    startTransition(() => router.refresh());
+  }
+
   if (!active) return null;
 
   const first = timers[0];
+  // Mesmo cálculo do card e da linha da empresa: base + (agora+skew − início), em
+  // hh:mm:ss (decisão 5) — fonte única em lib/timer.ts.
+  const meetingClock = meeting
+    ? formatClock(
+        meetingLiveSeconds(
+          { baseSeconds: meeting.baseSeconds, openStartsMs: [meeting.startedAtMs], skewMs: meeting.skewMs },
+          nowMs
+        )
+      )
+    : null;
 
   // z-pill (45): o lembrete de timer fica ACIMA do conteúdo, mas ABAIXO de
   // qualquer overlay (modais z-overlay, detalhe z-sheet) — ele nunca pode
@@ -286,6 +373,30 @@ export default function ActiveTimerIndicator() {
         <p className="pointer-events-auto mb-2 max-w-[92vw] truncate rounded-lg border border-red-200 bg-surface px-3 py-1.5 text-xs text-red-600 shadow-card dark:border-red-500/30 dark:text-red-400">
           {error}
         </p>
+      )}
+
+      {/* Timer de REUNIÃO aberto (0145) — encerrável de qualquer tela. */}
+      {meeting && (
+        <div className="pointer-events-auto mb-2 flex max-w-[92vw] animate-fade-in items-center gap-1.5 rounded-full border border-emerald-400/70 bg-surface py-1.5 pl-3.5 pr-1.5 shadow-pop dark:border-emerald-400/40">
+          <span className="relative flex h-2.5 w-2.5 shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-60" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+          </span>
+          <span className="min-w-0 max-w-[38vw] truncate text-sm font-medium text-fg sm:max-w-[16rem]">
+            Reunião · {meeting.title ?? "(sem título)"}
+          </span>
+          <span className="font-mono text-sm tabular-nums text-emerald-600 dark:text-emerald-400">
+            {meetingClock}
+          </span>
+          <button
+            type="button"
+            onClick={handleStopMeeting}
+            disabled={pausingId !== null}
+            className="ml-1 shrink-0 rounded-full border border-emerald-500/60 px-3 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-300 dark:hover:bg-emerald-500/10"
+          >
+            {pausingId === "meeting" ? "Pausando…" : "Pausar"}
+          </button>
+        </div>
       )}
 
       {/* Lista expandida (2+ timers) */}
@@ -326,7 +437,7 @@ export default function ActiveTimerIndicator() {
         </div>
       )}
 
-      {collapsed ? (
+      {timers.length > 0 && (collapsed ? (
         /* Chip mínimo: ponto pulsante + tempo. Clique reexpande. */
         <button
           type="button"
@@ -401,7 +512,7 @@ export default function ActiveTimerIndicator() {
             <Chevron up={false} />
           </button>
         </div>
-      )}
+      ))}
     </div>
   );
 }

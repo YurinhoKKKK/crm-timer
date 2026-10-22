@@ -637,6 +637,10 @@ export default function Calendar({
               event={detail}
               ownerName={nameById.get(detail.ownerId) ?? "colega"}
               isOwn={detail.ownerId === currentUserId}
+              currentUserId={currentUserId}
+              companies={companies}
+              directory={directory}
+              nameById={nameById}
             />
           ) : (
             <MeetingCard

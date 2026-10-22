@@ -158,3 +158,53 @@ export async function getCapacityTaskDrilldown(
 
   return { error: null, tasks };
 }
+
+// -------------------------------------------------------------- REUNIÕES
+// Drill-down da coluna "Horas em reunião" (decisão 10): as reuniões cronometradas
+// em que a pessoa conta, com início no período (BRT). Sai de capacity_person_meetings
+// (admin-only por dentro). Número da célula = soma destes segundos (bate exato).
+
+export type DrilldownMeeting = {
+  companyName: string;
+  title: string | null;
+  startedAt: string | null;
+  seconds: number;
+  autoClosed: boolean;
+};
+
+export async function getCapacityMeetingsDrilldown(
+  personId: string,
+  period: CapacityPeriod
+): Promise<{ error: string | null; meetings?: DrilldownMeeting[] }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Sessão expirada. Faça login novamente." };
+
+  const { start, end } = periodRange(period);
+  const { data, error } = await supabase.rpc("capacity_person_meetings", {
+    p_person: personId,
+    p_start: start,
+    p_end: end,
+  });
+  if (error) return { error: error.message };
+
+  const meetings: DrilldownMeeting[] = (
+    (data as {
+      company_name: string;
+      title: string | null;
+      started_at: string | null;
+      seconds: number | string;
+      auto_closed: boolean;
+    }[]) ?? []
+  ).map((r) => ({
+    companyName: r.company_name,
+    title: r.title,
+    startedAt: r.started_at,
+    seconds: Number(r.seconds),
+    autoClosed: r.auto_closed,
+  }));
+
+  return { error: null, meetings };
+}

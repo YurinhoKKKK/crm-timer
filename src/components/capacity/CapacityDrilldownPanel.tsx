@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation";
 import Avatar from "@/components/Avatar";
 import TaskDetailLink from "@/components/TaskDetailLink";
 import { avatarUrl } from "@/lib/avatar";
+import { formatDurationBR } from "@/lib/timer";
 import {
   PERIOD_LABEL,
   toHours,
   isTaskScope,
+  isMeetingsScope,
   type CapacityPeriod,
   type DrilldownScope,
   type AnyDrilldownScope,
@@ -17,8 +19,10 @@ import {
 import {
   getCapacityDrilldown,
   getCapacityTaskDrilldown,
+  getCapacityMeetingsDrilldown,
   type DrilldownCompany,
   type DrilldownTask,
+  type DrilldownMeeting,
 } from "@/app/admin/capacity-actions";
 
 export type DrilldownTarget = {
@@ -54,8 +58,8 @@ function scopeNoun(scope: AnyDrilldownScope, n: number): string {
       return plural ? "clientes com etiqueta ALERTA" : "cliente com etiqueta ALERTA";
     case "parados":
       return plural ? "clientes parados" : "cliente parado";
-    case "sem_registro":
-      return plural ? "clientes sem registro" : "cliente sem registro";
+    case "reunioes":
+      return "em reunião"; // sufixo; o título formata as horas
     case "empresas":
       return plural ? "empresas atendidas" : "empresa atendida";
     case "fora_da_carteira":
@@ -72,6 +76,9 @@ function scopeNoun(scope: AnyDrilldownScope, n: number): string {
 // Linha-título sob o nome. "horas" mostra o tempo (o número é segundos); os
 // demais mostram "N substantivo".
 function subtitleText(scope: AnyDrilldownScope, count: number): string {
+  if (scope === "reunioes") {
+    return `${formatDurationBR(count)} em reunião`;
+  }
   if (scope === "horas") {
     const h = toHours(count).toLocaleString("pt-BR", {
       minimumFractionDigits: 1,
@@ -90,12 +97,25 @@ const PERIOD_SCOPED: AnyDrilldownScope[] = [
   "horas",
   "pontuais",
   "atrasadas",
+  "reunioes",
 ];
 
 function fmtHoursShort(seconds: number): string {
   return toHours(seconds).toLocaleString("pt-BR", {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
+  });
+}
+
+// Dia + hora de uma reunião cronometrada, no fuso de Brasília.
+function fmtMeetingWhen(iso: string | null): string | null {
+  if (!iso) return null;
+  return new Date(iso).toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
@@ -134,24 +154,32 @@ export default function CapacityDrilldownPanel({
   const [error, setError] = useState<string | null>(null);
   const [companies, setCompanies] = useState<DrilldownCompany[]>([]);
   const [tasks, setTasks] = useState<DrilldownTask[]>([]);
+  const [meetings, setMeetings] = useState<DrilldownMeeting[]>([]);
   const [pending, startTransition] = useTransition();
   const [navId, setNavId] = useState<string | null>(null);
 
   const { personId, personName, scope, count, period } = target;
   const taskScope = isTaskScope(scope);
+  const meetingsScope = isMeetingsScope(scope);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
     setError(null);
-    // Recortes de ATIVIDADE abrem TAREFAS (RPC própria); os demais, EMPRESAS.
-    const load = isTaskScope(scope)
+    // ATIVIDADE → TAREFAS; "reunioes" → REUNIÕES cronometradas; demais → EMPRESAS.
+    const load = isMeetingsScope(scope)
+      ? getCapacityMeetingsDrilldown(personId, period).then((res) => {
+          if (!active) return;
+          if (res.error) setError(res.error);
+          else setMeetings(res.meetings ?? []);
+        })
+      : isTaskScope(scope)
       ? getCapacityTaskDrilldown(personId, scope, period).then((res) => {
           if (!active) return;
           if (res.error) setError(res.error);
           else setTasks(res.tasks ?? []);
         })
-      : fetcher(personId, scope, period).then((res) => {
+      : fetcher(personId, scope as DrilldownScope, period).then((res) => {
           if (!active) return;
           if (res.error) setError(res.error);
           else setCompanies(res.companies ?? []);
@@ -222,6 +250,40 @@ export default function CapacityDrilldownPanel({
               </p>
               <p className="mt-1 text-xs text-fg-subtle">{error}</p>
             </div>
+          ) : meetingsScope ? (
+            meetings.length === 0 ? (
+              <p className="py-8 text-center text-sm text-fg-subtle">
+                Nenhuma reunião cronometrada neste período.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {meetings.map((m, i) => (
+                  <li key={i} className="rounded-xl border border-line bg-surface p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="min-w-0 font-medium text-fg">
+                        {m.title || "(sem título)"}
+                      </span>
+                      <span className="shrink-0 text-sm font-semibold tabular-nums text-fg">
+                        {formatDurationBR(m.seconds)}
+                      </span>
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-fg-muted">
+                      <span className="inline-flex items-center rounded-full border border-line bg-surface-2/60 px-2 py-0.5">
+                        {m.companyName}
+                      </span>
+                      {m.startedAt && (
+                        <span className="text-fg-subtle">{fmtMeetingWhen(m.startedAt)}</span>
+                      )}
+                      {m.autoClosed && (
+                        <span className="text-amber-700 dark:text-amber-300">
+                          encerrado automaticamente
+                        </span>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )
           ) : taskScope ? (
             tasks.length === 0 ? (
               <p className="py-8 text-center text-sm text-fg-subtle">
@@ -329,15 +391,6 @@ export default function CapacityDrilldownPanel({
                           {c.daysSince} dias
                         </span>{" "}
                         sem registro de contato
-                      </p>
-                    )}
-
-                    {/* Sem registro: nunca houve registro — não é abandono, é
-                        ausência no sistema (contato pela Digisac não vem ao CRM). */}
-                    {scope === "sem_registro" && (
-                      <p className="mt-2 text-xs text-fg-muted">
-                        <span className="font-medium text-fg">Sem registro de contato</span>{" "}
-                        no sistema (pode ter havido contato pela Digisac)
                       </p>
                     )}
 

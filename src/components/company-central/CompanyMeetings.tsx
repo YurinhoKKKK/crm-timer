@@ -1,5 +1,6 @@
 import NewMeetingForm from "@/components/meetings/NewMeetingForm";
 import MeetingList from "@/components/meetings/MeetingList";
+import CompanyMeetingHours from "@/components/company-central/CompanyMeetingHours";
 import type {
   DirectoryUser,
   MeetingActionsContext,
@@ -37,6 +38,10 @@ export default function CompanyMeetings({
   };
   return (
     <div>
+      {/* Horas em reunião (0148) — linha no topo; só admin e consultores da empresa
+          (o bloco se esconde sozinho — restricted — para quem o banco recusa). */}
+      <CompanyMeetingHours companyId={companyId} />
+
       <NewMeetingForm directory={directory} lockedCompany={lockedCompany} />
       <MeetingList
         rows={rows}

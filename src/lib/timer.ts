@@ -44,6 +44,45 @@ export function formatElapsedCompact(totalSeconds: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
 
+/**
+ * Duração legível para TOTAIS (horas de reunião da empresa, coluna da Capacidade,
+ * trechos): "15 min", "1 h 05 min". Granularidade de minuto (arredonda). A
+ * ordenação nas tabelas continua pelo número de segundos, nunca por este texto.
+ */
+export function formatDurationBR(totalSeconds: number): string {
+  const mins = Math.max(0, Math.round(totalSeconds / 60));
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h === 0 ? `${m} min` : `${h} h ${pad(m)} min`;
+}
+
+// ---------------------------------------------------------------------------
+// Timer de REUNIÃO — fonte ÚNICA do tempo exibido (pop-up, cards e linha da
+// empresa). A base NÃO tiquetaqueia (manual_seconds, se houver, OU a soma dos
+// trechos FECHADOS). O que corre é cada trecho aberto: (agora + skew − início).
+// `skewMs` corrige o relógio do navegador contra o do servidor (decisão 4): o
+// "agora" do cálculo é SEMPRE Date.now() a cada tique, nunca um acumulador +1 s.
+// ---------------------------------------------------------------------------
+export type MeetingTimerBase = {
+  baseSeconds: number; // parte que não corre (manual OU soma dos trechos fechados)
+  openStartsMs: number[]; // início (ms UTC) de cada trecho aberto; vazio = parado
+  skewMs: number; // defasagem servidor − navegador no momento do fetch
+};
+
+export function meetingLiveSeconds(base: MeetingTimerBase, nowMs: number): number {
+  let total = Math.max(0, base.baseSeconds);
+  for (const start of base.openStartsMs) {
+    total += Math.max(0, (nowMs + base.skewMs - start) / 1000);
+  }
+  return total;
+}
+
+/** Defasagem (ms) servidor − navegador, calculada uma vez a partir do server_now. */
+export function clockSkewMs(serverNowIso: string | null | undefined): number {
+  const s = parseStartedAt(serverNowIso);
+  return s === null ? 0 : s - Date.now();
+}
+
 function split(totalSeconds: number) {
   const t = Math.max(0, Math.floor(totalSeconds));
   return { h: Math.floor(t / 3600), m: Math.floor((t % 3600) / 60), s: t % 60 };

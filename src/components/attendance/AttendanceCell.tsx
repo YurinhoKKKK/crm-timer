@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAttendance, doStart, doStop } from "@/lib/attendance-store";
 import { emitAttendanceSync } from "@/lib/attendance-sync";
+import { emitMeetingTimerSync } from "@/lib/timer-sync";
+import { fetchMyOpenMeetingTimer } from "@/app/meeting-timer-actions";
 import { formatElapsedCompact } from "@/lib/timer";
 
 // Célula da coluna "Atendimento" no painel "Minhas empresas" (calibração, 0126).
@@ -41,6 +43,8 @@ export default function AttendanceCell({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  // Iniciar atendimento encerra o timer de reunião aberto (decisão 5) — confirma.
+  const [pendingMeeting, setPendingMeeting] = useState<string | null>(null);
   const isHere = open?.companyId === companyId;
 
   useEffect(() => {
@@ -50,7 +54,8 @@ export default function AttendanceCell({
     return () => window.clearInterval(id);
   }, [isHere]);
 
-  async function onPlay() {
+  async function proceedPlay() {
+    setPendingMeeting(null);
     setBusy(true);
     setErr(null);
     const r = await doStart(companyId, companyNumber);
@@ -60,7 +65,18 @@ export default function AttendanceCell({
       return;
     }
     emitAttendanceSync();
+    emitMeetingTimerSync(); // o atendimento encerrou o timer de reunião (decisão 5)
     router.refresh();
+  }
+
+  async function onPlay() {
+    setErr(null);
+    const openMeeting = await fetchMyOpenMeetingTimer();
+    if (openMeeting) {
+      setPendingMeeting(openMeeting.title ?? "reunião em andamento");
+      return;
+    }
+    await proceedPlay();
   }
 
   async function onPause() {
@@ -126,6 +142,27 @@ export default function AttendanceCell({
         <span className="text-[11px] text-red-600 dark:text-red-400" title={err}>
           erro
         </span>
+      )}
+      {pendingMeeting !== null && (
+        <div className="mt-1 flex w-full flex-wrap items-center gap-1.5 text-[11px] text-amber-700 dark:text-amber-300">
+          <span>Encerrar o timer da reunião “{pendingMeeting}”?</span>
+          <button
+            type="button"
+            onClick={proceedPlay}
+            disabled={busy}
+            className="rounded border border-risd/50 px-1.5 py-0.5 font-semibold text-risd hover:bg-brand-tint disabled:opacity-60"
+          >
+            Continuar
+          </button>
+          <button
+            type="button"
+            onClick={() => setPendingMeeting(null)}
+            disabled={busy}
+            className="rounded px-1.5 py-0.5 text-fg-muted hover:text-fg"
+          >
+            Cancelar
+          </button>
+        </div>
       )}
     </div>
   );

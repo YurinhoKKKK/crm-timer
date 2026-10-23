@@ -130,8 +130,9 @@ export default function CapacityView({
             sempre separadas.
           </li>
           <li>
-            <strong>Parados</strong> (mais de 15 dias desde o último registro) é o
-            sinal de alerta.
+            <strong>Parados</strong> são os clientes ativos que ficaram{" "}
+            <strong>vermelhos</strong> no último dia útil fechado (sem contato pelo
+            Digisac naquele dia; hoje não conta) — o sinal de alerta.
           </li>
           <li>
             <strong>Horas em reunião</strong> soma o tempo cronometrado em reuniões
@@ -245,7 +246,7 @@ function ConsultoresTable({
               <Th align="right" active={sort.key === "alerta"} desc={sort.desc} onClick={() => toggle("alerta")} title="Clientes ativos com a etiqueta ALERTA">
                 Alerta
               </Th>
-              <Th align="right" active={sort.key === "stalled"} desc={sort.desc} onClick={() => toggle("stalled")} title="Clientes ativos parados: mais de 15 dias desde o último registro de contato (mesmo critério da tela de Acompanhamento)">
+              <Th align="right" active={sort.key === "stalled"} desc={sort.desc} onClick={() => toggle("stalled")} title="Clientes ativos vermelhos no último dia útil fechado: sem contato pelo Digisac naquele dia (hoje não conta; mesmo critério da tela de Acompanhamento)">
                 Parados
               </Th>
               <Th align="right" active={sort.key === "meeting"} desc={sort.desc} onClick={() => toggle("meeting")} title="Horas em reunião com clientes no período (timer manual de reunião). Soma as reuniões — do CRM e do Google — em que a pessoa conta, com início no período.">

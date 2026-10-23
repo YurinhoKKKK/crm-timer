@@ -34,6 +34,9 @@ export type DrilldownCompany = {
   id: string;
   name: string;
   group: string;
+  // Modelo de projeto (etiqueta CALCULADA — mesmas cores do quadro de Empresas);
+  // null = sem modelo (a tela mostra "Sem modelo" apagado).
+  projectModel: { name: string; bgColor: string; textColor: string } | null;
   labels: DrilldownLabel[];
   sharedWith: DrilldownConsultant[]; // só preenchido em "compartilhados"
   daysSince: number | null; // relevante em "parados"/"sem_registro"; null = nunca contatado
@@ -68,6 +71,7 @@ export async function getCapacityDrilldown(
           company_id: string;
           company_name: string;
           group_name: string;
+          project_model: { name: string; bg_color: string; text_color: string } | null;
           labels:
             | { name: string; bg_color: string; text_color: string; highlight: boolean }[]
             | null;
@@ -82,6 +86,13 @@ export async function getCapacityDrilldown(
     id: r.company_id,
     name: r.company_name,
     group: r.group_name,
+    projectModel: r.project_model
+      ? {
+          name: r.project_model.name,
+          bgColor: r.project_model.bg_color,
+          textColor: r.project_model.text_color,
+        }
+      : null,
     labels: (r.labels ?? []).map((l) => ({
       name: l.name,
       bgColor: l.bg_color,

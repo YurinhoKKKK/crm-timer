@@ -1,27 +1,54 @@
 import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
-import FollowupView from "@/components/followup/FollowupView";
-import { loadFollowup, clampPeriod, clampDir } from "@/lib/followup";
+import FollowupTabs from "@/components/followup/FollowupTabs";
+import {
+  loadFollowupBoard,
+  loadFollowupLastSync,
+  loadScoresMonth,
+  clampTab,
+  clampMonth,
+  monthOptions,
+  type LoadResult,
+  type ScoreMonthRow,
+} from "@/lib/followup";
 
-// Acompanhamento de clientes — monitora se TODOS os clientes estão sendo
-// atendidos de forma constante ("quais estão esfriando?"), não ranqueia ninguém.
-// Admin vê todas as empresas; consultor só a carteira dele (escopo garantido no
-// banco pela RLS companies_select dentro da RPC client_followup, SECURITY
-// INVOKER). Colaborador não acessa (guardRole barra).
+// Acompanhamento de clientes — monitora se TODOS os clientes estão recebendo
+// contato constante ("quem está esfriando?"), não ranqueia ninguém. Desde a 0150
+// o contato vem SÓ das mensagens do Digisac (cor do dia), e a tela ganhou uma
+// aba de Pontuação (admin). Admin vê todas as empresas de grupo ativo; consultor
+// só a carteira dele (escopo garantido no banco, dentro das RPCs SECURITY
+// DEFINER). Colaborador não acessa (guardRole barra).
 //
-// force-dynamic: os dados mudam a cada contato; o período vem da URL (estado de
-// visão, como periodo/status noutras telas) e refaz a agregação no servidor.
+// force-dynamic: os dados mudam a cada sync do Digisac; o período/mês/aba vêm da
+// URL (estado de visão) e refazem a leitura no servidor.
 export const dynamic = "force-dynamic";
 
 export default async function AcompanhamentoPage({
   searchParams,
 }: {
-  searchParams: { periodo?: string | string[]; dir?: string | string[] };
+  searchParams: {
+    aba?: string | string[];
+    mes?: string | string[];
+  };
 }) {
   const { supabase, profile } = await guardRole(["admin", "consultor"]);
-  const period = clampPeriod(searchParams.periodo);
-  const desc = clampDir(searchParams.dir);
-  const rows = await loadFollowup(supabase, period, desc);
+  const isAdmin = profile.role === "admin";
+
+  // A aba de Pontuação só existe para o admin; consultor cai sempre no board.
+  const tab = isAdmin ? clampTab(searchParams.aba) : "acompanhamento";
+  // Mês ÚNICO para as duas abas (set/2026 → corrente; padrão corrente).
+  const month = clampMonth(searchParams.mes);
+
+  // O board e o "atualizado às" saem sempre (fonte da aba Acompanhamento e do
+  // carimbo em ambas as abas). A pontuação do mês só quando o admin está na aba
+  // Pontuação — uma ida a menos ao banco para consultor/aba de board.
+  const [boardRes, lastSync, scoresRes] = await Promise.all([
+    loadFollowupBoard(supabase, month),
+    loadFollowupLastSync(supabase),
+    isAdmin && tab === "pontuacao"
+      ? loadScoresMonth(supabase, month)
+      : Promise.resolve({ rows: [], error: null } as LoadResult<ScoreMonthRow>),
+  ]);
 
   return (
     <AppShell
@@ -31,13 +58,18 @@ export default async function AcompanhamentoPage({
         avatarUrl: profile.avatarUrl,
       }}
       title="Acompanhamento de clientes"
-      subtitle="Quem está esfriando — para atender de forma constante, não para ranquear."
+      subtitle="Contato pelo Digisac — para atender de forma constante, não para ranquear."
     >
-      <FollowupView
-        rows={rows}
-        period={period}
-        desc={desc}
+      <FollowupTabs
         role={profile.role as "admin" | "consultor"}
+        tab={tab}
+        board={boardRes.rows}
+        boardError={boardRes.error}
+        lastSync={lastSync}
+        month={month}
+        monthOptions={monthOptions()}
+        scores={scoresRes.rows}
+        scoresError={scoresRes.error}
       />
     </AppShell>
   );

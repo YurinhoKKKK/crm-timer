@@ -7,6 +7,7 @@ import { FilterBar, SearchBox, EmptyState, norm } from "@/components/ListControl
 import GroupSection from "@/components/company-groups/GroupSection";
 import { groupCompanies, type CompanyGroup } from "@/lib/company-groups";
 import AnchoredPopover from "@/components/AnchoredPopover";
+import { WrenchIcon } from "@/components/ResponsibleChips";
 import {
   formatBRL,
   brToDecimalString,
@@ -264,6 +265,11 @@ function PersonChip({ row, person, ctx }: { row: CsRow; person: Responsible; ctx
         title={`${person.name} — ${rl}${statusTitle}`}
         className="flex w-full min-w-0 items-center gap-2 rounded-full border border-line bg-surface-2 px-2 py-0.5 text-xs text-fg transition hover:ring-2 hover:ring-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
       >
+        {/* Marca de COLABORADOR (chave inglesa) — mesma do ResponsibleChips, para
+            coerência. Aparece em 'colaborador' e 'ambos'. */}
+        {person.role !== "consultor" && (
+          <WrenchIcon className="h-3 w-3 shrink-0 text-violet-600 dark:text-violet-300" />
+        )}
         <span className="min-w-0 flex-1 truncate text-left font-medium">{person.name}</span>
         <span className="shrink-0 whitespace-nowrap text-[10px] font-medium uppercase tracking-wide text-fg-subtle">
           {rl}

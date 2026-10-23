@@ -1,14 +1,18 @@
 "use client";
 
-import { farolOf, type Farol } from "@/lib/followup";
+import type { DayColor } from "@/lib/followup";
 
 // Identidade VISUAL do semáforo de contato — fonte ÚNICA compartilhada entre a
 // página /acompanhamento (FollowupView) e a badge nos cards de empresa do painel
 // do consultor. A cor NUNCA é o único sinal: o rótulo em texto acompanha sempre
-// (acessibilidade). Os PRAZOS (verde ≤7 · amarelo 7–15 · vermelho >15 e
-// sem-registro) moram em farolOf (lib/followup), também fonte única.
+// (acessibilidade).
+//
+// Desde a 0150 a unidade é a COR DO DIA (não "dias desde o contato"): verde =
+// contato pela manhã (+1), amarelo = contato à tarde (0), vermelho = contato
+// após as 17h ou nenhum no dia (−1), aguardando (cinza) = dia corrente em
+// andamento ainda sem contato antes das 17h (neutro, não é falta).
 export const FAROL_UI: Record<
-  Farol,
+  DayColor,
   { label: string; dot: string; chip: string; text: string }
 > = {
   verde: {
@@ -24,32 +28,31 @@ export const FAROL_UI: Record<
     text: "text-amber-700 dark:text-amber-300",
   },
   vermelho: {
-    label: "Sem contato",
+    label: "Após 17h / sem contato",
     dot: "bg-red-500",
     chip: "bg-red-500/10 text-red-700 dark:text-red-300 border-red-500/30",
     text: "text-red-700 dark:text-red-300",
   },
+  aguardando: {
+    label: "Aguardando",
+    dot: "bg-slate-400",
+    chip: "bg-slate-500/10 text-slate-600 dark:text-slate-300 border-slate-500/30",
+    text: "text-slate-600 dark:text-slate-300",
+  },
 };
 
-// Dias desde o último contato, em texto discreto. null = nunca houve registro.
-function dimensionText(days: number | null): string {
-  if (days === null) return "nunca contatado";
-  if (days === 0) return "contato hoje";
-  return `há ${days} ${days === 1 ? "dia" : "dias"}`;
-}
-
-// Badge compacta de contato para os cards: chip colorido com o rótulo da faixa
-// (gravidade) + os dias desde o último contato, discretos (dimensão). Mesmos
-// prazos e mesmo padrão visual da página de acompanhamento — é UM sinal a mais no
-// card, não o protagonista.
+// Badge compacta de contato para os cards: chip colorido com o rótulo da COR DO
+// DIA. É UM sinal a mais no card, não o protagonista. A cor vem pronta do banco
+// (followup_board); quando não há cor (empresa fora de grupo ativo), o chamador
+// simplesmente não renderiza a badge.
 export function FarolBadge({
-  days,
+  color,
   className,
 }: {
-  days: number | null;
+  color: DayColor;
   className?: string;
 }) {
-  const ui = FAROL_UI[farolOf(days)];
+  const ui = FAROL_UI[color];
   return (
     <span className={`inline-flex items-center gap-1.5 ${className ?? ""}`}>
       <span
@@ -58,7 +61,6 @@ export function FarolBadge({
         <span className={`h-2 w-2 rounded-full ${ui.dot}`} aria-hidden="true" />
         {ui.label}
       </span>
-      <span className="text-xs text-fg-subtle">{dimensionText(days)}</span>
     </span>
   );
 }

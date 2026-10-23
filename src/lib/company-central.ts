@@ -68,7 +68,7 @@ export type CentralCompany = {
   pausedDays: number;
 };
 
-export type CentralPerson = { name: string; avatarUrl: string | null };
+export type CentralPerson = { id: string; name: string; avatarUrl: string | null };
 
 export type CentralOverview = {
   total: number;
@@ -124,6 +124,8 @@ export type PersonOption = { id: string; full_name: string; email: string };
 export type CentralData = {
   company: CentralCompany;
   consultants: CentralPerson[];
+  // Colaboradores responsáveis (vínculo 0090) — para os chips do cabeçalho.
+  collaboratorResponsibles: CentralPerson[];
   overview: CentralOverview;
   tasks: CentralTaskItem[];
   tasksTruncated: boolean;
@@ -191,7 +193,7 @@ export async function loadCompanyCentral(
       supabase
         .from("company_consultants")
         .select(
-          "consultant:profiles!company_consultants_consultant_id_fkey(full_name, email, avatar_path)"
+          "consultant:profiles!company_consultants_consultant_id_fkey(id, full_name, email, avatar_path)"
         )
         .eq("company_id", companyId)
     ),
@@ -286,7 +288,9 @@ export async function loadCompanyCentral(
       "company_collaborators (responsáveis)",
       supabase
         .from("company_collaborators")
-        .select("collaborator_id")
+        .select(
+          "collaborator_id, collaborator:profiles!company_collaborators_collaborator_id_fkey(id, full_name, email, avatar_path)"
+        )
         .eq("company_id", companyId)
     ),
     perf.timed("company_labels", loadCompanyLabels(supabase, companyId)),
@@ -342,6 +346,7 @@ export async function loadCompanyCentral(
   const consultants: CentralPerson[] = [];
   for (const link of (consultantsData as {
     consultant: Joined<{
+      id: string;
       full_name: string | null;
       email: string;
       avatar_path: string | null;
@@ -350,6 +355,7 @@ export async function loadCompanyCentral(
     const c = first(link.consultant);
     if (c) {
       consultants.push({
+        id: c.id,
         name: c.full_name || c.email,
         avatarUrl: avatarUrl(c.avatar_path),
       });
@@ -490,9 +496,29 @@ export async function loadCompanyCentral(
     (collaboratorsData as PersonOption[]) ?? [],
     self
   );
-  const responsibleIds = (
-    (responsibleData as { collaborator_id: string }[]) ?? []
-  ).map((r) => r.collaborator_id);
+  const responsibleRows =
+    (responsibleData as {
+      collaborator_id: string;
+      collaborator: Joined<{
+        id: string;
+        full_name: string | null;
+        email: string;
+        avatar_path: string | null;
+      }>;
+    }[]) ?? [];
+  const responsibleIds = responsibleRows.map((r) => r.collaborator_id);
+  // Chips do cabeçalho: colaboradores responsáveis com nome + avatar.
+  const collaboratorResponsibles: CentralPerson[] = [];
+  for (const row of responsibleRows) {
+    const c = first(row.collaborator);
+    if (c) {
+      collaboratorResponsibles.push({
+        id: c.id,
+        name: c.full_name || c.email,
+        avatarUrl: avatarUrl(c.avatar_path),
+      });
+    }
+  }
 
   // --- Acesso do cliente (passo 30) ---
   const clientAccess: ClientAccessView = isAdmin
@@ -537,6 +563,7 @@ export async function loadCompanyCentral(
         pausedDays,
       },
       consultants,
+      collaboratorResponsibles,
       overview,
       tasks,
       tasksTruncated,

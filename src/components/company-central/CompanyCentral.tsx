@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Avatar from "@/components/Avatar";
+import ResponsibleChips from "@/components/ResponsibleChips";
 import CompanyPeriodFilter from "@/components/company-central/CompanyPeriodFilter";
 import { periodQuery, type ResolvedPeriod } from "@/lib/period";
 import NewTaskForm from "@/app/admin/tarefas/NewTaskForm";
@@ -90,7 +91,7 @@ export default function CompanyCentral({
   // "Ver como cliente" (passo 30), também por painel.
   previewHref: string;
 }) {
-  const { company, consultants, overview: o } = data;
+  const { company, consultants, collaboratorResponsibles, overview: o } = data;
 
   // Clique num card do funil → tela dedicada com a lista filtrada (mesmo
   // padrão do dashboard); o período atual (inclusive mês/intervalo) é preservado.
@@ -133,22 +134,16 @@ export default function CompanyCentral({
               <NewClientChip startedOn={company.startedOn} size="md" />
             </div>
             <div>
-              <p className="text-xs text-fg-subtle">Consultor(es) responsável(is)</p>
-              {consultants.length > 0 ? (
-                <div className="mt-1 flex flex-wrap gap-1.5">
-                  {consultants.map((c) => (
-                    <span
-                      key={c.name}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface-2 py-0.5 pl-1 pr-2 text-xs text-fg-muted"
-                    >
-                      <Avatar name={c.name} url={c.avatarUrl} size={18} />
-                      {c.name}
-                    </span>
-                  ))}
-                </div>
+              <p className="text-xs text-fg-subtle">Responsáveis</p>
+              {consultants.length > 0 || collaboratorResponsibles.length > 0 ? (
+                <ResponsibleChips
+                  consultants={consultants}
+                  collaborators={collaboratorResponsibles}
+                  className="mt-1"
+                />
               ) : (
                 <p className="mt-1 text-sm text-fg-subtle">
-                  Nenhum consultor vinculado.
+                  Nenhum responsável vinculado.
                 </p>
               )}
             </div>

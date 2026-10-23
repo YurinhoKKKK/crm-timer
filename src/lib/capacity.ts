@@ -92,7 +92,7 @@ export type CapacityRow = {
   carteiraExclusive: number;
   carteiraShared: number;
   carteiraAlerta: number;
-  carteiraStalled: number; // PARADOS: > 15 dias desde o último registro (o alerta)
+  carteiraStalled: number; // PARADOS: vermelhos no último dia útil fechado (Digisac)
   meetingSeconds: number; // HORAS EM REUNIÃO no período (decisão 10) — segundos somados
   hasCarteira: boolean; // tem carteira → entra na tabela de consultores
   isExecutor: boolean; // tem execução (qualquer tempo) → tabela de colaboradores

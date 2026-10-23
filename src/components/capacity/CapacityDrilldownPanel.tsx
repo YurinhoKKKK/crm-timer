@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Avatar from "@/components/Avatar";
 import TaskDetailLink from "@/components/TaskDetailLink";
+import LabelChips from "@/components/LabelChips";
 import { avatarUrl } from "@/lib/avatar";
 import { formatDurationBR } from "@/lib/timer";
 import {
@@ -353,6 +354,25 @@ export default function CapacityDrilldownPanel({
                     </div>
 
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      {/* Modelo do projeto (etiqueta calculada — mesmas cores do
+                          quadro de Empresas), ANTES do grupo. Sem modelo → apagado. */}
+                      {c.projectModel ? (
+                        <LabelChips
+                          labels={[
+                            {
+                              id: "pm",
+                              name: c.projectModel.name,
+                              bg_color: c.projectModel.bgColor,
+                              text_color: c.projectModel.textColor,
+                              highlight: false,
+                            },
+                          ]}
+                        />
+                      ) : (
+                        <span className="inline-flex items-center rounded-full border border-dashed border-line bg-transparent px-2 py-0.5 text-[11px] italic text-fg-subtle">
+                          Sem modelo
+                        </span>
+                      )}
                       <span className="inline-flex items-center rounded-full border border-line bg-surface-2/60 px-2 py-0.5 text-[11px] text-fg-muted">
                         {c.group}
                       </span>
@@ -384,13 +404,14 @@ export default function CapacityDrilldownPanel({
                       </div>
                     )}
 
-                    {/* Parados: há quantos dias sem contato (o alerta de verdade). */}
+                    {/* Parados: há quantos dias desde a última mensagem do Digisac
+                        (o alerta de verdade). */}
                     {scope === "parados" && c.daysSince !== null && (
                       <p className="mt-2 text-xs text-fg-muted">
                         <span className="font-medium text-rose-700 dark:text-rose-300">
-                          {c.daysSince} dias
+                          {c.daysSince} {c.daysSince === 1 ? "dia" : "dias"}
                         </span>{" "}
-                        sem registro de contato
+                        desde a última mensagem no Digisac
                       </p>
                     )}
 

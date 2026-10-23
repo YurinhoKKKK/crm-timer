@@ -13,7 +13,7 @@ import {
 } from "@/components/ListControls";
 import LabelChips, { labelChipStyle } from "@/components/LabelChips";
 import NewClientChip from "@/components/NewClientChip";
-import Avatar from "@/components/Avatar";
+import ResponsibleChips from "@/components/ResponsibleChips";
 import ContractBar from "@/components/ContractBar";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import NotesButton from "@/components/notes-panel/NotesButton";
@@ -43,6 +43,7 @@ export type CompanyItem = {
   whatsappGroupName: string | null;
   whatsappContactId: string | null;
   consultants: { id: string; name: string; avatarUrl?: string | null }[];
+  collaborators: { id: string; name: string; avatarUrl?: string | null }[];
   labels: Label[];
   groupId: string | null;
   noteCount: number;
@@ -823,19 +824,12 @@ function CompanyRow({
             Sem grupo de WhatsApp vinculado.
           </span>
         )}
-        {company.consultants.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {company.consultants.map((c) => (
-              <span
-                key={c.id}
-                className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface-2 py-0.5 pl-1 pr-2 text-xs text-fg-muted"
-              >
-                <Avatar name={c.name} url={c.avatarUrl} size={18} />
-                {c.name}
-              </span>
-            ))}
-          </div>
-        )}
+        <ResponsibleChips
+          consultants={company.consultants}
+          collaborators={company.collaborators}
+          showEmptyCollaborator
+          className="mt-2"
+        />
         {/* Barra do contrato — compacta; só aparece com as duas datas, então não
             reserva espaço nem quebra o layout das linhas sem datas. */}
         <div className="mt-2 empty:hidden">

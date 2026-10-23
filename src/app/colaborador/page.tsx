@@ -8,6 +8,7 @@ import { loadCompanyNoteCounts } from "@/lib/notes";
 import { loadStartedOnByCompany } from "@/lib/company-details";
 import { loadCompanyGroups, loadCompanyGroupMap } from "@/lib/company-groups";
 import { loadAttendanceContext } from "@/lib/attendance";
+import { loadResponsibleChipsByCompany } from "@/lib/people";
 import { perfRoute } from "@/lib/perf";
 
 type CompanyCountRow = {
@@ -79,6 +80,13 @@ export default async function ColaboradorPage() {
     }))
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
+  // Balões de responsáveis (consultores + colaboradores) — uma ida agregada
+  // (RPC company_responsibles), escopada às empresas que o colaborador alcança.
+  const responsibleChips = await loadResponsibleChipsByCompany(
+    supabase,
+    companies.map((c) => c.id)
+  );
+
   return (
     <AppShell
       user={{
@@ -127,6 +135,8 @@ export default async function ColaboradorPage() {
               startedOn: startedOnByCompany.get(c.id) ?? null,
               outOfPortfolio: !c.inPortfolio,
               groupId: groupByCompany.get(c.id) ?? null,
+              consultants: responsibleChips.get(c.id)?.consultants ?? [],
+              collaborators: responsibleChips.get(c.id)?.collaborators ?? [],
             })
           )}
         />

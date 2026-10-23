@@ -4,7 +4,11 @@ import NewTaskForm from "@/app/admin/tarefas/NewTaskForm";
 import CompanySummaryGrid, {
   type CompanyCardItem,
 } from "@/components/CompanySummaryGrid";
-import { withSelf, loadResponsiblesByCompany } from "@/lib/people";
+import {
+  withSelf,
+  loadResponsiblesByCompany,
+  loadResponsibleChipsByCompany,
+} from "@/lib/people";
 import { loadCompanyNoteCounts } from "@/lib/notes";
 import { loadStartedOnByCompany } from "@/lib/company-details";
 import {
@@ -13,6 +17,7 @@ import {
   resolveCompanyGroupId,
 } from "@/lib/company-groups";
 import { perfRoute } from "@/lib/perf";
+import { currentMonth, monthToDate, type DayColor } from "@/lib/followup";
 
 type PersonOption = { id: string; full_name: string; email: string };
 
@@ -41,9 +46,9 @@ export default async function ConsultorPage() {
 
   // O acompanhamento vem JUNTO das consultas que já existiam, em paralelo (uma
   // ida a mais ao banco no total, nunca uma por card). A MESMA RPC da página
-  // /acompanhamento (fonte única): SECURITY INVOKER escopada por companies_select
-  // ⇒ devolve só as empresas deste consultor. Período/sentido não afetam o
-  // days_since da badge; usamos os padrões.
+  // /acompanhamento (fonte única): followup_board é SECURITY DEFINER escopado por
+  // dentro ⇒ devolve só as empresas de grupo ATIVO deste consultor, com a COR DO
+  // DIA pronta. Empresa fora de grupo ativo não vem (⇒ card sem badge).
   const perf = perfRoute("/consultor (painel)");
   const [
     { data: companiesData },
@@ -80,10 +85,11 @@ export default async function ConsultorPage() {
       "rpc company_task_counts",
       supabase.rpc("company_task_counts", { p_start: null })
     ),
-    // Semáforo de contato por empresa (mesma fonte da /acompanhamento).
+    // Semáforo de contato por empresa (cor do dia; mesma fonte da /acompanhamento).
+    // O badge usa sempre o MÊS ATUAL (cor do dia relevante).
     perf.timed(
-      "rpc client_followup (badge de contato)",
-      supabase.rpc("client_followup", { p_period_days: 30, p_desc: true })
+      "rpc followup_board (badge de contato)",
+      supabase.rpc("followup_board", { p_month: monthToDate(currentMonth()) })
     ),
     // Contagem de anotações por empresa (balão de atalho), agregada no banco.
     perf.timed("rpc company_note_counts", loadCompanyNoteCounts(supabase)),
@@ -103,6 +109,13 @@ export default async function ConsultorPage() {
   perf.done();
 
   const companyRows = (companiesData as CompanyRow[]) ?? [];
+  // Balões de responsáveis (consultores + colaboradores) por empresa — uma ida
+  // agregada (RPC company_responsibles), escopada às empresas que o consultor
+  // alcança. Depende dos ids, por isso vem após o Promise.all.
+  const responsibleChips = await loadResponsibleChipsByCompany(
+    supabase,
+    companyRows.map((c) => c.id)
+  );
   // Empresa → grupo (ponto único de leitura de group_id) e empresa → nome do
   // grupo PARADO (alimenta o aviso de nova tarefa). Nenhuma empresa some: as
   // paradas agora aparecem na sua seção em vez de serem escondidas.
@@ -113,12 +126,14 @@ export default async function ConsultorPage() {
   // Lista para o seletor de "Nova tarefa" (id + nome).
   const companies = companyRows.map((c) => ({ id: c.id, name: c.name }));
 
-  // Mapa empresa → dias desde o último contato (null = nunca). A RPC já é
-  // escopada pela RLS, então nunca traz empresa fora da carteira do consultor.
-  const contactDays = new Map<string, number | null>(
-    ((followupData as { company_id: string; days_since: number | null }[]) ?? []).map(
-      (r) => [r.company_id, r.days_since]
-    )
+  // Mapa empresa → COR DO DIA relevante. A RPC já é escopada por dentro, e só
+  // traz empresas de grupo ativo da carteira do consultor; as demais ficam de
+  // fora do mapa ⇒ o card não mostra badge de contato.
+  const contactColor = new Map<string, DayColor>(
+    ((followupData as { company_id: string; color: DayColor }[]) ?? []).map((r) => [
+      r.company_id,
+      r.color,
+    ])
   );
   // O consultor também pode se atribuir como responsável de tarefas (Passo 14).
   const collaborators = withSelf(
@@ -201,10 +216,14 @@ export default async function ConsultorPage() {
                   total: c.total,
                   pending: c.pending,
                   overdue: c.overdue,
-                  contact: { days: contactDays.get(c.id) ?? null },
+                  contact: contactColor.has(c.id)
+                    ? { color: contactColor.get(c.id)! }
+                    : undefined,
                   noteCount: noteCounts.get(c.id) ?? 0,
                   startedOn: startedOnByCompany.get(c.id) ?? null,
                   groupId: groupByCompany.get(c.id) ?? null,
+                  consultants: responsibleChips.get(c.id)?.consultants ?? [],
+                  collaborators: responsibleChips.get(c.id)?.collaborators ?? [],
                 })
               )}
             />

@@ -1,6 +1,44 @@
 import type { createClient } from "@/lib/supabase-server";
+import { avatarUrl } from "@/lib/avatar";
 
 export type PersonOption = { id: string; full_name: string; email: string };
+
+// Pessoa para os balões de responsáveis (ResponsibleChips). avatarUrl já
+// resolvido (o componente é "use client" e não resolve caminho).
+export type ChipPerson = { id: string; name: string; avatarUrl: string | null };
+
+// Mapa empresa → { consultores, colaboradores } para os balões dos painéis
+// "Minhas empresas". Fonte: RPC company_responsibles (SECURITY DEFINER, 0154),
+// que devolve os dois grupos SÓ para empresas que o chamador alcança — uma ida
+// agregada (um array de ids), nunca uma por empresa. A RLS direta não serviria:
+// o colaborador não lê company_consultants.
+export async function loadResponsibleChipsByCompany(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  companyIds: string[]
+): Promise<Map<string, { consultants: ChipPerson[]; collaborators: ChipPerson[] }>> {
+  const map = new Map<string, { consultants: ChipPerson[]; collaborators: ChipPerson[] }>();
+  if (companyIds.length === 0) return map;
+  const { data } = await supabase.rpc("company_responsibles", {
+    p_company_ids: companyIds,
+  });
+  type Row = {
+    company_id: string;
+    consultants: { id: string; name: string | null; avatar_path: string | null }[] | null;
+    collaborators: { id: string; name: string | null; avatar_path: string | null }[] | null;
+  };
+  const toChip = (p: { id: string; name: string | null; avatar_path: string | null }): ChipPerson => ({
+    id: p.id,
+    name: p.name || "(sem nome)",
+    avatarUrl: avatarUrl(p.avatar_path),
+  });
+  for (const row of (data as Row[]) ?? []) {
+    map.set(row.company_id, {
+      consultants: (row.consultants ?? []).map(toChip),
+      collaborators: (row.collaborators ?? []).map(toChip),
+    });
+  }
+  return map;
+}
 
 // Mapa empresa → ids dos colaboradores RESPONSÁVEIS (vínculo declarado — âncora
 // 0090). Alimenta o filtro do seletor de responsável no cadastro de tarefa: só

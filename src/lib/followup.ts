@@ -1,18 +1,25 @@
 import type { createClient } from "@/lib/supabase-server";
 
-// Acompanhamento de clientes — tipos e helpers da tela que responde "quais
-// clientes estão esfriando?". A agregação pesada mora no banco (RPC
-// client_followup, SECURITY INVOKER escopada por companies_select); aqui só
-// tipamos o retorno e derivamos o semáforo.
+// Acompanhamento de clientes — tipos e helpers da tela que responde "quem está
+// esfriando?". Desde a migration 0150 o contato é medido SÓ pelas mensagens do
+// Digisac (digisac_messages), não mais por ações no CRM. A unidade é a COR DO DIA
+// (verde/amarelo/vermelho/aguardando), gravada por dia × empresa em
+// followup_daily_scores e devolvida pronta pelas RPCs SECURITY DEFINER abaixo —
+// aqui só tipamos o retorno. A identidade visual mora em FAROL_UI (FarolBadge),
+// fonte única compartilhada com os cards do painel do consultor.
+// LGPD: nunca lemos nem guardamos o texto das mensagens.
 
 type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
 
-export type FollowupKind =
-  | "reuniao"
-  | "anotacao"
-  | "listagem"
-  | "reajuste"
-  | "tarefa";
+// Cor do dia (decisão 3 da 0150): a 1ª mensagem válida do dia define a cor.
+// <12:00 verde (+1) · 12:00–16:59 amarelo (0) · ≥17:00 ou sem contato vermelho
+// (−1). 'aguardando' (cinza, 0) é só o dia corrente antes das 17:00 ainda sem
+// contato — nunca é falta. Substitui o antigo modelo "dias desde o contato".
+export type DayColor = "verde" | "amarelo" | "vermelho" | "aguardando";
+
+// Compat: o tipo histórico. A cor agora vem pronta do banco; mantido como alias
+// para quem ainda fala em "farol" (identidade visual em FAROL_UI).
+export type Farol = DayColor;
 
 export type FollowupConsultant = {
   id: string;
@@ -20,118 +27,252 @@ export type FollowupConsultant = {
   avatarPath: string | null;
 };
 
-export type FollowupRow = {
+// Uma linha do quadro de Acompanhamento (RPC followup_board). A cor é a do DIA
+// RELEVANTE (hoje, se dia útil; senão o último dia útil — ex.: no sábado, a
+// sexta). As contagens de dias por cor são do período escolhido.
+export type BoardRow = {
   companyId: string;
   companyName: string;
   consultants: FollowupConsultant[];
-  lastContactAt: string | null; // ISO; null = nunca houve contato
-  lastContactKind: FollowupKind | null;
-  daysSince: number | null; // dias civis (BRT); null = nunca
-  nextMeetingAt: string | null; // próxima reunião MARCADA (futuro)
-  period: {
-    meetings: number;
-    notes: number;
-    listings: number;
-    readjusts: number;
-    tasks: number;
-  };
+  collaborators: FollowupConsultant[];
+  relevantDay: string; // data pura YYYY-MM-DD do dia avaliado
+  color: DayColor;
+  isToday: boolean; // o dia relevante é hoje (dia útil em andamento)
+  firstMsgAt: string | null; // 1ª mensagem válida do dia relevante (ISO)
+  lastMsgAt: string | null; // última mensagem válida de todas (ISO); null = nunca
+  nextMeetingAt: string | null; // próxima reunião marcada (futuro)
+  daysVerde: number;
+  daysAmarelo: number;
+  daysVermelho: number;
+  responsibleName: string | null; // colaborador responsável do dia; null = sem responsável
 };
 
-export type Farol = "verde" | "amarelo" | "vermelho";
+// Pontuação do mês por colaborador (RPC followup_scores_month, admin).
+// collaboratorId null = empresas sem responsável (aparecem mas não pontuam).
+export type ScoreMonthRow = {
+  collaboratorId: string | null;
+  collaboratorName: string | null;
+  avatarPath: string | null;
+  points: number;
+  daysVerde: number;
+  daysAmarelo: number;
+  daysVermelho: number;
+  companies: number;
+};
 
-export const FOLLOWUP_PERIODS = [30, 60, 90] as const;
-export type FollowupPeriod = (typeof FOLLOWUP_PERIODS)[number];
+// Uma célula da grade dia×empresa do drill-down da Pontuação (RPC
+// followup_scores_detail, admin).
+export type ScoreDetailRow = {
+  companyId: string;
+  companyName: string;
+  day: string; // YYYY-MM-DD
+  color: DayColor;
+  firstMsgAt: string | null;
+  points: number;
+};
 
-export function clampPeriod(raw: string | string[] | undefined): FollowupPeriod {
-  const v = parseInt((Array.isArray(raw) ? raw[0] : raw) ?? "", 10);
-  return (FOLLOWUP_PERIODS as readonly number[]).includes(v)
-    ? (v as FollowupPeriod)
-    : 30;
-}
-
-// Sentido da MESMA fila de prioridade (não é troca de critério). Descendente por
-// urgência é o padrão (mais críticos no topo); `dir=asc` na URL inverte para os
-// atendidos mais recentemente no topo. Retorna `p_desc` para a RPC.
-export function clampDir(raw: string | string[] | undefined): boolean {
+// As duas abas da tela. 'pontuacao' só existe para o admin (o guard da page
+// garante; aqui só normalizamos o parâmetro da URL).
+export type FollowupTab = "acompanhamento" | "pontuacao";
+export function clampTab(raw: string | string[] | undefined): FollowupTab {
   const v = (Array.isArray(raw) ? raw[0] : raw) ?? "";
-  return v !== "asc"; // qualquer coisa fora de "asc" = descendente (padrão)
+  return v === "pontuacao" ? "pontuacao" : "acompanhamento";
 }
 
-// Semáforo pelos prazos definidos: verde até 7 dias, amarelo de 7 a 15, vermelho
-// acima de 15. Nunca contatado é o caso mais urgente → vermelho (a tela mostra o
-// texto "Nunca contatado", não um número). O texto SEMPRE acompanha a cor
-// (acessibilidade): a cor nunca é o único sinal.
-export function farolOf(days: number | null): Farol {
-  if (days === null) return "vermelho";
-  if (days <= 7) return "verde";
-  if (days <= 15) return "amarelo";
-  return "vermelho";
+// --- Meses disponíveis na Pontuação ----------------------------------------
+// O histórico começa em setembro/2026 (primeiro mês com backfill do Digisac). O
+// mês corrente aparece como "em andamento". Datas em BRT (a virada de mês segue
+// America/Sao_Paulo, como todo o resto do app).
+const TZ = "America/Sao_Paulo";
+const FIRST_MONTH = "2026-09";
+
+export type MonthOption = { value: string; label: string; current: boolean };
+
+function brtYearMonth(): { y: number; m: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: TZ,
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date());
+  const y = Number(parts.find((p) => p.type === "year")!.value);
+  const m = Number(parts.find((p) => p.type === "month")!.value);
+  return { y, m };
 }
 
-export const KIND_LABEL: Record<FollowupKind, string> = {
-  reuniao: "Reunião realizada",
-  anotacao: "Atualização ao cliente",
-  listagem: "Listagem entregue",
-  reajuste: "Reajuste concluído",
-  tarefa: "Tarefa concluída",
-};
-
-// Carrega o acompanhamento do período. A RLS (companies_select) já escopa: admin
-// vê todas; consultor só a carteira dele. Uma linha por empresa (bounded pelo nº
-// de empresas do escopo — nunca linhas cruas de sinais).
-//
-// p_only_active=true: a tela de Acompanhamento mostra SÓ empresas de grupo ATIVO
-// (kind='active'). Cliente parado/renovação/onboarding/sem grupo é do comercial e
-// do sucesso do cliente — fica fora, e TODOS os números da tela (semáforo, totais,
-// recorte por consultor) saem deste mesmo conjunto filtrado, pois derivam destas
-// linhas. Outros chamadores da RPC (badge do painel, team_capacity) usam o padrão
-// false e seguem vendo tudo. Ver migration 0100.
-export async function loadFollowup(
-  supabase: SupabaseServer,
-  periodDays: FollowupPeriod,
-  desc: boolean
-): Promise<FollowupRow[]> {
-  const { data } = await supabase.rpc("client_followup", {
-    p_period_days: periodDays,
-    p_desc: desc,
-    p_only_active: true,
+// "2026-09" → "setembro de 2026".
+function monthLabel(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1, 1));
+  const name = d.toLocaleDateString("pt-BR", {
+    timeZone: "UTC",
+    month: "long",
+    year: "numeric",
   });
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+// Normaliza ?mes= para um YYYY-MM válido dentro da janela; fora da janela cai no
+// mês corrente.
+export function clampMonth(raw: string | string[] | undefined): string {
+  const current = currentMonth();
+  const v = (Array.isArray(raw) ? raw[0] : raw) ?? "";
+  if (/^\d{4}-\d{2}$/.test(v) && v >= FIRST_MONTH && v <= current) return v;
+  return current;
+}
+
+export function currentMonth(): string {
+  const { y, m } = brtYearMonth();
+  return `${y}-${String(m).padStart(2, "0")}`;
+}
+
+// Lista do mês corrente (topo) até setembro/2026 — mais recente primeiro.
+export function monthOptions(): MonthOption[] {
+  const current = currentMonth();
+  const out: MonthOption[] = [];
+  let [y, m] = current.split("-").map(Number);
+  const [fy, fm] = FIRST_MONTH.split("-").map(Number);
+  while (y > fy || (y === fy && m >= fm)) {
+    const value = `${y}-${String(m).padStart(2, "0")}`;
+    out.push({ value, label: monthLabel(value), current: value === current });
+    m -= 1;
+    if (m === 0) {
+      m = 12;
+      y -= 1;
+    }
+  }
+  return out;
+}
+
+// Primeiro dia do mês (YYYY-MM-01) — o que as RPCs esperam em p_month.
+export function monthToDate(ym: string): string {
+  return `${ym}-01`;
+}
+
+// --- Loaders ----------------------------------------------------------------
+
+// Resultado de leitura que distingue "vazio de verdade" de "deu erro" — um erro
+// de RPC NUNCA pode virar lista vazia silenciosa na tela (a tela mostra um aviso
+// e o servidor loga). Ver decisão de produto.
+export type LoadResult<T> = { rows: T[]; error: string | null };
+
+// Quadro de Acompanhamento de um MÊS. A RPC followup_board é SECURITY DEFINER com
+// gate por dentro: admin vê todas as empresas de grupo ativo; consultor só a
+// carteira dele. Mês atual = cor do dia relevante; mês passado = cor do último
+// dia útil do mês. A ordem já vem pronta (vermelho → amarelo → verde →
+// aguardando; dentro da cor, há mais tempo sem mensagem primeiro) — a inversão
+// "melhor primeiro" é feita na tela, nunca aqui.
+export async function loadFollowupBoard(
+  supabase: SupabaseServer,
+  month: string
+): Promise<LoadResult<BoardRow>> {
+  const { data, error } = await supabase.rpc("followup_board", {
+    p_month: monthToDate(month),
+  });
+  if (error) {
+    // Não engolir: sem isto, uma RPC que falha apareceria como quadro vazio.
+    console.error("[acompanhamento] followup_board falhou:", error.message);
+    return { rows: [], error: error.message };
+  }
   const rows =
     (data as
       | {
           company_id: string;
           company_name: string;
-          consultants: { id: string; name: string | null; avatar_path: string | null }[] | null;
-          last_contact_at: string | null;
-          last_contact_kind: FollowupKind | null;
-          days_since: number | null;
+          consultants:
+            | { id: string; name: string | null; avatar_path: string | null }[]
+            | null;
+          collaborators:
+            | { id: string; name: string | null; avatar_path: string | null }[]
+            | null;
+          relevant_day: string;
+          color: DayColor;
+          is_today: boolean;
+          first_msg_at: string | null;
+          last_msg_at: string | null;
           next_meeting_at: string | null;
-          period_meetings: number;
-          period_notes: number;
-          period_listings: number;
-          period_readjusts: number;
-          period_tasks: number;
+          days_verde: number;
+          days_amarelo: number;
+          days_vermelho: number;
+          responsible_name: string | null;
         }[]
       | null) ?? [];
 
-  return rows.map((r) => ({
-    companyId: r.company_id,
-    companyName: r.company_name,
-    consultants: (r.consultants ?? []).map((c) => ({
-      id: c.id,
-      name: c.name,
-      avatarPath: c.avatar_path,
+  return {
+    error: null,
+    rows: rows.map((r) => ({
+      companyId: r.company_id,
+      companyName: r.company_name,
+      consultants: (r.consultants ?? []).map((c) => ({
+        id: c.id,
+        name: c.name,
+        avatarPath: c.avatar_path,
+      })),
+      collaborators: (r.collaborators ?? []).map((c) => ({
+        id: c.id,
+        name: c.name,
+        avatarPath: c.avatar_path,
+      })),
+      relevantDay: r.relevant_day,
+      color: r.color,
+      isToday: r.is_today,
+      firstMsgAt: r.first_msg_at,
+      lastMsgAt: r.last_msg_at,
+      nextMeetingAt: r.next_meeting_at,
+      daysVerde: Number(r.days_verde),
+      daysAmarelo: Number(r.days_amarelo),
+      daysVermelho: Number(r.days_vermelho),
+      responsibleName: r.responsible_name,
     })),
-    lastContactAt: r.last_contact_at,
-    lastContactKind: r.last_contact_kind,
-    daysSince: r.days_since,
-    nextMeetingAt: r.next_meeting_at,
-    period: {
-      meetings: Number(r.period_meetings),
-      notes: Number(r.period_notes),
-      listings: Number(r.period_listings),
-      readjusts: Number(r.period_readjusts),
-      tasks: Number(r.period_tasks),
-    },
-  }));
+  };
+}
+
+// "Atualizado às HH:MM" — último sync OK do Digisac (digisac_sync_runs). null se
+// nunca sincronizou (ou se a leitura falhou — carimbo não é dado crítico).
+export async function loadFollowupLastSync(
+  supabase: SupabaseServer
+): Promise<string | null> {
+  const { data } = await supabase.rpc("followup_last_sync");
+  return (data as string | null) ?? null;
+}
+
+// Pontuação do mês por colaborador (admin; a RPC rejeita não-admin). Já vem
+// ordenada por pontos desc. Erro vira aviso na tela + log no servidor (nunca
+// lista vazia silenciosa — foi exatamente o que escondeu o bug do 42702).
+export async function loadScoresMonth(
+  supabase: SupabaseServer,
+  month: string
+): Promise<LoadResult<ScoreMonthRow>> {
+  const { data, error } = await supabase.rpc("followup_scores_month", {
+    p_month: monthToDate(month),
+  });
+  if (error) {
+    console.error("[acompanhamento] followup_scores_month falhou:", error.message);
+    return { rows: [], error: error.message };
+  }
+  const rows =
+    (data as
+      | {
+          collaborator_id: string | null;
+          collaborator_name: string | null;
+          avatar_path: string | null;
+          points: number;
+          days_verde: number;
+          days_amarelo: number;
+          days_vermelho: number;
+          companies: number;
+        }[]
+      | null) ?? [];
+  return {
+    error: null,
+    rows: rows.map((r) => ({
+      collaboratorId: r.collaborator_id,
+      collaboratorName: r.collaborator_name,
+      avatarPath: r.avatar_path,
+      points: Number(r.points),
+      daysVerde: Number(r.days_verde),
+      daysAmarelo: Number(r.days_amarelo),
+      daysVermelho: Number(r.days_vermelho),
+      companies: Number(r.companies),
+    })),
+  };
 }

@@ -27,6 +27,10 @@ type CompanyLink = {
   company_id: string;
   consultant: ConsultantOption | ConsultantOption[] | null;
 };
+type CollaboratorLink = {
+  company_id: string;
+  collaborator: ConsultantOption | ConsultantOption[] | null;
+};
 
 type CompanyRow = {
   id: string;
@@ -62,6 +66,7 @@ export default async function EmpresasPage() {
     { data: standardData },
     labelCatalog,
     { data: linksData },
+    { data: colabLinksData },
     noteCounts,
     trafficGroups,
   ] = await Promise.all([
@@ -102,6 +107,13 @@ export default async function EmpresasPage() {
       .select(
         "company_id, consultant:profiles!company_consultants_consultant_id_fkey(id, full_name, email, avatar_path)"
       ),
+    // Colaboradores responsáveis por empresa (âncora 0090) — mesma ida agregada,
+    // nunca uma por empresa. RLS escopa ao admin (todas).
+    supabase
+      .from("company_collaborators")
+      .select(
+        "company_id, collaborator:profiles!company_collaborators_collaborator_id_fkey(id, full_name, email, avatar_path)"
+      ),
     // Contagem de anotações por empresa numa ida agregada (RPC), nunca uma por
     // empresa nem contando array no cliente.
     loadCompanyNoteCounts(supabase),
@@ -140,6 +152,18 @@ export default async function EmpresasPage() {
     consultantsByCompany.set(link.company_id, list);
   }
 
+  // Mapa empresa → colaboradores responsáveis (vínculo declarado — 0090).
+  const collaboratorsByCompany = new Map<string, ConsultantOption[]>();
+  for (const link of (colabLinksData as CollaboratorLink[]) ?? []) {
+    const collaborator = Array.isArray(link.collaborator)
+      ? link.collaborator[0]
+      : link.collaborator;
+    if (!collaborator) continue;
+    const list = collaboratorsByCompany.get(link.company_id) ?? [];
+    list.push(collaborator);
+    collaboratorsByCompany.set(link.company_id, list);
+  }
+
   const companyItems: CompanyItem[] = rows.map((c) => {
     const det = Array.isArray(c.company_details)
       ? c.company_details[0] ?? null
@@ -150,6 +174,11 @@ export default async function EmpresasPage() {
     whatsappGroupName: c.whatsapp_group_name,
     whatsappContactId: c.whatsapp_contact_id,
     consultants: (consultantsByCompany.get(c.id) ?? []).map((x) => ({
+      id: x.id,
+      name: x.full_name || x.email,
+      avatarUrl: avatarUrl(x.avatar_path),
+    })),
+    collaborators: (collaboratorsByCompany.get(c.id) ?? []).map((x) => ({
       id: x.id,
       name: x.full_name || x.email,
       avatarUrl: avatarUrl(x.avatar_path),

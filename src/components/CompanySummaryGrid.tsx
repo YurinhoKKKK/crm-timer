@@ -6,7 +6,9 @@ import { SearchBox, EmptyState, norm } from "@/components/ListControls";
 import LabelChips from "@/components/LabelChips";
 import NewClientChip from "@/components/NewClientChip";
 import type { Label } from "@/lib/labels";
-import { farolOf } from "@/lib/followup";
+import type { DayColor } from "@/lib/followup";
+import type { ChipPerson } from "@/lib/people";
+import ResponsibleChips from "@/components/ResponsibleChips";
 import { FarolBadge } from "@/components/followup/FarolBadge";
 import NotesButton from "@/components/notes-panel/NotesButton";
 import GroupSection from "@/components/company-groups/GroupSection";
@@ -41,10 +43,11 @@ export type CompanyCardItem = {
   // Início do contrato (company_details.started_on, data pura) para a etiqueta
   // DERIVADA "Cliente Novo" (≤ 90 dias). Ausente/null → sem selo. Ver [[new-client]].
   startedOn?: string | null;
-  // Semáforo de contato (mesma fonte da /acompanhamento). Presente só onde há
-  // acompanhamento (painel do consultor); `days` null = nunca contatado. Quando
-  // ausente, a linha não mostra a coluna Contato nem o filtro de atenção aparece.
-  contact?: { days: number | null };
+  // Semáforo de contato (cor do dia; mesma fonte da /acompanhamento). Presente só
+  // onde há acompanhamento (painel do consultor) E a empresa está em grupo ativo
+  // (tem score). Ausente ⇒ a linha não mostra a coluna Contato nem o filtro de
+  // atenção aparece.
+  contact?: { color: DayColor };
   // Contagem de anotações (balão de atalho). Presente nos dois painéis; ausente
   // só quando não deve haver balão. Quando ausente, sem coluna Atualizações.
   noteCount?: number;
@@ -55,6 +58,10 @@ export type CompanyCardItem = {
   // Grupo da empresa (resolveCompanyGroupId no servidor). Alimenta as seções por
   // grupo; null = "Sem grupo". Ausente quando a tela não agrupa (modo plano).
   groupId?: string | null;
+  // Responsáveis (balões): consultores + colaboradores. Presentes nos painéis do
+  // consultor/colaborador; ausentes → sem balões. Vêm de company_responsibles.
+  consultants?: ChipPerson[];
+  collaborators?: ChipPerson[];
 };
 
 // Contexto de renderização das LINHAS: largura das colunas (grid) e quais colunas
@@ -170,8 +177,11 @@ export default function CompanySummaryGrid({
     [hasContact, hasNotes, hasAttendance, attendance, viewerId, viewerIsAdmin, notesHrefSuffix]
   );
 
+  // Precisa de atenção = amarelo (contato só à tarde) ou vermelho (após 17h/sem
+  // contato). Verde e aguardando (dia em andamento, neutro) não entram.
   const needsAttention = (c: CompanyCardItem) =>
-    c.contact !== undefined && farolOf(c.contact.days) !== "verde";
+    c.contact !== undefined &&
+    (c.contact.color === "amarelo" || c.contact.color === "vermelho");
   const attentionCount = useMemo(
     () => (hasContact ? items.filter(needsAttention).length : 0),
     [items, hasContact]
@@ -385,12 +395,24 @@ function CompanyRow({
       style={{ gridTemplateColumns: ctx.template }}
     >
       {/* Empresa — quebra em até 2 linhas; além disso, reticências + nome no title. */}
-      <h3
-        title={c.name}
-        className="line-clamp-2 break-words font-medium text-fg group-hover:text-risd"
-      >
-        {c.name}
-      </h3>
+      <div className="min-w-0">
+        <h3
+          title={c.name}
+          className="line-clamp-2 break-words font-medium text-fg group-hover:text-risd"
+        >
+          {c.name}
+        </h3>
+        {/* Responsáveis (consultores + colaboradores) — fica ACIMA do overlay
+            (z-10) para os tooltips funcionarem sem navegar. */}
+        {((c.consultants?.length ?? 0) > 0 || (c.collaborators?.length ?? 0) > 0) && (
+          <ResponsibleChips
+            consultants={c.consultants ?? []}
+            collaborators={c.collaborators ?? []}
+            size={16}
+            className="relative z-10 mt-1"
+          />
+        )}
+      </div>
 
       {/* O "resto" é um bloco horizontal no celular (faixa 2) e, no desktop, vira
           display:contents para que seus filhos ocupem as colunas da grade. */}
@@ -463,10 +485,10 @@ function CompanyRow({
           </div>
         )}
 
-        {/* Contato (só painel do consultor) — semáforo + dias desde o contato. */}
+        {/* Contato (só painel do consultor) — cor do dia relevante. */}
         {ctx.hasContact && (
           <div className="min-w-0">
-            {c.contact ? <FarolBadge days={c.contact.days} /> : null}
+            {c.contact ? <FarolBadge color={c.contact.color} /> : null}
           </div>
         )}
 

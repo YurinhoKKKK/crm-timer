@@ -164,7 +164,7 @@ function ResumoTab({
   teamOutTask: number; topClients: ClientRow[]; topPeople: PersonRow[];
   onVerClientes: () => void; onVerPessoas: () => void;
 }) {
-  const maxModelMedian = Math.max(1, ...byModel.map((m) => num(m.median_monthly_h)));
+  const maxModelAvg = Math.max(1, ...byModel.map((m) => num(m.avg_monthly_h)));
   const ORDER = ["bpo", "consultoria", "ema", "sem modelo"];
   const models = [...byModel].sort((a, b) => ORDER.indexOf(a.key) - ORDER.indexOf(b.key));
   return (
@@ -177,7 +177,7 @@ function ResumoTab({
       </div>
 
       <div className="rounded-2xl border border-line bg-surface p-4 shadow-card">
-        <h3 className="mb-3 text-sm font-semibold text-fg">Por perfil de cliente <span className="font-normal text-fg-subtle">· mediana por cliente/mês</span></h3>
+        <h3 className="mb-3 text-sm font-semibold text-fg">Por perfil de cliente <span className="font-normal text-fg-subtle">· média por cliente/mês</span></h3>
         {models.length === 0 ? (
           <p className="text-sm text-fg-subtle">Nenhum atendimento no período.</p>
         ) : (
@@ -186,10 +186,10 @@ function ResumoTab({
               <div key={m.key} className="flex items-center gap-3">
                 <div className="w-28 shrink-0 text-sm text-fg">{modelLabel(m.key)}</div>
                 <div className="relative h-5 flex-1 overflow-hidden rounded bg-surface-2">
-                  <div className="h-full rounded bg-risd" style={{ width: `${(num(m.median_monthly_h) / maxModelMedian) * 100}%` }} />
+                  <div className="h-full rounded bg-risd" style={{ width: `${(num(m.avg_monthly_h) / maxModelAvg) * 100}%` }} />
                 </div>
                 <div className="w-28 shrink-0 text-right text-sm tabular-nums text-fg-muted">
-                  {fmtH(m.median_monthly_h)} <span className="text-fg-subtle">· {m.n_clients} cli.</span>
+                  {fmtH(m.avg_monthly_h)} <span className="text-fg-subtle">· {m.n_clients} cli.</span>
                 </div>
               </div>
             ))}

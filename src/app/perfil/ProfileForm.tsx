@@ -10,6 +10,7 @@ import {
   saveAvatarPath,
   removeAvatar,
 } from "./actions";
+import AvatarCropModal from "./AvatarCropModal";
 
 const ROLE_LABEL: Record<string, string> = {
   admin: "Administrador",
@@ -20,7 +21,9 @@ const ROLE_LABEL: Record<string, string> = {
   pending: "Pendente",
 };
 
-const MAX_BYTES = 2 * 1024 * 1024; // 2 MB
+const MAX_BYTES = 10 * 1024 * 1024; // 10 MB (o ORIGINAL; o upload final é bem menor)
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const OPEN_FAIL = "Não foi possível abrir essa imagem. Envie em JPG ou PNG.";
 
 export default function ProfileForm({
   userId,
@@ -50,6 +53,8 @@ export default function ProfileForm({
   const [avatarUrl, setAvatarUrl] = useState(initialAvatarUrl);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
+  // Object URL do arquivo original enquanto o modal de recorte está aberto.
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
 
   const [, startTransition] = useTransition();
 
@@ -68,30 +73,55 @@ export default function ProfileForm({
     window.setTimeout(() => setNameStatus("idle"), 1500);
   }
 
-  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+  // Escolher arquivo: valida e, se ok, abre o modal de recorte. Nada sobe aqui.
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ""; // permite reenviar o mesmo arquivo depois
     if (!file) return;
 
     setAvatarError(null);
-    if (!file.type.startsWith("image/")) {
-      setAvatarError("Selecione um arquivo de imagem.");
-      return;
-    }
     if (file.size > MAX_BYTES) {
-      setAvatarError("A imagem deve ter no máximo 2 MB.");
+      setAvatarError("A imagem deve ter no máximo 10 MB.");
       return;
     }
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      setAvatarError(OPEN_FAIL); // HEIC e formatos não suportados
+      return;
+    }
+    // Confirma que o navegador CONSEGUE decodificar antes de abrir o recorte.
+    const url = URL.createObjectURL(file);
+    const probe = new Image();
+    probe.onload = () => setCropSrc(url);
+    probe.onerror = () => {
+      URL.revokeObjectURL(url);
+      setAvatarError(OPEN_FAIL);
+    };
+    probe.src = url;
+  }
 
+  function closeCrop() {
+    setCropSrc((cur) => {
+      if (cur) URL.revokeObjectURL(cur);
+      return null;
+    });
+  }
+
+  // Recebe o arquivo FINAL já recortado (JPEG 512×512) do modal, envia ao
+  // Storage e grava — fluxo igual ao de antes (saveAvatarPath remove a anterior).
+  async function handleCroppedSave(blob: Blob) {
     setAvatarBusy(true);
+    setAvatarError(null);
     try {
       const supabase = createClient();
-      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-      const newPath = `${userId}/${Date.now()}.${ext}`;
+      const newPath = `${userId}/${Date.now()}.jpg`;
 
       const { error: uploadError } = await supabase.storage
         .from("avatars")
-        .upload(newPath, file, { cacheControl: "3600", upsert: true });
+        .upload(newPath, blob, {
+          cacheControl: "3600",
+          upsert: true,
+          contentType: "image/jpeg",
+        });
       if (uploadError) {
         setAvatarError(uploadError.message);
         return;
@@ -106,6 +136,7 @@ export default function ProfileForm({
       const { data } = supabase.storage.from("avatars").getPublicUrl(newPath);
       setAvatarPath(newPath);
       setAvatarUrl(data.publicUrl);
+      closeCrop();
       startTransition(() => router.refresh());
     } finally {
       setAvatarBusy(false);
@@ -135,7 +166,17 @@ export default function ProfileForm({
       <section>
         <h2 className="mb-4 font-semibold text-fg">Foto de perfil</h2>
         <div className="flex items-center gap-5">
-          <Avatar name={name} url={avatarUrl} size={72} />
+          {/* Clicar na foto atual abre o mesmo fluxo de recorte (decisão 6). */}
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={avatarBusy}
+            title="Alterar foto"
+            aria-label="Alterar foto"
+            className="rounded-full transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            <Avatar name={name} url={avatarUrl} size={72} />
+          </button>
           <div className="space-y-2">
             <div className="flex flex-wrap gap-2">
               <button
@@ -144,7 +185,7 @@ export default function ProfileForm({
                 disabled={avatarBusy}
                 className={btnSecondary}
               >
-                {avatarBusy ? "Enviando…" : avatarUrl ? "Trocar foto" : "Adicionar foto"}
+                {avatarBusy ? "Enviando…" : avatarUrl ? "Alterar foto" : "Adicionar foto"}
               </button>
               {avatarUrl && (
                 <button
@@ -153,11 +194,11 @@ export default function ProfileForm({
                   disabled={avatarBusy}
                   className="rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-fg-muted transition hover:border-red-300 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:cursor-not-allowed disabled:opacity-60 dark:hover:text-red-300"
                 >
-                  Remover
+                  Remover foto
                 </button>
               )}
             </div>
-            <p className="text-xs text-fg-subtle">PNG ou JPG, até 2 MB.</p>
+            <p className="text-xs text-fg-subtle">PNG, JPG ou WEBP, até 10 MB.</p>
             {avatarError && (
               <p className="text-sm text-red-600 dark:text-red-400">
                 {avatarError}
@@ -167,11 +208,19 @@ export default function ProfileForm({
           <input
             ref={fileRef}
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png,image/webp"
             onChange={handleFile}
             className="hidden"
           />
         </div>
+
+        {cropSrc && (
+          <AvatarCropModal
+            imageSrc={cropSrc}
+            onCancel={closeCrop}
+            onSave={handleCroppedSave}
+          />
+        )}
       </section>
 
       {/* Dados */}

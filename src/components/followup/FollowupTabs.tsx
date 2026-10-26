@@ -75,6 +75,7 @@ export default function FollowupTabs({
   // consultor zera o colaborador (as opções de colaborador dependem do consultor).
   const [consultantId, setConsultantId] = useState("");
   const [collaboratorId, setCollaboratorId] = useState("");
+  const [recovering, setRecovering] = useState(false);
 
   function onConsultantChange(v: string) {
     setConsultantId(v);
@@ -116,6 +117,7 @@ export default function FollowupTabs({
           error={scoresError}
           consultantId={consultantId}
           collaboratorId={collaboratorId}
+          recovering={recovering}
         />
       ) : (
         <FollowupView
@@ -128,6 +130,8 @@ export default function FollowupTabs({
           onConsultantChange={onConsultantChange}
           collaboratorId={collaboratorId}
           onCollaboratorChange={setCollaboratorId}
+          recovering={recovering}
+          onRecoveringChange={setRecovering}
         />
       )}
     </div>

@@ -35,7 +35,9 @@ type ExportRecord = {
   responsibleId: string | null;
   responsibleName: string | null;
   firstMsgAt: string | null;
-  color: DayColor;
+  contactColor: DayColor; // resultado do contato do dia
+  color: DayColor; // cor do CLIENTE (a que pontua)
+  recoveryNeed: number; // 0/1/2
   points: number;
   finalized: boolean;
 };
@@ -52,16 +54,18 @@ export async function loadPontuacaoExport(
   supabase: SupabaseServer,
   month: string,
   consultant: string | null = null,
-  collaborator: string | null = null
+  collaborator: string | null = null,
+  recovering = false
 ): Promise<PontuacaoExportData> {
   const p_month = monthToDate(month);
   const p_consultant = consultant;
   const p_collaborator = collaborator;
-  // As RPCs filtram por consultor/colaborador (decisão 4) — e sempre por "empresa
-  // com colaborador agora" (decisão 2) por dentro.
+  const p_recovering = recovering;
+  // As RPCs filtram por consultor/colaborador + "Em recuperação" (decisões 4) — e
+  // sempre por "empresa com colaborador agora" (decisão 2 da 0156) por dentro.
   const [summaryRes, exportRes, syncRes] = await Promise.all([
-    supabase.rpc("followup_scores_month", { p_month, p_consultant, p_collaborator }),
-    supabase.rpc("followup_scores_export", { p_month, p_consultant, p_collaborator }),
+    supabase.rpc("followup_scores_month", { p_month, p_consultant, p_collaborator, p_recovering }),
+    supabase.rpc("followup_scores_export", { p_month, p_consultant, p_collaborator, p_recovering }),
     supabase.rpc("followup_last_sync"),
   ]);
   // As RPCs têm gate is_admin por dentro; um erro aqui (ex.: não-admin) sobe para
@@ -101,7 +105,9 @@ export async function loadPontuacaoExport(
           responsible_id: string | null;
           responsible_name: string | null;
           first_msg_at: string | null;
+          contact_color: DayColor;
           color: DayColor;
+          recovery_need: number;
           points: number;
           finalized: boolean;
         }[]
@@ -114,7 +120,9 @@ export async function loadPontuacaoExport(
     responsibleId: r.responsible_id,
     responsibleName: r.responsible_name,
     firstMsgAt: r.first_msg_at,
+    contactColor: r.contact_color,
     color: r.color,
+    recoveryNeed: Number(r.recovery_need),
     points: Number(r.points),
     finalized: r.finalized,
   }));
@@ -493,24 +501,27 @@ function buildPorEmpresa(wb: ExcelJS.Workbook, records: ExportRecord[], days: st
 
 function buildRegistros(wb: ExcelJS.Workbook, records: ExportRecord[]) {
   const ws = wb.addWorksheet("Registros");
-  const LAST_COL = 9;
+  const LAST_COL = 10;
   ws.getColumn(1).width = 12; // Data
   ws.getColumn(2).width = 10; // Dia
   ws.getColumn(3).width = 32; // Empresa
   ws.getColumn(4).width = 18; // Grupo
   ws.getColumn(5).width = 22; // Responsável
   ws.getColumn(6).width = 12; // 1ª mensagem
-  ws.getColumn(7).width = 20; // Cor
-  ws.getColumn(8).width = 8; // Pontos
-  ws.getColumn(9).width = 14; // Situação
+  ws.getColumn(7).width = 20; // Contato do dia
+  ws.getColumn(8).width = 22; // Cor do cliente
+  ws.getColumn(9).width = 8; // Pontos
+  ws.getColumn(10).width = 14; // Situação
 
   const headerRow = ws.addRow([
     "Data", "Dia", "Empresa", "Grupo no dia", "Responsável",
-    "1ª mensagem", "Cor", "Pontos", "Situação",
+    "1ª mensagem", "Contato do dia", "Cor do cliente", "Pontos", "Situação",
   ]);
   paintHeader(ws, headerRow.number, 1, LAST_COL);
 
   for (const r of records) {
+    const clienteLabel =
+      COLOR_LABEL[r.color] + (r.recoveryNeed > 0 ? " (em recuperação)" : "");
     const row = ws.addRow([
       excelSerialFromPureDate(r.day),
       weekdayPt(r.day),
@@ -518,7 +529,8 @@ function buildRegistros(wb: ExcelJS.Workbook, records: ExportRecord[]) {
       r.groupName,
       r.responsibleName || "Sem responsável",
       hhmm(r.firstMsgAt),
-      COLOR_LABEL[r.color],
+      COLOR_LABEL[r.contactColor],
+      clienteLabel,
       r.points,
       r.finalized ? "Consolidado" : "Em andamento",
     ]);
@@ -529,9 +541,13 @@ function buildRegistros(wb: ExcelJS.Workbook, records: ExportRecord[]) {
       cell.border = allBorders;
     }
     ws.getCell(row.number, 1).numFmt = "dd/mm/yyyy";
-    const colorCell = ws.getCell(row.number, 7);
-    colorCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_FILL[r.color].bg } };
-    colorCell.font = { name: FONT, color: { argb: COLOR_FILL[r.color].ink } };
+    // Col 7 = contato do dia; col 8 = cor do cliente — cada uma com seu preenchimento.
+    const contactCell = ws.getCell(row.number, 7);
+    contactCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_FILL[r.contactColor].bg } };
+    contactCell.font = { name: FONT, color: { argb: COLOR_FILL[r.contactColor].ink } };
+    const clientCell = ws.getCell(row.number, 8);
+    clientCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLOR_FILL[r.color].bg } };
+    clientCell.font = { name: FONT, color: { argb: COLOR_FILL[r.color].ink } };
   }
 
   ws.views = [{ state: "frozen", ySplit: headerRow.number }];
@@ -552,19 +568,27 @@ function buildRegras(wb: ExcelJS.Workbook) {
   ws.addRow([]);
 
   const lines: string[] = [
-    "Cor do dia pela 1ª mensagem válida (horário de Brasília):",
-    "   • Antes das 12:00 → verde (Em dia) = +1 ponto",
-    "   • Das 12:00 às 16:59 → amarelo (Atenção) = 0 ponto",
-    "   • A partir das 17:00, ou nenhuma mensagem no dia → vermelho (Após 17h / sem contato) = −1 ponto",
-    "   • Dia corrente ainda sem contato antes das 17:00 → cinza (Aguardando) = 0 ponto, não é falta",
+    "Contato do dia pela 1ª mensagem válida (horário de Brasília):",
+    "   • Antes das 12:00 → verde",
+    "   • Das 12:00 às 16:59 → amarelo",
+    "   • A partir das 17:00, ou nenhuma mensagem no dia → vermelho",
+    "   • Dia corrente ainda sem contato antes das 17:00 → aguardando (não é falta)",
     "",
-    "Só contam dias úteis (segunda a sexta), excluindo feriados nacionais. Sábado, domingo e feriado não pontuam nem viram falta.",
-    "O ponto do dia vai para o colaborador responsável pela empresa naquele dia. Empresa sem responsável aparece, mas não credita ninguém.",
+    "Cor do cliente (semáforo de recuperação) — a partir de 26/10/2026:",
+    "   • Um dia vermelho zera a saúde: o cliente passa a precisar de 2 contatos de manhã (verdes) para voltar ao normal.",
+    "   • Durante a recuperação, um contato de manhã conta como 1 verde; contato à tarde mantém; nenhum/à noite recomeça a recuperação.",
+    "   • 1º verde na recuperação → cliente fica amarelo (ainda falta 1); 2º verde → cliente volta ao verde.",
+    "",
+    "Pontos seguem a COR DO CLIENTE: verde = +1, vermelho = −1, amarelo/recuperação/aguardando = 0.",
+    "A coluna 'Contato do dia' mostra o resultado cru do contato; 'Cor do cliente' é a cor que pontua.",
+    "",
+    "Só contam dias úteis (segunda a sexta), excluindo feriados nacionais. Sábado, domingo e feriado não pontuam nem viram falta; a recuperação continua do último dia útil, sem expirar.",
+    "O ponto do dia vai para o colaborador responsável pela empresa naquele dia. Empresa sem responsável não entra.",
     "Mensagens em massa (a mesma pessoa enviando para 5 ou mais contatos distintos em 60 segundos) não contam como contato.",
     "Mensagens de robôs/automação e comentários internos não contam.",
-    "Empresas consideradas = as que estavam em Ativos ou Ema no dia (reconstruído pelo histórico de grupos).",
+    "Empresas consideradas = as que estavam em Ativos ou Ema no dia (reconstruído pelo histórico de grupos) e têm colaborador responsável.",
     "",
-    "Observação: setembro e outubro/2026 usam o responsável ATUAL de cada empresa (ainda sem histórico de responsável por data).",
+    "Observação: setembro e outubro/2026 usam o responsável ATUAL de cada empresa. Linhas até 25/10/2026 mantêm a regra antiga (cor do cliente = contato do dia).",
     "LGPD: esta planilha nunca inclui o texto das mensagens — apenas o horário da 1ª mensagem válida.",
   ];
   for (const text of lines) {

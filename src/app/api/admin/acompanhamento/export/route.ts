@@ -39,8 +39,9 @@ export async function GET(request: Request) {
   const asUuid = (v: string | null) => (v && UUID.test(v) ? v : null);
   const consultant = asUuid(params.get("consultor"));
   const collaborator = asUuid(params.get("colaborador"));
+  const recovering = params.get("recuperacao") === "1";
 
-  const data = await loadPontuacaoExport(supabase, month, consultant, collaborator);
+  const data = await loadPontuacaoExport(supabase, month, consultant, collaborator, recovering);
   const buffer = await buildPontuacaoWorkbook(data, month);
 
   return new NextResponse(buffer, {

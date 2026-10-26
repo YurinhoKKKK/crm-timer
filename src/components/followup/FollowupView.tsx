@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { avatarUrl } from "@/lib/avatar";
 import ResponsibleChips from "@/components/ResponsibleChips";
@@ -9,6 +8,7 @@ import { SearchBox, FilterBar, ShowMore, usePaged, norm } from "@/components/Lis
 import { type BoardRow, type DayColor, type MonthOption } from "@/lib/followup";
 import { FAROL_UI } from "@/components/followup/FarolBadge";
 import MonthSelect from "@/components/followup/MonthSelect";
+import CompanyHistoryPanel from "@/components/followup/CompanyHistoryPanel";
 
 // Preferência de ordem (pior/melhor primeiro) guardada por usuário.
 const ORDER_KEY = "crm:acompanhamento:ordem";
@@ -42,11 +42,42 @@ function fmtRelevantDay(day: string): string {
   return `${weekday}, ${short}`;
 }
 
-// A ordem PADRÃO vem pronta do banco (RPC followup_board): vermelho → amarelo →
-// verde → aguardando; dentro da cor, há mais tempo sem mensagem primeiro ("pior
-// primeiro"). O botão "Melhor primeiro" INVERTE a lista inteira (antes de
-// filtrar e paginar — nunca reordenamos uma página isolada). Os chips de cor
-// filtram por cima, preservando a ordem escolhida.
+// Data pura YYYY-MM-DD → "DD/MM".
+function fmtDM(day: string | null): string {
+  if (!day) return "";
+  const [, m, d] = day.split("-");
+  return `${d}/${m}`;
+}
+
+// "HH:MM" (BRT) de um instante.
+function fmtTimeOnly(iso: string): string {
+  return new Date(iso).toLocaleTimeString("pt-BR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
+}
+
+// Tooltip da célula (decisão 6 da 0157): o CONTATO do dia relevante + o aviso de
+// recuperação quando falta(m) dia(s) verde(s).
+function cellTooltip(r: BoardRow): string {
+  const lines: string[] = [];
+  if (r.contactColor === "aguardando") {
+    lines.push("Aguardando contato hoje");
+  } else if (r.firstMsgAt) {
+    lines.push(`Contato às ${fmtTimeOnly(r.firstMsgAt)} (${r.contactColor})`);
+  } else {
+    lines.push("Sem contato");
+  }
+  if (r.recoveryNeed > 0) {
+    if (r.contactColor === "aguardando") {
+      lines.push("Em recuperação: precisa de contato antes das 12h");
+    } else {
+      lines.push(
+        `Em recuperação: ${
+          r.recoveryNeed === 1 ? "falta 1 dia verde" : `faltam ${r.recoveryNeed} dias verdes`
+        }`
+      );
+    }
+  }
+  return lines.join("\n");
+}
 
 // Resumo do mês: contagem de dias por cor (os 'aguardando'/fins de semana não
 // entram — só dias úteis já pontuados).
@@ -58,8 +89,8 @@ function periodSummary(r: BoardRow): string {
   return parts.join(" · ");
 }
 
-// Os filtros de consultor e colaborador moram no pai (FollowupTabs) para
-// sobreviverem à troca de aba e alimentarem o link de exportação da Pontuação.
+// Os filtros de consultor, colaborador e "Em recuperação" moram no pai
+// (FollowupTabs) para sobreviverem à troca de aba e alimentarem a exportação.
 export default function FollowupView({
   rows,
   role,
@@ -70,6 +101,8 @@ export default function FollowupView({
   onConsultantChange,
   collaboratorId,
   onCollaboratorChange,
+  recovering,
+  onRecoveringChange,
 }: {
   rows: BoardRow[];
   role: "admin" | "consultor";
@@ -80,6 +113,8 @@ export default function FollowupView({
   onConsultantChange: (v: string) => void;
   collaboratorId: string;
   onCollaboratorChange: (v: string) => void;
+  recovering: boolean;
+  onRecoveringChange: (v: boolean) => void;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -87,10 +122,10 @@ export default function FollowupView({
 
   const [query, setQuery] = useState("");
   const [color, setColor] = useState<DayColor | "">("");
-  // true = "pior primeiro" (ordem do banco); false = "melhor primeiro"
-  // (invertido). Inicia no padrão e lê a preferência salva ao montar (evita
-  // divergência de hidratação).
   const [worstFirst, setWorstFirst] = useState(true);
+  // Empresa aberta no painel lateral de histórico (decisão 5).
+  const [selected, setSelected] = useState<BoardRow | null>(null);
+
   useEffect(() => {
     try {
       if (localStorage.getItem(ORDER_KEY) === "melhor") setWorstFirst(false);
@@ -122,7 +157,6 @@ export default function FollowupView({
     );
   }, [rows]);
 
-  // Recorte por consultor (só filtra; NÃO reordena por "melhor").
   const byConsultant = useMemo(
     () =>
       consultantId
@@ -131,8 +165,6 @@ export default function FollowupView({
     [rows, consultantId]
   );
 
-  // Colaboradores presentes nas linhas visíveis (já com o recorte de consultor),
-  // em ordem alfabética — opções do filtro de colaborador.
   const collaboratorOptions = useMemo(() => {
     const map = new Map<string, string>();
     for (const r of byConsultant)
@@ -143,7 +175,6 @@ export default function FollowupView({
     );
   }, [byConsultant]);
 
-  // Recorte por colaborador — COMPÕE com o de consultor.
   const byCollaborator = useMemo(
     () =>
       collaboratorId
@@ -152,31 +183,29 @@ export default function FollowupView({
     [byConsultant, collaboratorId]
   );
 
-  // Busca por nome da empresa — COMPÕE com os filtros. Sem acentos, qualquer
-  // trecho (os nomes começam com código interno).
+  // Filtro "Em recuperação" (decisão 4): need > 0 no dia relevante. COMPÕE.
+  const byRecovering = useMemo(
+    () => (recovering ? byCollaborator.filter((r) => r.recoveryNeed > 0) : byCollaborator),
+    [byCollaborator, recovering]
+  );
+
   const base = useMemo(() => {
     const q = norm(query.trim());
-    if (!q) return byCollaborator;
-    return byCollaborator.filter((r) => norm(r.companyName).includes(q));
-  }, [byCollaborator, query]);
+    if (!q) return byRecovering;
+    return byRecovering.filter((r) => norm(r.companyName).includes(q));
+  }, [byRecovering, query]);
 
-  // Contagem por cor sobre o recorte já com consultor + colaborador + busca (mas
-  // ignorando o filtro de cor, para os números continuarem fazendo sentido).
   const bands = useMemo(() => {
     const b = { verde: 0, amarelo: 0, vermelho: 0, aguardando: 0 };
     for (const r of base) b[r.color] += 1;
     return b;
   }, [base]);
 
-  // Ordem: padrão do banco ("pior primeiro") ou a lista TODA invertida ("melhor
-  // primeiro"). Inverter aqui a lista inteira (antes de filtrar/paginar) mantém
-  // a paginação correta — nunca reordenamos uma página isolada.
   const ordered = useMemo(
     () => (worstFirst ? base : [...base].reverse()),
     [base, worstFirst]
   );
 
-  // Os chips de cor filtram por cima da ordem escolhida. A paginação corta DEPOIS.
   const filtered = useMemo(
     () => (color ? ordered.filter((r) => r.color === color) : ordered),
     [ordered, color]
@@ -191,7 +220,6 @@ export default function FollowupView({
   }
 
   const total = base.length;
-  // 'aguardando' só aparece como chip quando há algum (dia útil em andamento).
   const colorBands: DayColor[] = ["verde", "amarelo", "vermelho"];
   if (bands.aguardando > 0) colorBands.push("aguardando");
 
@@ -239,8 +267,20 @@ export default function FollowupView({
             ))}
           </select>
         )}
-        {/* Alterna a ordem da lista inteira. A seta aponta para onde está o
-            "pior" (para baixo = pior no topo; para cima = pior embaixo). */}
+        {/* Filtro "Em recuperação" (decisão 4). */}
+        <button
+          type="button"
+          onClick={() => onRecoveringChange(!recovering)}
+          aria-pressed={recovering}
+          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas ${
+            recovering
+              ? "border-amber-400/60 bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
+              : "border-line bg-surface text-fg-muted hover:border-risd/40 hover:text-fg"
+          }`}
+        >
+          <span className="h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" />
+          Em recuperação
+        </button>
         <button
           type="button"
           onClick={toggleOrder}
@@ -255,7 +295,6 @@ export default function FollowupView({
         </button>
       </FilterBar>
 
-      {/* Cores do dia — também filtram a lista ao clicar. */}
       <div className="flex flex-wrap gap-2">
         <BandChip active={color === ""} onClick={() => setColor("")} label="Todos" count={total} />
         {colorBands.map((f) => (
@@ -269,8 +308,9 @@ export default function FollowupView({
           />
         ))}
         <p className="ml-auto self-center text-xs text-fg-subtle">
-          Cor do dia pela 1ª mensagem: manhã = em dia · tarde = atenção · após 17h
-          ou nenhuma = sem contato
+          Cor do cliente: depois de um dia sem contato (vermelho) são precisos 2
+          contatos de manhã para voltar ao verde. Clique numa empresa para ver o
+          histórico.
         </p>
       </div>
 
@@ -285,6 +325,8 @@ export default function FollowupView({
         <EmptyCard good={!query}>
           {query
             ? `Nenhuma empresa corresponde a “${query.trim()}” neste recorte.`
+            : recovering
+            ? "Nenhum cliente em recuperação neste recorte."
             : color === "verde"
             ? "Nenhum cliente em dia neste recorte."
             : color === "amarelo"
@@ -297,7 +339,7 @@ export default function FollowupView({
         <>
           <ul className="space-y-2.5">
             {visible.map((r) => (
-              <CompanyRow key={r.companyId} row={r} role={role} />
+              <CompanyRow key={r.companyId} row={r} onOpen={() => setSelected(r)} />
             ))}
           </ul>
           {hasMore && <ShowMore remaining={remaining} onClick={showMore} />}
@@ -305,6 +347,21 @@ export default function FollowupView({
       )}
 
       {role === "admin" && <CollaboratorBreakdown rows={rows} />}
+
+      {selected && (
+        <CompanyHistoryPanel
+          companyId={selected.companyId}
+          companyName={selected.companyName}
+          companyHref={
+            role === "admin"
+              ? `/admin/empresas/${selected.companyId}`
+              : `/consultor/${selected.companyId}`
+          }
+          initialMonth={month}
+          monthOptions={monthOptions}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </div>
   );
 }
@@ -338,17 +395,29 @@ function BandChip({
   );
 }
 
-function CompanyRow({ row, role }: { row: BoardRow; role: "admin" | "consultor" }) {
+// Selo da situação atual (decisão 3): vermelho há N dias / recuperando / recaiu.
+function statusText(row: BoardRow): string | null {
+  if (row.redStreak > 0) {
+    const n = row.redStreak;
+    return `Vermelho há ${n} ${n > 1 ? "dias úteis" : "dia útil"} (desde ${fmtDM(row.redSince)})`;
+  }
+  if (row.recoveryNeed > 0) {
+    return `Recuperando · falta ${row.recoveryNeed} ${row.recoveryNeed > 1 ? "verdes" : "verde"}`;
+  }
+  return null;
+}
+
+function CompanyRow({ row, onOpen }: { row: BoardRow; onOpen: () => void }) {
   const ui = FAROL_UI[row.color];
-  const href =
-    role === "admin" ? `/admin/empresas/${row.companyId}` : `/consultor/${row.companyId}`;
   const summary = periodSummary(row);
+  const status = statusText(row);
 
   return (
     <li>
-      <Link
-        href={href}
-        className="group flex gap-3 rounded-xl border border-line bg-surface p-4 shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+      <button
+        type="button"
+        onClick={onOpen}
+        className="group flex w-full gap-3 rounded-xl border border-line bg-surface p-4 text-left shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
       >
         <span className={`mt-0.5 w-1.5 shrink-0 self-stretch rounded-full ${ui.dot}`} aria-hidden="true" />
 
@@ -357,13 +426,30 @@ function CompanyRow({ row, role }: { row: BoardRow; role: "admin" | "consultor" 
             <span className="font-medium text-fg group-hover:text-risd">{row.companyName}</span>
             <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
               <span
-                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${ui.chip}`}
+                title={cellTooltip(row)}
+                className={`inline-flex cursor-help items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${ui.chip}`}
               >
                 <span className={`h-2 w-2 rounded-full ${ui.dot}`} aria-hidden="true" />
                 {ui.label}
               </span>
-              {/* Fim de semana/feriado: a cor é a do último dia útil — mostramos
-                  qual dia para não confundir com "hoje". */}
+              {/* Selo da situação: vermelho há N dias OU recuperando. */}
+              {status && (
+                <span
+                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                    row.redStreak > 0
+                      ? "border-red-400/50 bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300"
+                      : "border-amber-400/50 bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
+                  }`}
+                >
+                  {status}
+                </span>
+              )}
+              {/* Recaída recente (últimos 5 dias úteis). */}
+              {row.relapseAt && (
+                <span className="inline-flex items-center rounded-full border border-red-400/40 bg-surface px-2 py-0.5 text-[11px] font-medium text-red-700 dark:text-red-300">
+                  Recaiu em {fmtDM(row.relapseAt)}
+                </span>
+              )}
               {!row.isToday && (
                 <span className="text-xs text-fg-subtle">
                   cor de <span className="tabular-nums">{fmtRelevantDay(row.relevantDay)}</span>
@@ -372,7 +458,6 @@ function CompanyRow({ row, role }: { row: BoardRow; role: "admin" | "consultor" 
             </span>
           </div>
 
-          {/* Responsáveis: consultores + colaboradores, no componente único. */}
           <ResponsibleChips
             consultants={row.consultants.map((c) => ({
               id: c.id,
@@ -387,7 +472,6 @@ function CompanyRow({ row, role }: { row: BoardRow; role: "admin" | "consultor" 
             className="mt-2"
           />
 
-          {/* Última mensagem válida (qualquer data) + resumo de dias no período. */}
           <p className="mt-2 text-sm text-fg-muted">
             {row.lastMsgAt ? (
               <>
@@ -412,14 +496,12 @@ function CompanyRow({ row, role }: { row: BoardRow; role: "admin" | "consultor" 
             </p>
           )}
         </div>
-      </Link>
+      </button>
     </li>
   );
 }
 
 // Recorte por COLABORADOR: quantos clientes DELE em cada cor (dia relevante).
-// Empresa com 2 colaboradores conta na carteira de cada um. Ordem alfabética,
-// sem pódio — é carteira precisando de atenção, não ranking.
 function CollaboratorBreakdown({ rows }: { rows: BoardRow[] }) {
   const groups = useMemo(() => {
     const map = new Map<
@@ -477,8 +559,6 @@ function BandTally({ color, n }: { color: DayColor; n: number }) {
   );
 }
 
-// Erro de carregamento NUNCA vira lista vazia silenciosa — aviso explícito; o
-// servidor loga o erro real (loadFollowupBoard).
 function ErrorCard({ children }: { children: React.ReactNode }) {
   return (
     <div className="rounded-2xl border border-red-300/60 bg-red-50 p-8 text-center text-sm text-red-700 shadow-card dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">

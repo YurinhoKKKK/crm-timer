@@ -36,7 +36,12 @@ export type BoardRow = {
   consultants: FollowupConsultant[];
   collaborators: FollowupConsultant[];
   relevantDay: string; // data pura YYYY-MM-DD do dia avaliado
-  color: DayColor;
+  color: DayColor; // COR DO CLIENTE (semáforo de recuperação) — a que pontua
+  contactColor: DayColor; // resultado do CONTATO do dia relevante (crua)
+  recoveryNeed: number; // 0/1/2 — dias verdes que ainda faltam (em recuperação)
+  redStreak: number; // dias úteis vermelhos consecutivos até o dia relevante (0 = não está vermelho)
+  redSince: string | null; // 1º dia do streak vermelho (YYYY-MM-DD) ou null
+  relapseAt: string | null; // dia de uma recaída nos últimos 5 dias úteis (YYYY-MM-DD) ou null
   isToday: boolean; // o dia relevante é hoje (dia útil em andamento)
   firstMsgAt: string | null; // 1ª mensagem válida do dia relevante (ISO)
   lastMsgAt: string | null; // última mensagem válida de todas (ISO); null = nunca
@@ -66,9 +71,28 @@ export type ScoreDetailRow = {
   companyId: string;
   companyName: string;
   day: string; // YYYY-MM-DD
-  color: DayColor;
+  color: DayColor; // cor do CLIENTE (a que pontua)
+  contactColor: DayColor; // resultado do CONTATO do dia
+  recoveryNeed: number; // 0/1/2
+  evento: string | null; // rótulo do evento do dia (Ficou vermelho / Recuperado / Recaiu / …)
   firstMsgAt: string | null;
   points: number;
+};
+
+// Histórico do contato de uma empresa num mês (RPC followup_company_history).
+export type ClientEventDay = {
+  d: string; // YYYY-MM-DD
+  firstMsgAt: string | null;
+  contactColor: DayColor;
+  color: DayColor;
+  points: number;
+  recoveryNeed: number;
+  evento: string | null;
+};
+export type CompanyHistory = {
+  relevantDay: string;
+  days: ClientEventDay[]; // mais recente em cima
+  summary: { reds: number; relapses: number; recoveries: number; situacao: string };
 };
 
 // As duas abas da tela. 'pontuacao' só existe para o admin (o guard da page
@@ -186,6 +210,11 @@ export async function loadFollowupBoard(
             | null;
           relevant_day: string;
           color: DayColor;
+          contact_color: DayColor;
+          recovery_need: number;
+          red_streak: number;
+          red_since: string | null;
+          relapse_at: string | null;
           is_today: boolean;
           first_msg_at: string | null;
           last_msg_at: string | null;
@@ -214,6 +243,11 @@ export async function loadFollowupBoard(
       })),
       relevantDay: r.relevant_day,
       color: r.color,
+      contactColor: r.contact_color,
+      recoveryNeed: Number(r.recovery_need),
+      redStreak: Number(r.red_streak),
+      redSince: r.red_since,
+      relapseAt: r.relapse_at,
       isToday: r.is_today,
       firstMsgAt: r.first_msg_at,
       lastMsgAt: r.last_msg_at,

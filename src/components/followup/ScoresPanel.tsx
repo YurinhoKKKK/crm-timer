@@ -47,14 +47,17 @@ export default function ScoresPanel({
   error,
   consultantId,
   collaboratorId,
+  recovering,
 }: {
   month: string;
   monthOptions: MonthOption[];
   rows: ScoreMonthRow[];
   error?: string | null;
-  // Filtros aplicados no quadro (decisão 4): o Excel respeita-os.
+  // Filtros aplicados no quadro: o Excel respeita-os (consultor/colaborador na
+  // 0156; "Em recuperação" na 0158).
   consultantId: string;
   collaboratorId: string;
+  recovering: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -77,8 +80,9 @@ export default function ScoresPanel({
     const params = new URLSearchParams({ mes: month });
     if (consultantId) params.set("consultor", consultantId);
     if (collaboratorId) params.set("colaborador", collaboratorId);
+    if (recovering) params.set("recuperacao", "1");
     return `/api/admin/acompanhamento/export?${params.toString()}`;
-  }, [month, consultantId, collaboratorId]);
+  }, [month, consultantId, collaboratorId, recovering]);
 
   function setMonth(m: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -194,9 +198,12 @@ export default function ScoresPanel({
       )}
 
       <p className="text-xs text-fg-subtle">
-        Pontos por dia útil: manhã <span className="font-medium text-emerald-700 dark:text-emerald-300">+1</span>, tarde{" "}
-        <span className="font-medium text-amber-700 dark:text-amber-300">0</span>, após 17h ou sem contato{" "}
-        <span className="font-medium text-red-700 dark:text-red-300">−1</span>. Clique num colaborador para ver a grade por dia e empresa.
+        Pontos seguem a cor do cliente: verde{" "}
+        <span className="font-medium text-emerald-700 dark:text-emerald-300">+1</span>, em recuperação{" "}
+        <span className="font-medium text-amber-700 dark:text-amber-300">0</span>, vermelho{" "}
+        <span className="font-medium text-red-700 dark:text-red-300">−1</span>. Depois de um dia vermelho (sem
+        contato), são precisos 2 contatos de manhã para o cliente voltar ao verde. Clique num colaborador para ver
+        a grade por dia — passe o mouse em cada dia para ver o contato e a cor do cliente.
       </p>
     </div>
   );
@@ -309,12 +316,32 @@ function ScoreDetailGrid({ rows }: { rows: ScoreDetailRow[] }) {
     return Array.from(map.values());
   }, [rows]);
 
+  // Contagens de evento no mês (decisão 6): clientes que ficaram vermelhos,
+  // recuperados (empresas distintas) e recaídas (eventos).
+  const counts = useMemo(() => {
+    const vermelhos = new Set<string>();
+    const recuperados = new Set<string>();
+    let recaidas = 0;
+    for (const r of rows) {
+      if (r.evento === "Ficou vermelho") vermelhos.add(r.companyId);
+      else if (r.evento === "Recuperado") recuperados.add(r.companyId);
+      else if (r.evento === "Recaiu") recaidas += 1;
+    }
+    return { vermelhos: vermelhos.size, recuperados: recuperados.size, recaidas };
+  }, [rows]);
+
   if (companies.length === 0) {
     return <p className="text-sm text-fg-subtle">Nenhum dia pontuado neste mês.</p>;
   }
 
   return (
-    <ul className="space-y-2">
+    <>
+      <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-fg-muted">
+        <span>Ficaram vermelhos: <b className="tabular-nums text-fg">{counts.vermelhos}</b></span>
+        <span>Recuperados: <b className="tabular-nums text-fg">{counts.recuperados}</b></span>
+        <span>Recaídas: <b className="tabular-nums text-fg">{counts.recaidas}</b></span>
+      </div>
+      <ul className="space-y-2">
       {companies.map((c) => (
         <li
           key={c.name}
@@ -341,15 +368,23 @@ function ScoreDetailGrid({ rows }: { rows: ScoreDetailRow[] }) {
           </span>
         </li>
       ))}
-    </ul>
+      </ul>
+    </>
   );
 }
 
 function DayPill({ day }: { day: ScoreDetailRow }) {
+  // A pílula usa a COR DO CLIENTE (a que pontua); o tooltip traz o contato do dia
+  // e a cor do cliente (decisão 6), além do horário e dos pontos.
   const ui = FAROL_UI[day.color as DayColor];
   const pts = day.points > 0 ? `+${day.points}` : String(day.points);
   const [, m, d] = day.day.split("-");
-  const title = `${d}/${m} · ${ui.label} · ${hourOf(day.firstMsgAt)} · ${pts} pt`;
+  const contato =
+    day.contactColor === "aguardando"
+      ? "aguardando"
+      : `${day.contactColor}${day.firstMsgAt ? " " + hourOf(day.firstMsgAt) : ""}`;
+  const cliente = `${day.color}${day.recoveryNeed > 0 ? " (em recuperação)" : ""}`;
+  const title = `${d}/${m} · contato: ${contato} · cliente: ${cliente} · ${pts} pt`;
   return (
     <span
       title={title}

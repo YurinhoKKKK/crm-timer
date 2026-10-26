@@ -45,11 +45,16 @@ export default function ScoresPanel({
   monthOptions,
   rows,
   error,
+  consultantId,
+  collaboratorId,
 }: {
   month: string;
   monthOptions: MonthOption[];
   rows: ScoreMonthRow[];
   error?: string | null;
+  // Filtros aplicados no quadro (decisão 4): o Excel respeita-os.
+  consultantId: string;
+  collaboratorId: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -65,6 +70,15 @@ export default function ScoresPanel({
     () => monthOptions.find((m) => m.value === month)?.current ?? false,
     [monthOptions, month]
   );
+
+  // Link do Excel respeita o filtro aplicado no quadro (decisão 4): mês +
+  // consultor + colaborador. Os ids vão para a rota, que passa às RPCs.
+  const exportHref = useMemo(() => {
+    const params = new URLSearchParams({ mes: month });
+    if (consultantId) params.set("consultor", consultantId);
+    if (collaboratorId) params.set("colaborador", collaboratorId);
+    return `/api/admin/acompanhamento/export?${params.toString()}`;
+  }, [month, consultantId, collaboratorId]);
 
   function setMonth(m: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -118,7 +132,7 @@ export default function ScoresPanel({
         )}
         {/* Download .xlsx do mês — rota com gate is_admin (consultor recebe 403). */}
         <a
-          href={`/api/admin/acompanhamento/export?mes=${month}`}
+          href={exportHref}
           className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-fg shadow-sm transition hover:border-risd/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

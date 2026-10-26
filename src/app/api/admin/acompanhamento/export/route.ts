@@ -32,9 +32,15 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
   }
 
-  const month = clampMonth(new URL(request.url).searchParams.get("mes") ?? undefined);
+  const params = new URL(request.url).searchParams;
+  const month = clampMonth(params.get("mes") ?? undefined);
+  // Filtros do quadro (decisão 4). Aceita só UUID; qualquer outra coisa vira null.
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const asUuid = (v: string | null) => (v && UUID.test(v) ? v : null);
+  const consultant = asUuid(params.get("consultor"));
+  const collaborator = asUuid(params.get("colaborador"));
 
-  const data = await loadPontuacaoExport(supabase, month);
+  const data = await loadPontuacaoExport(supabase, month, consultant, collaborator);
   const buffer = await buildPontuacaoWorkbook(data, month);
 
   return new NextResponse(buffer, {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import FollowupView from "@/components/followup/FollowupView";
 import ScoresPanel from "@/components/followup/ScoresPanel";
@@ -69,6 +70,17 @@ export default function FollowupTabs({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
+  // Filtros de consultor/colaborador do quadro — no pai para sobreviverem à troca
+  // de aba e alimentarem o link de exportação da Pontuação (decisão 4). Trocar o
+  // consultor zera o colaborador (as opções de colaborador dependem do consultor).
+  const [consultantId, setConsultantId] = useState("");
+  const [collaboratorId, setCollaboratorId] = useState("");
+
+  function onConsultantChange(v: string) {
+    setConsultantId(v);
+    setCollaboratorId("");
+  }
+
   function goTab(next: FollowupTab) {
     const params = new URLSearchParams(searchParams.toString());
     if (next === "acompanhamento") params.delete("aba");
@@ -97,7 +109,14 @@ export default function FollowupTabs({
       </div>
 
       {isAdmin && tab === "pontuacao" ? (
-        <ScoresPanel month={month} monthOptions={monthOptions} rows={scores} error={scoresError} />
+        <ScoresPanel
+          month={month}
+          monthOptions={monthOptions}
+          rows={scores}
+          error={scoresError}
+          consultantId={consultantId}
+          collaboratorId={collaboratorId}
+        />
       ) : (
         <FollowupView
           rows={board}
@@ -105,6 +124,10 @@ export default function FollowupTabs({
           error={boardError}
           month={month}
           monthOptions={monthOptions}
+          consultantId={consultantId}
+          onConsultantChange={onConsultantChange}
+          collaboratorId={collaboratorId}
+          onCollaboratorChange={setCollaboratorId}
         />
       )}
     </div>

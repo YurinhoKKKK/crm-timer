@@ -58,25 +58,34 @@ function periodSummary(r: BoardRow): string {
   return parts.join(" · ");
 }
 
+// Os filtros de consultor e colaborador moram no pai (FollowupTabs) para
+// sobreviverem à troca de aba e alimentarem o link de exportação da Pontuação.
 export default function FollowupView({
   rows,
   role,
   error,
   month,
   monthOptions,
+  consultantId,
+  onConsultantChange,
+  collaboratorId,
+  onCollaboratorChange,
 }: {
   rows: BoardRow[];
   role: "admin" | "consultor";
   error?: string | null;
   month: string;
   monthOptions: MonthOption[];
+  consultantId: string;
+  onConsultantChange: (v: string) => void;
+  collaboratorId: string;
+  onCollaboratorChange: (v: string) => void;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const [query, setQuery] = useState("");
-  const [consultantId, setConsultantId] = useState("");
   const [color, setColor] = useState<DayColor | "">("");
   // true = "pior primeiro" (ordem do banco); false = "melhor primeiro"
   // (invertido). Inicia no padrão e lê a preferência salva ao montar (evita
@@ -122,16 +131,37 @@ export default function FollowupView({
     [rows, consultantId]
   );
 
+  // Colaboradores presentes nas linhas visíveis (já com o recorte de consultor),
+  // em ordem alfabética — opções do filtro de colaborador.
+  const collaboratorOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of byConsultant)
+      for (const c of r.collaborators)
+        if (!map.has(c.id)) map.set(c.id, c.name || "(sem nome)");
+    return Array.from(map, ([id, name]) => ({ id, name })).sort((a, b) =>
+      a.name.localeCompare(b.name, "pt-BR")
+    );
+  }, [byConsultant]);
+
+  // Recorte por colaborador — COMPÕE com o de consultor.
+  const byCollaborator = useMemo(
+    () =>
+      collaboratorId
+        ? byConsultant.filter((r) => r.collaborators.some((c) => c.id === collaboratorId))
+        : byConsultant,
+    [byConsultant, collaboratorId]
+  );
+
   // Busca por nome da empresa — COMPÕE com os filtros. Sem acentos, qualquer
   // trecho (os nomes começam com código interno).
   const base = useMemo(() => {
     const q = norm(query.trim());
-    if (!q) return byConsultant;
-    return byConsultant.filter((r) => norm(r.companyName).includes(q));
-  }, [byConsultant, query]);
+    if (!q) return byCollaborator;
+    return byCollaborator.filter((r) => norm(r.companyName).includes(q));
+  }, [byCollaborator, query]);
 
-  // Contagem por cor sobre o recorte já com consultor + busca (mas ignorando o
-  // filtro de cor, para os números continuarem fazendo sentido).
+  // Contagem por cor sobre o recorte já com consultor + colaborador + busca (mas
+  // ignorando o filtro de cor, para os números continuarem fazendo sentido).
   const bands = useMemo(() => {
     const b = { verde: 0, amarelo: 0, vermelho: 0, aguardando: 0 };
     for (const r of base) b[r.color] += 1;
@@ -165,6 +195,9 @@ export default function FollowupView({
   const colorBands: DayColor[] = ["verde", "amarelo", "vermelho"];
   if (bands.aguardando > 0) colorBands.push("aguardando");
 
+  const selectCls =
+    "rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg shadow-sm transition focus:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas";
+
   return (
     <div className="space-y-6">
       <FilterBar>
@@ -179,12 +212,27 @@ export default function FollowupView({
         {role === "admin" && consultantOptions.length > 0 && (
           <select
             value={consultantId}
-            onChange={(e) => setConsultantId(e.target.value)}
+            onChange={(e) => onConsultantChange(e.target.value)}
             aria-label="Filtrar por consultor responsável"
-            className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-fg shadow-sm transition focus:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+            className={selectCls}
           >
             <option value="">Todos os consultores</option>
             {consultantOptions.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        )}
+        {role === "admin" && collaboratorOptions.length > 0 && (
+          <select
+            value={collaboratorId}
+            onChange={(e) => onCollaboratorChange(e.target.value)}
+            aria-label="Filtrar por colaborador responsável"
+            className={selectCls}
+          >
+            <option value="">Todos os colaboradores</option>
+            {collaboratorOptions.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
@@ -256,7 +304,7 @@ export default function FollowupView({
         </>
       )}
 
-      {role === "admin" && <ConsultantBreakdown rows={rows} />}
+      {role === "admin" && <CollaboratorBreakdown rows={rows} />}
     </div>
   );
 }
@@ -369,9 +417,10 @@ function CompanyRow({ row, role }: { row: BoardRow; role: "admin" | "consultor" 
   );
 }
 
-// Recorte por consultor: quantos clientes DELE em cada cor (dia relevante).
-// Ordem alfabética, sem pódio — é carteira precisando de atenção, não ranking.
-function ConsultantBreakdown({ rows }: { rows: BoardRow[] }) {
+// Recorte por COLABORADOR: quantos clientes DELE em cada cor (dia relevante).
+// Empresa com 2 colaboradores conta na carteira de cada um. Ordem alfabética,
+// sem pódio — é carteira precisando de atenção, não ranking.
+function CollaboratorBreakdown({ rows }: { rows: BoardRow[] }) {
   const groups = useMemo(() => {
     const map = new Map<
       string,
@@ -383,8 +432,8 @@ function ConsultantBreakdown({ rows }: { rows: BoardRow[] }) {
       map.set(id, g);
     };
     for (const r of rows) {
-      if (r.consultants.length === 0) bump("__none__", "Sem responsável", r.color);
-      else for (const c of r.consultants) bump(c.id, c.name || "(sem nome)", r.color);
+      if (r.collaborators.length === 0) bump("__none__", "Sem responsável", r.color);
+      else for (const c of r.collaborators) bump(c.id, c.name || "(sem nome)", r.color);
     }
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   }, [rows]);
@@ -393,7 +442,7 @@ function ConsultantBreakdown({ rows }: { rows: BoardRow[] }) {
 
   return (
     <section className="rounded-2xl border border-line bg-surface p-5 shadow-card">
-      <h2 className="text-sm font-semibold text-fg">Carteira por consultor</h2>
+      <h2 className="text-sm font-semibold text-fg">Carteira por colaborador</h2>
       <p className="mt-0.5 text-xs text-fg-subtle">
         Quantos clientes de cada um precisam de atenção hoje — não é ranking de
         produtividade.

@@ -50,12 +50,18 @@ export type PontuacaoExportData = {
 
 export async function loadPontuacaoExport(
   supabase: SupabaseServer,
-  month: string
+  month: string,
+  consultant: string | null = null,
+  collaborator: string | null = null
 ): Promise<PontuacaoExportData> {
   const p_month = monthToDate(month);
+  const p_consultant = consultant;
+  const p_collaborator = collaborator;
+  // As RPCs filtram por consultor/colaborador (decisão 4) — e sempre por "empresa
+  // com colaborador agora" (decisão 2) por dentro.
   const [summaryRes, exportRes, syncRes] = await Promise.all([
-    supabase.rpc("followup_scores_month", { p_month }),
-    supabase.rpc("followup_scores_export", { p_month }),
+    supabase.rpc("followup_scores_month", { p_month, p_consultant, p_collaborator }),
+    supabase.rpc("followup_scores_export", { p_month, p_consultant, p_collaborator }),
     supabase.rpc("followup_last_sync"),
   ]);
   // As RPCs têm gate is_admin por dentro; um erro aqui (ex.: não-admin) sobe para

@@ -12,23 +12,40 @@ import {
   finalizeMeetingTimer,
   editMeetingTimer,
   fetchReadableMeetingTimers,
+  fetchMeetingTimerHistory,
   type MeetingTimerState,
+  type MeetingAuditEntry,
 } from "@/app/meeting-timer-actions";
 import type { DirectoryUser, ReachableCompany } from "@/lib/meetings";
 
 const TZ = "America/Sao_Paulo";
-const PLAY_LEAD_MS = 30 * 60 * 1000; // Play liberado 30 min antes do início (decisão 5).
+// Acima disto (1 h antes do início), o Play pede confirmação no app (decisão 2).
+// NÃO há mais trava de horário (decisão 1): o banco inicia normalmente.
+const CONFIRM_LEAD_MS = 60 * 60 * 1000;
 
-// Formata o horário (BRT) a partir do qual o Play fica disponível. Mostra só HH:MM
-// quando é hoje; senão inclui DD/MM.
-function playFromLabel(fromMs: number): string {
-  const d = new Date(fromMs);
+// Frase do horário agendado (BRT) para o modal de confirmação. "às HH:MM" quando é
+// hoje; "em DD/MM às HH:MM" nos outros dias.
+function startLabel(ms: number): string {
+  const d = new Date(ms);
   const today = new Date().toLocaleDateString("en-CA", { timeZone: TZ });
   const day = d.toLocaleDateString("en-CA", { timeZone: TZ });
   const hhmm = d.toLocaleTimeString("pt-BR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
-  if (day === today) return hhmm;
+  if (day === today) return `às ${hhmm}`;
   const ddmm = d.toLocaleDateString("pt-BR", { timeZone: TZ, day: "2-digit", month: "2-digit" });
-  return `${ddmm} ${hhmm}`;
+  return `em ${ddmm} às ${hhmm}`;
+}
+
+function fmtDateTime(iso: string): string {
+  const ms = parseStartedAt(iso);
+  if (ms === null) return "";
+  return new Date(ms).toLocaleString("pt-BR", {
+    timeZone: TZ, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+}
+function fmtTime(iso: string): string {
+  const ms = parseStartedAt(iso);
+  if (ms === null) return "";
+  return new Date(ms).toLocaleTimeString("pt-BR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
 }
 
 // Controle do timer de REUNIÃO no card da Agenda e na aba Reuniões. Play / Pause /
@@ -50,7 +67,7 @@ export default function MeetingTimerControl({
   kind: "meeting" | "imported";
   meetingId?: string | null;
   googleEventId?: string | null;
-  // Início agendado (ISO) — para a janela de Play (decisão 5). Null = sem limite.
+  // Início agendado (ISO) — só para a confirmação de "muito cedo" (decisão 2).
   scheduledStart?: string | null;
   currentUserId: string;
   // Para reunião do CRM: é o criador. Para importado: dono + não privado + não é
@@ -66,15 +83,18 @@ export default function MeetingTimerControl({
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [nowMs, setNowMs] = useState(() => Date.now()); // só para a janela de Play
 
   // Form do importado (empresa + consultores presentes).
   const [picking, setPicking] = useState(false);
   const [companyId, setCompanyId] = useState("");
   const [people, setPeople] = useState<Set<string>>(new Set());
 
-  // Modal (inline) de edição de tempo.
+  // Modal (inline) de edição de tempo e de histórico.
   const [editing, setEditing] = useState(false);
+  const [history, setHistory] = useState(false);
+
+  // Confirmação de "muito cedo" (decisão 2): guarda a ação de Play a confirmar.
+  const [confirmStart, setConfirmStart] = useState<(() => void) | null>(null);
 
   const matches = useCallback(
     (t: MeetingTimerState) =>
@@ -124,21 +144,13 @@ export default function MeetingTimerControl({
     : null;
   const elapsed = useMeetingTimerTotal(base);
 
-  // Janela de Play (decisão 5): a partir de 30 min antes do início agendado. Tem
-  // tique próprio só enquanto a janela ainda não abriu (o relógio ao vivo é do hook).
-  const playFromMs = useMemo(() => {
-    const s = parseStartedAt(scheduledStart);
-    return s === null ? null : s - PLAY_LEAD_MS;
-  }, [scheduledStart]);
-  const playAllowed = playFromMs === null || nowMs >= playFromMs;
-  const waitingForWindow =
-    !running && !finalized && !playAllowed && (canStart || (!!timer && mine));
-  useEffect(() => {
-    if (!waitingForWindow) return;
-    setNowMs(Date.now());
-    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, [waitingForWindow]);
+  const scheduledMs = useMemo(() => parseStartedAt(scheduledStart), [scheduledStart]);
+
+  // Precisa confirmar quando o Play é > 1 h antes do início agendado (decisão 2).
+  const needsConfirm = useCallback(
+    () => scheduledMs !== null && scheduledMs - (Date.now() + skew) > CONFIRM_LEAD_MS,
+    [scheduledMs, skew]
+  );
 
   async function act(fn: () => Promise<{ error: string | null }>) {
     setBusy(true);
@@ -158,6 +170,12 @@ export default function MeetingTimerControl({
     if (await act(() => startMeetingTimer(input))) setPicking(false);
   }
 
+  // Play: pede confirmação se for muito cedo; senão dispara direto (decisão 2).
+  function guardStart(action: () => void) {
+    if (needsConfirm()) setConfirmStart(() => action);
+    else action();
+  }
+
   const btn =
     "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd disabled:cursor-not-allowed disabled:opacity-60";
   const btnPrimary = `${btn} bg-risd text-white hover:bg-chrysler`;
@@ -167,11 +185,6 @@ export default function MeetingTimerControl({
   if (!loaded) {
     return <div className="mt-3 h-8 animate-pulse rounded-lg bg-surface-2" />;
   }
-
-  const windowHint =
-    !playAllowed && playFromMs !== null
-      ? `Disponível a partir de ${playFromLabel(playFromMs)}`
-      : null;
 
   const Clock = (
     <span className="inline-flex items-center gap-2">
@@ -185,21 +198,25 @@ export default function MeetingTimerControl({
     </span>
   );
 
-  // Botão de Play (Iniciar/Retomar) com a trava da janela e a dica.
+  // Link "Editado · ver histórico" (decisão 4) — aparece quando houve ≥1 edição ou
+  // encerramento automático. Visível a quem o banco deixa ler (admin/quem iniciou/
+  // consultor da empresa); o flag `edited` já vem filtrado pela RLS.
+  const historyLink = timer?.edited ? (
+    <button
+      type="button"
+      onClick={() => { setError(null); setHistory(true); }}
+      className="text-[11px] font-medium text-risd underline-offset-2 hover:underline"
+    >
+      Editado · ver histórico
+    </button>
+  ) : null;
+
+  // Botão de Play (Iniciar/Retomar) — sem trava de horário (decisão 1).
   function PlayButton({ label, onClick }: { label: string; onClick: () => void }) {
     return (
-      <span className="inline-flex items-center gap-2">
-        <button
-          type="button"
-          className={btnPrimary}
-          disabled={busy || !playAllowed}
-          title={windowHint ?? undefined}
-          onClick={onClick}
-        >
-          {busy ? "…" : label}
-        </button>
-        {windowHint && <span className="text-[11px] text-fg-subtle">{windowHint}</span>}
-      </span>
+      <button type="button" className={btnPrimary} disabled={busy} onClick={onClick}>
+        {busy ? "…" : label}
+      </button>
     );
   }
 
@@ -224,7 +241,9 @@ export default function MeetingTimerControl({
             <PlayButton
               label="Iniciar"
               onClick={() => {
-                if (kind === "meeting") doStart({ meetingId });
+                // Reunião do CRM inicia direto (confirma se muito cedo). O evento
+                // importado abre o form primeiro; a confirmação fica no "Iniciar timer".
+                if (kind === "meeting") guardStart(() => doStart({ meetingId }));
                 else setPicking(true);
               }}
             />
@@ -237,6 +256,7 @@ export default function MeetingTimerControl({
         {timer?.isOpen && (
           <div className="flex flex-wrap items-center gap-2">
             {Clock}
+            {historyLink}
             {mine ? (
               <>
                 <button type="button" className={btnOutline} disabled={busy}
@@ -262,9 +282,13 @@ export default function MeetingTimerControl({
             <span className="font-mono text-sm font-semibold tabular-nums text-fg">
               {formatClock(elapsed)}
             </span>
+            {historyLink}
             {mine ? (
               <>
-                <PlayButton label="Retomar" onClick={() => act(() => resumeMeetingTimer(timer.timerId))} />
+                <PlayButton
+                  label="Retomar"
+                  onClick={() => guardStart(() => act(() => resumeMeetingTimer(timer.timerId)))}
+                />
                 <button type="button" className={btnGhost} disabled={busy}
                   onClick={() => act(() => finalizeMeetingTimer(timer.timerId))}>
                   Finalizar
@@ -291,6 +315,7 @@ export default function MeetingTimerControl({
             <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-fg-subtle">
               Finalizada
             </span>
+            {historyLink}
             {mine ? (
               <button type="button" className={btnGhost} disabled={busy}
                 onClick={() => { setError(null); setEditing(true); }}>
@@ -304,6 +329,36 @@ export default function MeetingTimerControl({
           </div>
         )}
       </div>
+
+      {/* --- confirmação de "muito cedo" (decisão 2) --- */}
+      {confirmStart && scheduledMs !== null && (
+        <div className="mt-2 space-y-2 border-t border-line pt-2">
+          <p className="text-xs text-fg">
+            A reunião começa {startLabel(scheduledMs)}. Iniciar o timer agora?
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className={btnPrimary}
+              disabled={busy}
+              onClick={() => {
+                const fn = confirmStart;
+                setConfirmStart(null);
+                fn();
+              }}
+            >
+              Iniciar agora
+            </button>
+            <button
+              type="button"
+              className="rounded-lg px-2.5 py-1.5 text-xs text-fg-muted transition hover:text-fg"
+              onClick={() => setConfirmStart(null)}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* --- form do importado: empresa + consultores presentes --- */}
       {picking && (
@@ -357,15 +412,15 @@ export default function MeetingTimerControl({
             <button
               type="button"
               className={btnPrimary}
-              disabled={busy || !companyId || !playAllowed}
-              title={windowHint ?? undefined}
+              disabled={busy || !companyId}
               onClick={() =>
-                doStart({ googleEventId, companyId, people: Array.from(people) })
+                guardStart(() =>
+                  doStart({ googleEventId, companyId, people: Array.from(people) })
+                )
               }
             >
               {busy ? "Iniciando…" : "Iniciar timer"}
             </button>
-            {windowHint && <span className="text-[11px] text-fg-subtle">{windowHint}</span>}
             <button
               type="button"
               className="rounded-lg px-2.5 py-1.5 text-xs text-fg-muted transition hover:text-fg"
@@ -390,6 +445,11 @@ export default function MeetingTimerControl({
             return ok;
           }}
         />
+      )}
+
+      {/* --- histórico de edições + encerramentos automáticos (decisão 4) --- */}
+      {history && timer && (
+        <HistoryPanel timerId={timer.timerId} onClose={() => setHistory(false)} />
       )}
 
       {error && <p className="mt-1.5 text-xs text-red-600 dark:text-red-400">{error}</p>}
@@ -475,6 +535,71 @@ function EditTimePanel({
         </button>
       </div>
       {localErr && <p className="text-[11px] text-red-600 dark:text-red-400">{localErr}</p>}
+    </div>
+  );
+}
+
+// Histórico do timer: edições manuais (quem, antes → depois, justificativa) e
+// encerramentos automáticos (evento de sistema), do mais recente ao mais antigo.
+function HistoryPanel({ timerId, onClose }: { timerId: string; onClose: () => void }) {
+  const [loading, setLoading] = useState(true);
+  const [entries, setEntries] = useState<MeetingAuditEntry[]>([]);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const res = await fetchMeetingTimerHistory(timerId);
+      if (!active) return;
+      if (res.error) setErr(res.error);
+      else if (res.restricted) setErr("Você não tem acesso ao histórico desta reunião.");
+      else setEntries(res.entries ?? []);
+      setLoading(false);
+    })();
+    return () => { active = false; };
+  }, [timerId]);
+
+  return (
+    <div className="mt-2 space-y-2 border-t border-line pt-2">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium text-fg">Histórico de alterações</p>
+        <button type="button" onClick={onClose}
+          className="rounded-lg px-2 py-0.5 text-xs text-fg-muted transition hover:text-fg">
+          Fechar
+        </button>
+      </div>
+
+      {loading && <p className="text-[11px] text-fg-subtle">Carregando…</p>}
+      {!loading && err && <p className="text-[11px] text-red-600 dark:text-red-400">{err}</p>}
+      {!loading && !err && entries.length === 0 && (
+        <p className="text-[11px] text-fg-subtle">Sem alterações registradas.</p>
+      )}
+
+      {!loading && !err && entries.length > 0 && (
+        <ol className="space-y-2">
+          {entries.map((e, i) => (
+            <li key={`${e.editedAt}-${i}`} className="rounded-lg border border-line bg-surface px-2.5 py-1.5">
+              {e.eventType === "auto_close" ? (
+                <>
+                  <p className="text-[11px] text-fg-subtle">{fmtDateTime(e.editedAt)} · Sistema</p>
+                  <p className="text-xs text-fg">Encerrado automaticamente às {fmtTime(e.editedAt)}</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-[11px] text-fg-subtle">
+                    {fmtDateTime(e.editedAt)} · {e.editorName ?? "—"}
+                  </p>
+                  <p className="text-xs text-fg">
+                    {e.oldSeconds !== null ? `${formatDurationBR(e.oldSeconds)} → ` : ""}
+                    <span className="font-semibold">{formatDurationBR(e.newSeconds)}</span>
+                  </p>
+                  <p className="mt-0.5 whitespace-pre-wrap text-[11px] text-fg-muted">{e.justification}</p>
+                </>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }

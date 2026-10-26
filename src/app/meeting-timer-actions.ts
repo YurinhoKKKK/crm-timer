@@ -32,6 +32,7 @@ export type MeetingTimerState = {
   isFinalized: boolean; // finalizado → sem Play
   baseSeconds: number;
   serverNow: string;
+  edited: boolean; // há ≥1 edição ou encerramento automático no histórico
 };
 
 export async function startMeetingTimer(input: {
@@ -125,6 +126,7 @@ export async function fetchReadableMeetingTimers(): Promise<MeetingTimerState[]>
       finalized: boolean;
       base_seconds: number | string;
       server_now: string;
+      edited: boolean;
     }[]
   ).map((r) => ({
     timerId: r.timer_id,
@@ -138,7 +140,62 @@ export async function fetchReadableMeetingTimers(): Promise<MeetingTimerState[]>
     isFinalized: r.finalized,
     baseSeconds: Number(r.base_seconds),
     serverNow: r.server_now,
+    edited: !!r.edited,
   }));
+}
+
+// --- Histórico de edições + encerramentos automáticos de um timer (decisão 4) --
+// Gate no banco: admin, quem iniciou ou consultor da empresa. Colaborador/cliente
+// recebem 42501 → a UI trata como `restricted` (nem o link deve aparecer p/ eles).
+export type MeetingAuditEntry = {
+  eventType: "edit" | "auto_close";
+  editedAt: string;
+  editedBy: string | null;
+  editorName: string | null;
+  oldSeconds: number | null;
+  newSeconds: number;
+  justification: string;
+};
+
+export async function fetchMeetingTimerHistory(timerId: string): Promise<{
+  error: string | null;
+  restricted?: boolean;
+  entries?: MeetingAuditEntry[];
+}> {
+  const { supabase, user } = await requireUser();
+  if (!user) return { error: "Sessão expirada. Faça login novamente." };
+
+  const { data, error } = await supabase.rpc("meeting_timer_audit_list", {
+    p_timer: timerId,
+  });
+  if (error) {
+    if (error.code === "42501") return { error: null, restricted: true };
+    return { error: error.message };
+  }
+
+  const rows =
+    (data as {
+      event_type: "edit" | "auto_close";
+      edited_at: string;
+      edited_by: string | null;
+      editor_name: string | null;
+      old_seconds: number | string | null;
+      new_seconds: number | string;
+      justification: string;
+    }[]) ?? [];
+
+  return {
+    error: null,
+    entries: rows.map((r) => ({
+      eventType: r.event_type,
+      editedAt: r.edited_at,
+      editedBy: r.edited_by,
+      editorName: r.editor_name,
+      oldSeconds: r.old_seconds === null ? null : Number(r.old_seconds),
+      newSeconds: Number(r.new_seconds),
+      justification: r.justification,
+    })),
+  };
 }
 
 // O timer de reunião ABERTO do próprio usuário (confirmação antes de iniciar

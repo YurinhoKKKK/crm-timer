@@ -6,6 +6,7 @@ import Avatar from "@/components/Avatar";
 import { FilterBar, SearchBox, EmptyState } from "@/components/ListControls";
 import { ComboFilter } from "@/components/Combobox";
 import PeriodPicker from "@/components/PeriodPicker";
+import HistoricoPdfButton from "@/components/company-central/HistoricoPdfButton";
 import { resolvePeriodValue, type PeriodConfig } from "@/lib/period";
 import { formatDuration } from "@/lib/format";
 import {
@@ -235,15 +236,18 @@ export default function CompanyActivityFeed({
       ref={sectionRef}
       className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6"
     >
-      <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-fg">Histórico de atividades</h3>
-        {status === "ready" && (
-          <span className="text-xs text-fg-subtle">
-            {active
-              ? `${total} ${total === 1 ? "resultado" : "resultados"}`
-              : `${total} ${total === 1 ? "registro" : "registros"}`}
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {status === "ready" && (
+            <span className="text-xs text-fg-subtle">
+              {active
+                ? `${total} ${total === 1 ? "resultado" : "resultados"}`
+                : `${total} ${total === 1 ? "registro" : "registros"}`}
+            </span>
+          )}
+          <HistoricoPdfButton companyId={companyId} />
+        </div>
       </div>
       {/* O filtro de período AQUI é próprio desta lista de eventos — não tem
           relação com o filtro do topo (Visão geral), que recorta os cartões. */}

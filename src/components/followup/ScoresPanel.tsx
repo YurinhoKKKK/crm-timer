@@ -13,7 +13,17 @@ import {
   type MonthOption,
   type ScoreDetailRow,
   type ScoreMonthRow,
+  type UnlinkedCompany,
 } from "@/lib/followup";
+
+// Abaixo deste nº de cliente-dias no mês, o aproveitamento é pouco confiável:
+// mostramos um selo "amostra pequena" (a pessoa continua na lista).
+const SMALL_SAMPLE = 40;
+
+// Aproveitamento (uma casa, pode ser negativo) → "66,9%".
+function fmtPct(v: number): string {
+  return `${v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+}
 
 const TZ = "America/Sao_Paulo";
 const NONE_KEY = "__none__";
@@ -46,6 +56,7 @@ export default function ScoresPanel({
   monthOptions,
   rows,
   error,
+  unlinked,
   consultantId,
   collaboratorId,
   recovering,
@@ -54,6 +65,8 @@ export default function ScoresPanel({
   monthOptions: MonthOption[];
   rows: ScoreMonthRow[];
   error?: string | null;
+  // Empresas ativas com colaborador mas sem contato do Digisac (não avaliadas).
+  unlinked: UnlinkedCompany[];
   // Filtros aplicados no quadro: o Excel respeita-os (consultor/colaborador na
   // 0156; "Em recuperação" na 0158).
   consultantId: string;
@@ -135,6 +148,29 @@ export default function ScoresPanel({
         </a>
       </div>
 
+      {unlinked.length > 0 && (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+          <p className="font-medium">
+            {unlinked.length}{" "}
+            {unlinked.length === 1
+              ? "empresa sem contato do Digisac vinculado não está sendo avaliada"
+              : "empresas sem contato do Digisac vinculado não estão sendo avaliadas"}
+            .
+          </p>
+          <p className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs">
+            {unlinked.map((c) => (
+              <a
+                key={c.companyId}
+                href={`/admin/empresas/${c.companyId}`}
+                className="underline decoration-amber-500/50 underline-offset-2 hover:decoration-amber-500"
+              >
+                {c.companyName}
+              </a>
+            ))}
+          </p>
+        </div>
+      )}
+
       {error ? (
         <div className="rounded-2xl border border-red-300/60 bg-red-50 p-8 text-center text-sm text-red-700 shadow-card dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
           Não foi possível carregar a pontuação. Tente recarregar a página; se
@@ -150,11 +186,12 @@ export default function ScoresPanel({
             <thead>
               <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-fg-subtle">
                 <th className="px-4 py-2.5 font-medium">Colaborador</th>
+                <th className="px-3 py-2.5 text-right font-medium">Aproveitamento</th>
                 <th className="px-3 py-2.5 text-right font-medium">Pontos</th>
-                <th className="px-3 py-2.5 text-right font-medium">Em dia</th>
-                <th className="px-3 py-2.5 text-right font-medium">Atenção</th>
-                <th className="px-3 py-2.5 text-right font-medium">Sem contato</th>
-                <th className="px-3 py-2.5 text-right font-medium">Empresas</th>
+                <th className="px-3 py-2.5 text-right font-medium">Cliente-dias</th>
+                <th className="px-3 py-2.5 text-right font-medium" title="Dias verdes (contato de manhã)">Verdes</th>
+                <th className="px-3 py-2.5 text-right font-medium" title="Dias amarelos (contato à tarde ou em recuperação)">Amarelos</th>
+                <th className="px-3 py-2.5 text-right font-medium" title="Dias vermelhos (sem contato)">Vermelhos</th>
               </tr>
             </thead>
             <tbody>
@@ -186,14 +223,21 @@ export default function ScoresPanel({
         </div>
       )}
 
-      <p className="text-xs text-fg-subtle">
-        Pontos seguem a cor do cliente: verde{" "}
-        <span className="font-medium text-emerald-700 dark:text-emerald-300">+1</span>, em recuperação{" "}
-        <span className="font-medium text-amber-700 dark:text-amber-300">0</span>, vermelho{" "}
-        <span className="font-medium text-red-700 dark:text-red-300">−1</span>. Depois de um dia vermelho (sem
-        contato), são precisos 2 contatos de manhã para o cliente voltar ao verde. Clique num colaborador para ver
-        a grade por dia — passe o mouse em cada dia para ver o contato e a cor do cliente.
-      </p>
+      <div className="space-y-1.5 text-xs text-fg-subtle">
+        <p>
+          <strong className="text-fg-muted">Aproveitamento</strong> = pontos feitos ÷ chances (1 por cliente por
+          dia útil). 100% = todos os clientes verdes todos os dias; 0% = ganhos e perdas se anulam; negativo = mais
+          vermelhos que verdes. Não depende do tamanho da carteira.
+        </p>
+        <p>
+          Pontos seguem a cor do cliente: verde{" "}
+          <span className="font-medium text-emerald-700 dark:text-emerald-300">+1</span>, em recuperação{" "}
+          <span className="font-medium text-amber-700 dark:text-amber-300">0</span>, vermelho{" "}
+          <span className="font-medium text-red-700 dark:text-red-300">−1</span>. Depois de um dia vermelho (sem
+          contato), são precisos 2 contatos de manhã para o cliente voltar ao verde. Clique num colaborador para ver
+          a grade por dia — passe o mouse em cada dia para ver o contato e a cor do cliente.
+        </p>
+      </div>
     </div>
   );
 }
@@ -249,8 +293,33 @@ function ScoreRow({
           </span>
         </td>
         <td className="px-3 py-2.5 text-right">
+          {orphan ? (
+            <span className="text-fg-subtle">—</span>
+          ) : (
+            <span className="inline-flex items-center justify-end gap-1.5">
+              {row.clienteDias < SMALL_SAMPLE && (
+                <span
+                  title={`Amostra pequena: ${row.clienteDias} cliente-dias no mês`}
+                  className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300"
+                >
+                  amostra pequena
+                </span>
+              )}
+              <span
+                className={`font-semibold tabular-nums ${
+                  row.aproveitamento < 0
+                    ? "text-red-700 dark:text-red-300"
+                    : "text-fg"
+                }`}
+              >
+                {fmtPct(row.aproveitamento)}
+              </span>
+            </span>
+          )}
+        </td>
+        <td className="px-3 py-2.5 text-right">
           <span
-            className={`font-semibold tabular-nums ${
+            className={`tabular-nums ${
               orphan
                 ? "text-fg-subtle"
                 : row.points > 0
@@ -263,14 +332,27 @@ function ScoreRow({
             {row.points > 0 ? `+${row.points}` : row.points}
           </span>
         </td>
+        <td className="px-3 py-2.5 text-right tabular-nums">{orphan ? "—" : row.clienteDias}</td>
         <td className="px-3 py-2.5 text-right tabular-nums">{row.daysVerde}</td>
         <td className="px-3 py-2.5 text-right tabular-nums">{row.daysAmarelo}</td>
         <td className="px-3 py-2.5 text-right tabular-nums">{row.daysVermelho}</td>
-        <td className="px-3 py-2.5 text-right tabular-nums">{row.companies}</td>
       </tr>
       {open && (
         <tr>
-          <td colSpan={6} className="bg-surface-2/20 px-4 py-3">
+          <td colSpan={7} className="bg-surface-2/20 px-4 py-3">
+            {!orphan && (
+              <p className="mb-2 text-xs text-fg-muted">
+                Aproveitamento{" "}
+                <b className={`tabular-nums ${row.aproveitamento < 0 ? "text-red-700 dark:text-red-300" : "text-fg"}`}>
+                  {fmtPct(row.aproveitamento)}
+                </b>{" "}
+                · Cliente-dias <b className="tabular-nums text-fg">{row.clienteDias}</b> · Pontos{" "}
+                <b className="tabular-nums text-fg">{row.points > 0 ? `+${row.points}` : row.points}</b>
+                {row.clienteDias < SMALL_SAMPLE && (
+                  <span className="ml-1 text-amber-700 dark:text-amber-300">(amostra pequena)</span>
+                )}
+              </p>
+            )}
             {loading ? (
               <p className="text-sm text-fg-subtle">Carregando grade…</p>
             ) : error ? (

@@ -5,11 +5,13 @@ import {
   loadFollowupBoard,
   loadFollowupLastSync,
   loadScoresMonth,
+  loadUnlinkedCompanies,
   clampTab,
   clampMonth,
   monthOptions,
   type LoadResult,
   type ScoreMonthRow,
+  type UnlinkedCompany,
 } from "@/lib/followup";
 
 // Acompanhamento de clientes — monitora se TODOS os clientes estão recebendo
@@ -42,12 +44,16 @@ export default async function AcompanhamentoPage({
   // O board e o "atualizado às" saem sempre (fonte da aba Acompanhamento e do
   // carimbo em ambas as abas). A pontuação do mês só quando o admin está na aba
   // Pontuação — uma ida a menos ao banco para consultor/aba de board.
-  const [boardRes, lastSync, scoresRes] = await Promise.all([
+  const onScores = isAdmin && tab === "pontuacao";
+  const [boardRes, lastSync, scoresRes, unlinked] = await Promise.all([
     loadFollowupBoard(supabase, month),
     loadFollowupLastSync(supabase),
-    isAdmin && tab === "pontuacao"
+    onScores
       ? loadScoresMonth(supabase, month)
       : Promise.resolve({ rows: [], error: null } as LoadResult<ScoreMonthRow>),
+    onScores
+      ? loadUnlinkedCompanies(supabase)
+      : Promise.resolve([] as UnlinkedCompany[]),
   ]);
 
   return (
@@ -70,6 +76,7 @@ export default async function AcompanhamentoPage({
         monthOptions={monthOptions()}
         scores={scoresRes.rows}
         scoresError={scoresRes.error}
+        unlinked={unlinked}
       />
     </AppShell>
   );

@@ -9,6 +9,7 @@ import type {
   FollowupTab,
   MonthOption,
   ScoreMonthRow,
+  UnlinkedCompany,
 } from "@/lib/followup";
 
 const TZ = "America/Sao_Paulo";
@@ -55,6 +56,7 @@ export default function FollowupTabs({
   monthOptions,
   scores,
   scoresError,
+  unlinked,
 }: {
   role: "admin" | "consultor";
   tab: FollowupTab;
@@ -65,6 +67,7 @@ export default function FollowupTabs({
   monthOptions: MonthOption[];
   scores: ScoreMonthRow[];
   scoresError: string | null;
+  unlinked: UnlinkedCompany[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -119,6 +122,7 @@ export default function FollowupTabs({
           monthOptions={monthOptions}
           rows={scores}
           error={scoresError}
+          unlinked={unlinked}
           consultantId={consultantId}
           collaboratorId={collaboratorId}
           recovering={recovering}

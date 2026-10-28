@@ -40,3 +40,62 @@ export async function adjustTaskTime(
   revalidatePath("/admin/instancias");
   return { error: null };
 }
+
+// --- Ausências do colaborador (migration 0162) ------------------------------
+// Dias úteis de ausência saem dos pontos E das chances do Aproveitamento (o
+// cálculo exclui na leitura, então vale retroativamente). A RLS ca_admin_all já
+// barra não-admin; aqui só validamos a entrada e revalidamos as telas afetadas.
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export async function addAbsence(
+  collaboratorId: string,
+  startDate: string,
+  endDate: string
+): Promise<{ error: string | null }> {
+  if (!DATE_RE.test(startDate) || !DATE_RE.test(endDate)) {
+    return { error: "Informe datas válidas (início e fim)." };
+  }
+  if (endDate < startDate) {
+    return { error: "A data de fim não pode ser antes do início." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Sessão expirada. Faça login novamente." };
+
+  const { error } = await supabase.from("collaborator_absences").insert({
+    collaborator_id: collaboratorId,
+    start_date: startDate,
+    end_date: endDate,
+    created_by: user.id,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath(`/admin/colaboradores/${collaboratorId}`);
+  revalidatePath("/acompanhamento");
+  return { error: null };
+}
+
+export async function removeAbsence(
+  collaboratorId: string,
+  absenceId: string
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Sessão expirada. Faça login novamente." };
+
+  const { error } = await supabase
+    .from("collaborator_absences")
+    .delete()
+    .eq("id", absenceId)
+    .eq("collaborator_id", collaboratorId);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/admin/colaboradores/${collaboratorId}`);
+  revalidatePath("/acompanhamento");
+  return { error: null };
+}

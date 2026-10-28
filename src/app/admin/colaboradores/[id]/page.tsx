@@ -12,6 +12,7 @@ import AdjustableTaskList, {
   type AdjustItem,
   type Adjustment,
 } from "./AdjustableTaskList";
+import CollaboratorAbsences from "./CollaboratorAbsences";
 import { type CompanyCategoryTime } from "../../CategoryTimeByCompanyChart";
 import CategoryTimeByCompanyChartLazy from "../../CategoryTimeByCompanyChartLazy";
 import PeriodPicker from "@/components/PeriodPicker";
@@ -316,6 +317,17 @@ export default async function CollaboratorDetailPage({
   // Contagem autoritativa de atrasadas vem do banco (imune ao teto da lista).
   const overdueCount = Number(headerCounts?.overdue ?? 0);
 
+  // Ausências do colaborador (admin-only; RLS ca_admin_all). Dias úteis de
+  // ausência saem dos pontos E das chances do Aproveitamento (migration 0162).
+  const { data: absencesData } = await supabase
+    .from("collaborator_absences")
+    .select("id, start_date, end_date")
+    .eq("collaborator_id", params.id)
+    .order("start_date", { ascending: false });
+  const absences = (
+    (absencesData as { id: string; start_date: string; end_date: string }[]) ?? []
+  ).map((a) => ({ id: a.id, startDate: a.start_date, endDate: a.end_date }));
+
   return (
     <AppShell
       user={{ name: profile.full_name, role: "admin", avatarUrl: profile.avatarUrl }}
@@ -376,6 +388,12 @@ export default async function CollaboratorDetailPage({
               </div>
             </div>
           </section>
+
+          {/* Ausências (afetam o Aproveitamento do Acompanhamento) */}
+          <CollaboratorAbsences
+            collaboratorId={params.id}
+            absences={absences}
+          />
 
           {/* Atrasadas / pendentes em destaque */}
           <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">

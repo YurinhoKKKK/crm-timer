@@ -21,6 +21,8 @@ type SummaryRow = {
   collaboratorId: string | null;
   collaboratorName: string | null;
   points: number;
+  aproveitamento: number;
+  clienteDias: number;
   daysVerde: number;
   daysAmarelo: number;
   daysVermelho: number;
@@ -79,6 +81,8 @@ export async function loadPontuacaoExport(
           collaborator_id: string | null;
           collaborator_name: string | null;
           points: number;
+          client_days: number;
+          aproveitamento: number | string | null;
           days_verde: number;
           days_amarelo: number;
           days_vermelho: number;
@@ -89,6 +93,8 @@ export async function loadPontuacaoExport(
     collaboratorId: r.collaborator_id,
     collaboratorName: r.collaborator_name,
     points: Number(r.points),
+    aproveitamento: r.aproveitamento === null ? 0 : Number(r.aproveitamento),
+    clienteDias: Number(r.client_days),
     daysVerde: Number(r.days_verde),
     daysAmarelo: Number(r.days_amarelo),
     daysVermelho: Number(r.days_vermelho),
@@ -278,7 +284,7 @@ function buildResumo(
   lastSync: string | null
 ) {
   const ws = wb.addWorksheet("Resumo");
-  const LAST_COL = 6;
+  const LAST_COL = 8;
   ws.getColumn(1).width = 34;
   for (let c = 2; c <= LAST_COL; c++) ws.getColumn(c).width = 15;
 
@@ -297,7 +303,7 @@ function buildResumo(
   addInfo(`Última sincronização Digisac: ${stampSync(lastSync)}`);
   ws.addRow([]);
 
-  const headerRow = ws.addRow(["Colaborador", "Pontos", "Dias verdes", "Dias amarelos", "Dias vermelhos", "Empresas"]);
+  const headerRow = ws.addRow(["Colaborador", "Aproveitamento", "Pontos", "Cliente-dias", "Dias verdes", "Dias amarelos", "Dias vermelhos", "Empresas"]);
   paintHeader(ws, headerRow.number, 1, LAST_COL);
 
   const people = summary.filter((s) => s.collaboratorId !== null);
@@ -305,13 +311,14 @@ function buildResumo(
 
   const firstDataRow = headerRow.number + 1;
   const write = (name: string, s: SummaryRow, muted: boolean) => {
-    const row = ws.addRow([name, s.points, s.daysVerde, s.daysAmarelo, s.daysVermelho, s.companies]);
+    const row = ws.addRow([name, s.aproveitamento, s.points, s.clienteDias, s.daysVerde, s.daysAmarelo, s.daysVermelho, s.companies]);
     for (let c = 1; c <= LAST_COL; c++) {
       const cell = ws.getCell(row.number, c);
       cell.font = { name: FONT, color: { argb: muted ? SUBTLE : INK }, italic: muted };
       cell.alignment = { vertical: "middle", horizontal: c === 1 ? "left" : "center" };
       cell.border = allBorders;
     }
+    ws.getCell(row.number, 2).numFmt = '0.0"%"'; // Aproveitamento
   };
   for (const p of people) write(p.collaboratorName || "(sem nome)", p, false);
   if (orphan) write("Sem responsável (não pontua)", orphan, true);
@@ -320,11 +327,16 @@ function buildResumo(
   const totalRow = ws.addRow(["Total geral"]);
   const col = (n: number) => colLetter(n);
   ws.getCell(totalRow.number, 1).value = "Total geral";
-  for (let c = 2; c <= LAST_COL; c++) {
+  // Colunas 3..8 somam; Aproveitamento (col 2) é pontos_total ÷ cliente-dias_total.
+  for (let c = 3; c <= LAST_COL; c++) {
     ws.getCell(totalRow.number, c).value = {
       formula: `SUM(${col(c)}${firstDataRow}:${col(c)}${lastDataRow})`,
     };
   }
+  ws.getCell(totalRow.number, 2).value = {
+    formula: `IF(${col(4)}${totalRow.number}=0,0,ROUND(${col(3)}${totalRow.number}/${col(4)}${totalRow.number}*100,1))`,
+  };
+  ws.getCell(totalRow.number, 2).numFmt = '0.0"%"';
   for (let c = 1; c <= LAST_COL; c++) {
     const cell = ws.getCell(totalRow.number, c);
     cell.font = { name: FONT, bold: true, color: { argb: INK } };

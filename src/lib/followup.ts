@@ -60,11 +60,18 @@ export type ScoreMonthRow = {
   collaboratorName: string | null;
   avatarPath: string | null;
   points: number;
+  // APROVEITAMENTO = pontos ÷ cliente-dias × 100 (uma casa, pode ser negativo).
+  aproveitamento: number;
+  clienteDias: number; // chances no mês (dias úteis avaliados, fora ausências)
   daysVerde: number;
   daysAmarelo: number;
   daysVermelho: number;
   companies: number;
 };
+
+// Empresa ativa com colaborador mas SEM contato do Digisac — não é avaliada
+// (aviso no topo da Pontuação). RPC followup_unlinked_companies (admin).
+export type UnlinkedCompany = { companyId: string; companyName: string };
 
 // Uma célula da grade dia×empresa do drill-down da Pontuação (RPC
 // followup_scores_detail, admin).
@@ -304,6 +311,8 @@ export async function loadScoresMonth(
           collaborator_name: string | null;
           avatar_path: string | null;
           points: number;
+          client_days: number;
+          aproveitamento: number | string | null;
           days_verde: number;
           days_amarelo: number;
           days_vermelho: number;
@@ -317,10 +326,27 @@ export async function loadScoresMonth(
       collaboratorName: r.collaborator_name,
       avatarPath: r.avatar_path,
       points: Number(r.points),
+      aproveitamento: r.aproveitamento === null ? 0 : Number(r.aproveitamento),
+      clienteDias: Number(r.client_days),
       daysVerde: Number(r.days_verde),
       daysAmarelo: Number(r.days_amarelo),
       daysVermelho: Number(r.days_vermelho),
       companies: Number(r.companies),
     })),
   };
+}
+
+// Empresas ativas com colaborador mas sem contato do Digisac (aviso da
+// Pontuação). RPC admin — o consultor nem chega aqui (a page só carrega p/ admin).
+export async function loadUnlinkedCompanies(
+  supabase: SupabaseServer
+): Promise<UnlinkedCompany[]> {
+  const { data, error } = await supabase.rpc("followup_unlinked_companies");
+  if (error) {
+    console.error("[acompanhamento] followup_unlinked_companies falhou:", error.message);
+    return [];
+  }
+  return ((data as { company_id: string; company_name: string }[] | null) ?? []).map(
+    (r) => ({ companyId: r.company_id, companyName: r.company_name })
+  );
 }

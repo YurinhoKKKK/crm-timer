@@ -1,9 +1,9 @@
 import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
 import { loadCompanyGroups } from "@/lib/company-groups";
-import { resolveChurnPeriod } from "@/lib/period";
+import { resolvePeriodValue, CHURN_PERIOD_CONFIG } from "@/lib/period";
+import PeriodPicker from "@/components/PeriodPicker";
 import CsTabs from "../CsTabs";
-import ChurnPeriodPicker from "./ChurnPeriodPicker";
 import ChurnSummary, { type ChurnSummaryData } from "./ChurnSummary";
 import ChurnBoard, { type ChurnRow } from "./ChurnBoard";
 
@@ -51,7 +51,7 @@ export default async function ControleDeChurnPage({
 }) {
   const { supabase, profile } = await guardRole(["admin"]);
 
-  const period = resolveChurnPeriod(searchParams ?? {});
+  const period = resolvePeriodValue(searchParams ?? {}, CHURN_PERIOD_CONFIG);
 
   const [boardRpc, summaryRpc, groups] = await Promise.all([
     supabase.rpc("churn_board", { p_start: period.start, p_end: period.end }),
@@ -107,9 +107,9 @@ export default async function ControleDeChurnPage({
     >
       <CsTabs active="churn" />
       <div className="mb-4">
-        <ChurnPeriodPicker value={period} />
+        <PeriodPicker value={period} config={CHURN_PERIOD_CONFIG} />
       </div>
-      <ChurnSummary summary={summary} showNoDate={period.preset === "todos"} />
+      <ChurnSummary summary={summary} showNoDate={period.kind === "tudo"} />
       <ChurnBoard
         rows={rows}
         finalizadoGroup={finalizadoGroup}

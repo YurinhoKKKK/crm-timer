@@ -1,8 +1,13 @@
 import Link from "next/link";
 import Avatar from "@/components/Avatar";
 import ResponsibleChips from "@/components/ResponsibleChips";
-import CompanyPeriodFilter from "@/components/company-central/CompanyPeriodFilter";
-import { periodQuery, type ResolvedPeriod } from "@/lib/period";
+import PeriodPicker from "@/components/PeriodPicker";
+import {
+  periodValueQuery,
+  periodPhrase,
+  type PeriodValue,
+  CENTRAL_PERIOD_CONFIG,
+} from "@/lib/period";
 import NewTaskForm from "@/app/admin/tarefas/NewTaskForm";
 import CompanyTaskList from "./CompanyTaskList";
 import ClientAccessManager from "./ClientAccessManager";
@@ -80,7 +85,7 @@ export default function CompanyCentral({
   previewHref,
 }: {
   data: CentralData;
-  period: ResolvedPeriod;
+  period: PeriodValue;
   // Link para a tela de edição de dados/vínculos (admin). Ausente no consultor.
   editHref?: string;
   // "Informações do cliente" (tela própria) — presente para admin e consultor.
@@ -96,15 +101,15 @@ export default function CompanyCentral({
   // Clique num card do funil → tela dedicada com a lista filtrada (mesmo
   // padrão do dashboard); o período atual (inclusive mês/intervalo) é preservado.
   const taskHref = (status?: string) =>
-    `${tasksHref}?${periodQuery(period)}${status ? `&status=${status}` : ""}`;
+    `${tasksHref}?${periodValueQuery(period)}${status ? `&status=${status}` : ""}`;
 
   return (
     <>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-sm font-medium text-fg-muted">
-          Visão geral · {period.label}
+          Visão geral · {periodPhrase(period)}
         </h2>
-        <CompanyPeriodFilter value={period} />
+        <PeriodPicker value={period} config={CENTRAL_PERIOD_CONFIG} />
       </div>
 
       {/* Aviso discreto quando a URL trouxe um período inválido (mês inexistente,
@@ -242,7 +247,7 @@ export default function CompanyCentral({
 
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
         <StatCard
-          label={`Tempo trabalhado ${period.label}`}
+          label={`Tempo trabalhado ${periodPhrase(period)}`}
           value={formatDuration(o.secondsPeriod)}
         />
         <StatCard
@@ -259,7 +264,7 @@ export default function CompanyCentral({
       {/* 3. Progresso */}
       <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
         <div className="mb-2 flex items-center justify-between text-sm text-fg-muted">
-          <span className="font-medium text-fg">Progresso {period.label}</span>
+          <span className="font-medium text-fg">Progresso {periodPhrase(period)}</span>
           <span className="font-mono tabular-nums">
             {o.finalizada} de {o.total} concluída{o.total === 1 ? "" : "s"} ·{" "}
             {o.percent}%
@@ -355,7 +360,7 @@ export default function CompanyCentral({
           Tarefas previstas para o período
         </h3>
         <p className="mb-4 text-xs text-fg-subtle">
-          Lista por prazo ({period.label}); o tempo em cada tarefa é o
+          Lista por prazo ({periodPhrase(period)}); o tempo em cada tarefa é o
           total gasto nela. O &ldquo;Tempo trabalhado&rdquo; acima conta pelo dia
           em que o trabalho foi feito, então uma tarefa prevista para o período
           pode ter sido trabalhada em outro.

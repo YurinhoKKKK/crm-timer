@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Download } from "lucide-react";
 import { brDate, monthYearLabel } from "@/lib/period";
@@ -86,12 +86,16 @@ export default function AttendanceComparison({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [base, setBase] = useState<Base>("out");
+  const [, startNav] = useTransition();
 
   function setParam(key: string, value: string | null) {
     const sp = new URLSearchParams(searchParams?.toString());
     if (value === null) sp.delete(key);
     else sp.set(key, value);
-    router.push(`${pathname}?${sp.toString()}`);
+    // Filtro na mesma página: sem rolar ao topo, sem descartar o conteúdo atual.
+    startNav(() => {
+      router.push(`${pathname}?${sp.toString()}`, { scroll: false });
+    });
   }
 
   const estOf = (c: { estOut: number; estTotal: number }) => (base === "out" ? c.estOut : c.estTotal);

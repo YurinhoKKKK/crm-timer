@@ -62,31 +62,6 @@ export function monthStart(): string {
 // conta). Atalhos não têm limite superior (end=null): seguem abertos até hoje,
 // preservando exatamente os números de antes.
 
-export type PeriodKind = PeriodKey | "mes" | "custom";
-
-export type ResolvedPeriod = {
-  kind: PeriodKind;
-  // Datas puras BRT. start null só em "tudo"; end null = aberto até hoje (atalhos).
-  start: string | null;
-  end: string | null;
-  // Fragmento humano para encaixar nas frases ("Visão geral · {label}",
-  // "Tempo trabalhado {label}", "Progresso {label}").
-  label: string;
-  // Rótulo curto do filtro PERSONALIZADO ativo (mês/intervalo); "" nos atalhos.
-  chip: string;
-  // Caiu no padrão 30d por entrada inválida (a tela mostra aviso discreto).
-  invalid: boolean;
-  // Ida-e-volta na URL (?periodo=... [&mes=... | &de=...&ate=...]).
-  params: Record<string, string>;
-};
-
-const SHORTCUT_LABEL: Record<PeriodKey, string> = {
-  hoje: "hoje",
-  "7d": "nos últimos 7 dias",
-  "30d": "nos últimos 30 dias",
-  tudo: "em todo o período",
-};
-
 const MONTHS_FULL_PT = [
   "janeiro", "fevereiro", "março", "abril", "maio", "junho",
   "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
@@ -112,8 +87,6 @@ export function lastDayOfMonth(ym: string): string {
   return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
 }
 
-const YM_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
-
 // Data real "YYYY-MM-DD": formato certo E dia existente (rejeita 2026-02-30,
 // que ao passar por Date "vira" 02 de março). Round-trip em UTC, sem fuso.
 function isRealDate(ymd: string): boolean {
@@ -126,103 +99,10 @@ function firstOf(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
 }
 
-function shortcut(p: PeriodKey, invalid = false): ResolvedPeriod {
-  return {
-    kind: p,
-    start: periodStart(p),
-    end: null,
-    label: SHORTCUT_LABEL[p],
-    chip: "",
-    invalid,
-    params: { periodo: p },
-  };
-}
-
-// Resolve os parâmetros de URL num período único e validado. Entrada ausente →
-// padrão 30d (sem aviso). Entrada PRESENTE mas corrompida (periodo desconhecido,
-// mês fora do formato, intervalo invertido/irreal) → 30d com `invalid` (aviso).
-export function resolvePeriod(input: {
-  periodo?: string | string[];
-  mes?: string | string[];
-  de?: string | string[];
-  ate?: string | string[];
-}): ResolvedPeriod {
-  const p = firstOf(input.periodo);
-
-  if (p == null || p === "") return shortcut("30d");
-  if (p === "hoje" || p === "7d" || p === "30d" || p === "tudo") {
-    return shortcut(p);
-  }
-
-  if (p === "mes") {
-    const mes = firstOf(input.mes);
-    if (mes && YM_RE.test(mes)) {
-      return {
-        kind: "mes",
-        start: `${mes}-01`,
-        end: lastDayOfMonth(mes),
-        label: `em ${monthYearLabel(mes)}`,
-        chip: monthYearLabel(mes),
-        invalid: false,
-        params: { periodo: "mes", mes },
-      };
-    }
-    return shortcut("30d", true);
-  }
-
-  if (p === "custom") {
-    const de = firstOf(input.de);
-    const ate = firstOf(input.ate);
-    if (de && ate && isRealDate(de) && isRealDate(ate) && de <= ate) {
-      return {
-        kind: "custom",
-        start: de,
-        end: ate,
-        label: `de ${brDate(de)} a ${brDate(ate)}`,
-        chip: `${brDate(de)} – ${brDate(ate)}`,
-        invalid: false,
-        params: { periodo: "custom", de, ate },
-      };
-    }
-    return shortcut("30d", true);
-  }
-
-  // periodo presente mas desconhecido → padrão com aviso.
-  return shortcut("30d", true);
-}
-
-// Query string dos parâmetros do período (para links que preservam o filtro:
-// drill-down de tarefas e "voltar"). Não inclui o "?".
-export function periodQuery(resolved: ResolvedPeriod): string {
-  return new URLSearchParams(resolved.params).toString();
-}
-
 // =====================================================================
-// PERÍODO DO DASHBOARD (/admin e /admin/colaboradores/[id]) — seletor próprio
-// com atalhos + calendário. Modelo SEPARADO do ResolvedPeriod da central da
-// empresa (contratos de URL diferentes): aqui os atalhos de INTERVALO (7d, 30d,
-// este mês, mês passado) materializam em ?de/?ate; só Ontem/Hoje/Tudo usam
-// ?periodo. start/end são DATAS puras BRT (YYYY-MM-DD); end é INCLUSIVO; ambos
-// null só em "Tudo" (sem filtro — idêntico ao comportamento anterior).
-//
-// Datas: texto AAAA-MM-DD de ponta a ponta. A aritmética de calendário é pura
-// (sobre inteiros ou sobre a data UTC-âncora de `addDays`, já usada no arquivo);
-// nada de fuso em data pura. "Hoje" vem de brtToday().
+// Helpers de data compartilhados pelo modelo único de período (abaixo) e pelo
+// PeriodPicker: aritmética pura sobre datas BRT (YYYY-MM-DD), sem fuso.
 // =====================================================================
-
-export type DashboardPreset = "ontem" | "hoje" | "tudo" | "custom";
-
-export type DashboardPeriod = {
-  preset: DashboardPreset;
-  // Datas puras BRT. Ambas null só em "tudo".
-  start: string | null;
-  end: string | null;
-  // Rótulo textual SEMPRE visível: "02/10/2026" (um dia), "01/09/2026 a
-  // 30/09/2026" (intervalo) ou "Tudo".
-  label: string;
-  // Ida-e-volta na URL (?periodo=ontem|hoje|tudo OU ?de=...&ate=...).
-  params: Record<string, string>;
-};
 
 // Soma `days` (pode ser negativo) a uma data 'YYYY-MM-DD'. Mesma âncora UTC do
 // `minusDays` acima (contamos dias de calendário, imune a horário de verão).
@@ -233,22 +113,6 @@ export function addDays(ymd: string, days: number): string {
 // Hoje/Ontem em BRT.
 export function brtYesterday(): string {
   return addDays(brtToday(), -1);
-}
-
-function dayLabel(start: string, end: string): string {
-  return start === end ? brDate(start) : `${brDate(start)} a ${brDate(end)}`;
-}
-
-function customPeriod(start: string, end: string): DashboardPeriod {
-  // Inverte se vier fim antes do início (decisão: 1º clique início, 2º fim).
-  const [lo, hi] = start <= end ? [start, end] : [end, start];
-  return {
-    preset: "custom",
-    start: lo,
-    end: hi,
-    label: dayLabel(lo, hi),
-    params: { de: lo, ate: hi },
-  };
 }
 
 // Atalhos que viram intervalo materializado (?de/?ate).
@@ -269,151 +133,9 @@ export function lastMonthRange(): { start: string; end: string } {
   return { start: `${ym}-01`, end: lastDayOfMonth(ym) };
 }
 
-// Resolve os parâmetros de URL do dashboard num período validado. Padrão (nada
-// ou inválido) = HOJE, sem erro. de/ate têm precedência (atalhos de intervalo e
-// personalizado materializam neles). Links antigos ?periodo=7d|30d continuam
-// funcionando, convertidos em intervalo.
-export function resolveDashboardPeriod(input: {
-  periodo?: string | string[];
-  de?: string | string[];
-  ate?: string | string[];
-}): DashboardPeriod {
-  const today = brtToday();
-  const hoje = (): DashboardPeriod => ({
-    preset: "hoje",
-    start: today,
-    end: today,
-    label: brDate(today),
-    params: { periodo: "hoje" },
-  });
-
-  const de = firstOf(input.de);
-  const ate = firstOf(input.ate);
-  if (de != null || ate != null) {
-    if (de && ate && isRealDate(de) && isRealDate(ate)) {
-      return customPeriod(de, ate);
-    }
-    return hoje(); // intervalo corrompido cai em Hoje
-  }
-
-  const p = firstOf(input.periodo);
-  if (p == null || p === "") return hoje();
-  if (p === "hoje") return hoje();
-  if (p === "ontem") {
-    const y = brtYesterday();
-    return {
-      preset: "ontem",
-      start: y,
-      end: y,
-      label: brDate(y),
-      params: { periodo: "ontem" },
-    };
-  }
-  if (p === "tudo") {
-    return { preset: "tudo", start: null, end: null, label: "Tudo", params: { periodo: "tudo" } };
-  }
-  // Retrocompatibilidade: ?periodo=7d|30d viram intervalo materializado.
-  if (p === "7d") {
-    const r = last7Range();
-    return customPeriod(r.start, r.end);
-  }
-  if (p === "30d") {
-    const r = last30Range();
-    return customPeriod(r.start, r.end);
-  }
-  // Desconhecido → Hoje (sem erro).
-  return hoje();
-}
-
-// Query string dos parâmetros do período do dashboard (links/"voltar"), sem "?".
-export function dashboardQuery(p: DashboardPeriod): string {
-  return new URLSearchParams(p.params).toString();
-}
-
-// =====================================================================
-// PERÍODO DO CONTROLE DE CHURN (2ª aba do Sucesso do Cliente) — atalhos de MÊS
-// (mês atual / mês anterior), "Todos" (sem filtro) e um intervalo personalizado.
-// Modelo SEPARADO do dashboard: aqui os atalhos de mês usam ?periodo=mes_atual|
-// mes_anterior|todos; o calendário (dia-a-dia ou grade de meses) materializa em
-// ?de/?ate. start/end são DATAS puras BRT (YYYY-MM-DD); "todos" tem ambos null
-// (inclui registros SEM data); os demais filtram churned_on BETWEEN start AND end
-// (sem data fica de fora). Padrão (nada/ inválido) = MÊS ATUAL.
-// =====================================================================
-
-export type ChurnPreset = "mes_atual" | "mes_anterior" | "todos" | "custom";
-
-export type ChurnPeriod = {
-  preset: ChurnPreset;
-  // Datas puras BRT. Ambas null só em "todos".
-  start: string | null;
-  end: string | null;
-  // Rótulo SEMPRE visível: "Outubro/2026", "01/09/2026 a 30/09/2026", "Todos".
-  label: string;
-  // Ida-e-volta na URL (?periodo=... OU ?de=...&ate=...).
-  params: Record<string, string>;
-};
-
 // "outubro/2026" → "Outubro/2026" (rótulo autônomo do filtro, não em frase).
 function capitalizeFirst(s: string): string {
   return s.length ? s[0].toUpperCase() + s.slice(1) : s;
-}
-
-function churnMonth(ym: string, preset: "mes_atual" | "mes_anterior"): ChurnPeriod {
-  return {
-    preset,
-    start: `${ym}-01`,
-    end: lastDayOfMonth(ym),
-    label: capitalizeFirst(monthYearLabel(ym)),
-    params: { periodo: preset },
-  };
-}
-
-// Resolve os parâmetros de URL do Controle de Churn num período validado. de/ate
-// têm precedência (calendário/ grade de meses). Entrada corrompida → mês atual.
-export function resolveChurnPeriod(input: {
-  periodo?: string | string[];
-  de?: string | string[];
-  ate?: string | string[];
-}): ChurnPeriod {
-  const mesAtual = () => churnMonth(brtToday().slice(0, 7), "mes_atual");
-
-  const de = firstOf(input.de);
-  const ate = firstOf(input.ate);
-  if (de != null || ate != null) {
-    if (de && ate && isRealDate(de) && isRealDate(ate) && de <= ate) {
-      const ym = de.slice(0, 7);
-      // Intervalo que cobre um mês inteiro (ex.: escolha na grade de meses) ganha
-      // o rótulo "Outubro/2026"; os demais, "01/09/2026 a 30/09/2026".
-      const label =
-        de === `${ym}-01` && ate === lastDayOfMonth(ym)
-          ? capitalizeFirst(monthYearLabel(ym))
-          : de === ate
-            ? brDate(de)
-            : `${brDate(de)} a ${brDate(ate)}`;
-      return { preset: "custom", start: de, end: ate, label, params: { de, ate } };
-    }
-    return mesAtual(); // intervalo corrompido cai no padrão
-  }
-
-  const p = firstOf(input.periodo);
-  if (p === "todos") {
-    return { preset: "todos", start: null, end: null, label: "Todos", params: { periodo: "todos" } };
-  }
-  if (p === "mes_anterior") {
-    return churnMonth(shiftMonth(brtToday().slice(0, 7), -1), "mes_anterior");
-  }
-  // mes_atual, vazio ou desconhecido → mês atual (padrão).
-  return mesAtual();
-}
-
-// Fragmento humano para a frase "Visão geral · {...}".
-export function dashboardPhrase(p: DashboardPeriod): string {
-  if (p.preset === "tudo") return "em todo o período";
-  if (p.preset === "ontem") return "ontem";
-  if (p.preset === "hoje") return "hoje";
-  return p.start === p.end
-    ? `em ${brDate(p.start as string)}`
-    : `de ${brDate(p.start as string)} a ${brDate(p.end as string)}`;
 }
 
 // --- Aritmética de calendário PURA (sobre inteiros) para o PeriodPicker ------
@@ -463,4 +185,301 @@ export function ymOf(ymd: string): string {
 export function monthName(ym: string): string {
   const m = Number(ym.split("-")[1]);
   return MONTHS_FULL_PT[m - 1] ?? ym;
+}
+
+// =====================================================================
+// MODELO ÚNICO DE PERÍODO — alimenta o PeriodPicker compartilhado
+// (src/components/PeriodPicker.tsx). Na LEITURA, substitui os modelos
+// específicos de cada tela (DashboardPeriod, ResolvedPeriod, ChurnPeriod, …) por
+// uma só forma {kind,start,end,label,params} + um resolvedor configurável por
+// props. Links antigos continuam funcionando (convertidos aqui).
+//
+// FRONTEIRAS: start/end são DATAS puras BRT (YYYY-MM-DD); `end` é INCLUSIVO;
+// ambos null em "tudo"; `end` null nunca ocorre aqui (atalhos materializam o
+// último dia). A conversão para o que cada servidor espera (ex.: Capacidade usa
+// `end` EXCLUSIVO) mora no loader da tela — aqui o contrato é sempre inclusivo.
+// =====================================================================
+
+export type ShortcutId =
+  | "ontem"
+  | "hoje"
+  | "tudo"
+  | "7d"
+  | "30d"
+  | "este_mes"
+  | "mes_passado"
+  | "calib_start";
+
+export type PeriodValue = {
+  kind: ShortcutId | "custom" | "mes";
+  // Datas puras BRT (YYYY-MM-DD), end INCLUSIVO. Ambas null só em "tudo".
+  start: string | null;
+  end: string | null;
+  // Rótulo SEMPRE visível ao lado do seletor ("Período: {label}"): estilo
+  // Dashboard — "02/10/2026", "01/09/2026 a 30/09/2026", "Outubro/2026", "Tudo".
+  label: string;
+  // Ida-e-volta na URL (com os nomes de param da tela — ver PeriodParamNames).
+  params: Record<string, string>;
+  // Link trouxe período corrompido → caímos no padrão (a tela mostra um aviso).
+  invalid?: boolean;
+};
+
+// Nomes dos parâmetros de URL. Padrão = periodo/de/ate/mes; telas que coexistem
+// com outro seletor na MESMA URL usam prefixo (ex.: fatDe/fatAte, hde/hate).
+export type PeriodParamNames = {
+  periodo: string;
+  de: string;
+  ate: string;
+  mes: string;
+};
+
+export type PeriodMode = "range" | "month";
+
+export type PeriodConfig = {
+  // Atalhos visíveis na barra e dentro do popover ("Período").
+  barShortcuts: ShortcutId[];
+  popoverShortcuts: ShortcutId[];
+  // Valor aplicado quando a URL vem vazia.
+  default: ShortcutId;
+  // Permite escolher dias/meses após hoje (padrão: não).
+  allowFuture?: boolean;
+  // "range" (calendário de dias) ou "month" (grade de meses).
+  mode?: PeriodMode;
+  // Modo mês com intervalo de MESES por 2 cliques (Faturamento).
+  monthRange?: boolean;
+  // Modo mês: trava meses anteriores a este (ex.: início da série).
+  minMonth?: string;
+  // Data de início do atalho "Desde o início" (Calibração).
+  calibStart?: string;
+  // Sobrepõe os nomes dos parâmetros de URL (namespacing por tela).
+  params?: Partial<PeriodParamNames>;
+};
+
+const DEFAULT_PERIOD_PARAMS: PeriodParamNames = {
+  periodo: "periodo",
+  de: "de",
+  ate: "ate",
+  mes: "mes",
+};
+
+// Configs compartilhados das telas com parâmetros PADRÃO (periodo/de/ate). Ficam
+// aqui para a tela E o seu drill-down (que herda o período pela URL) resolverem
+// com o MESMO contrato. As telas com params namespaced (Faturamento, Histórico,
+// Capacidade/atendimento) ou com início de calibração montam o config localmente.
+export const DASHBOARD_PERIOD_CONFIG: PeriodConfig = {
+  barShortcuts: ["ontem", "hoje", "tudo"],
+  popoverShortcuts: ["7d", "30d", "este_mes", "mes_passado"],
+  default: "hoje",
+};
+
+export const CENTRAL_PERIOD_CONFIG: PeriodConfig = {
+  barShortcuts: ["ontem", "hoje", "tudo"],
+  popoverShortcuts: ["7d", "30d", "este_mes", "mes_passado"],
+  default: "30d",
+};
+
+export const CHURN_PERIOD_CONFIG: PeriodConfig = {
+  barShortcuts: ["tudo"],
+  popoverShortcuts: ["este_mes", "mes_passado"],
+  default: "este_mes",
+};
+
+export const CAPACITY_TASKS_PERIOD_CONFIG: PeriodConfig = {
+  barShortcuts: [],
+  popoverShortcuts: ["7d", "30d", "este_mes", "mes_passado"],
+  default: "30d",
+};
+
+// Nomes efetivos dos parâmetros desta tela (padrão + sobreposições).
+export function periodParamNames(config: PeriodConfig): PeriodParamNames {
+  return { ...DEFAULT_PERIOD_PARAMS, ...config.params };
+}
+
+const YM_MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+// Intervalo "Desde o início" (Calibração): do início informado até hoje.
+export function calibStartRange(start: string): { start: string; end: string } {
+  return { start, end: brtToday() };
+}
+
+// Monta um valor de INTERVALO de dias (kind "custom" ou atalho materializado).
+function rangeValue(
+  kind: PeriodValue["kind"],
+  start: string,
+  end: string,
+  names: PeriodParamNames,
+  invalid = false
+): PeriodValue {
+  const [lo, hi] = start <= end ? [start, end] : [end, start];
+  return {
+    kind,
+    start: lo,
+    end: hi,
+    label: lo === hi ? brDate(lo) : `${brDate(lo)} a ${brDate(hi)}`,
+    params: { [names.de]: lo, [names.ate]: hi },
+    invalid,
+  };
+}
+
+// Mês único (Acompanhamento/Pontuação) → ?mes=YYYY-MM.
+function monthSingleValue(mes: string, names: PeriodParamNames): PeriodValue {
+  return {
+    kind: "mes",
+    start: `${mes}-01`,
+    end: lastDayOfMonth(mes),
+    label: capitalizeFirst(monthYearLabel(mes)),
+    params: { [names.mes]: mes },
+  };
+}
+
+// Materializa um atalho num PeriodValue. Ontem/Hoje/Tudo usam ?periodo; os
+// atalhos de intervalo (7d/30d/este mês/mês passado/desde o início) viram ?de/ate
+// — exatamente como o Dashboard (no reload aparecem como "custom").
+function shortcutValue(
+  s: ShortcutId,
+  config: PeriodConfig,
+  names: PeriodParamNames,
+  invalid = false
+): PeriodValue {
+  const today = brtToday();
+  if (s === "tudo") {
+    return { kind: "tudo", start: null, end: null, label: "Tudo", params: { [names.periodo]: "tudo" }, invalid };
+  }
+  if (s === "hoje") {
+    return { kind: "hoje", start: today, end: today, label: brDate(today), params: { [names.periodo]: "hoje" }, invalid };
+  }
+  if (s === "ontem") {
+    const y = brtYesterday();
+    return { kind: "ontem", start: y, end: y, label: brDate(y), params: { [names.periodo]: "ontem" }, invalid };
+  }
+  let r: { start: string; end: string };
+  if (s === "7d") r = last7Range();
+  else if (s === "30d") r = last30Range();
+  else if (s === "este_mes") r = thisMonthRange();
+  else if (s === "mes_passado") r = lastMonthRange();
+  else r = calibStartRange(config.calibStart ?? today); // calib_start
+  return finishCalib(rangeValue("custom", r.start, r.end, names, invalid), config);
+}
+
+// Rótulo especial "Desde o início da calibração" quando o intervalo bate certo
+// com o início informado até hoje (preserva o texto da tela antiga).
+function finishCalib(v: PeriodValue, config: PeriodConfig): PeriodValue {
+  if (config.calibStart && v.start === config.calibStart && v.end === brtToday()) {
+    return { ...v, label: "Desde o início da calibração" };
+  }
+  return v;
+}
+
+// Resolve os parâmetros de URL (lidos pelos nomes do config) num PeriodValue
+// validado. Entrada ausente → `config.default`; entrada presente mas corrompida
+// → default com `invalid`. Aceita, por retrocompatibilidade, os parâmetros
+// antigos de cada tela (7d/30d, mes_atual/mes_anterior/todos, periodo=mes/custom).
+export function resolvePeriodValue(
+  input: Record<string, string | string[] | undefined>,
+  config: PeriodConfig
+): PeriodValue {
+  const names = periodParamNames(config);
+  if ((config.mode ?? "range") === "month") {
+    return resolveMonthValue(input, config, names);
+  }
+
+  const de = firstOf(input[names.de]);
+  const ate = firstOf(input[names.ate]);
+  if (de != null || ate != null) {
+    if (de && ate && isRealDate(de) && isRealDate(ate)) {
+      return finishCalib(rangeValue("custom", de, ate, names), config);
+    }
+    return shortcutValue(config.default, config, names, true);
+  }
+
+  const p = firstOf(input[names.periodo]);
+  if (p == null || p === "") return shortcutValue(config.default, config, names);
+
+  const SHORTCUTS: ShortcutId[] = [
+    "ontem", "hoje", "tudo", "7d", "30d", "este_mes", "mes_passado", "calib_start",
+  ];
+  if ((SHORTCUTS as string[]).includes(p)) {
+    return shortcutValue(p as ShortcutId, config, names);
+  }
+  // Retrocompatibilidade de links antigos (Churn / Capacidade).
+  if (p === "mes_atual") return shortcutValue("este_mes", config, names);
+  if (p === "mes_anterior") return shortcutValue("mes_passado", config, names);
+  if (p === "todos") return shortcutValue("tudo", config, names);
+  // Central legada: ?periodo=mes&mes=YYYY-MM.
+  if (p === "mes") {
+    const mes = firstOf(input[names.mes]);
+    if (mes && YM_MONTH_RE.test(mes)) return monthSingleValue(mes, names);
+    return shortcutValue(config.default, config, names, true);
+  }
+  return shortcutValue(config.default, config, names, true);
+}
+
+function resolveMonthValue(
+  input: Record<string, string | string[] | undefined>,
+  config: PeriodConfig,
+  names: PeriodParamNames
+): PeriodValue {
+  const curMonth = brtToday().slice(0, 7);
+
+  if (config.monthRange) {
+    // Faturamento: intervalo de MESES em de/ate (YYYY-MM); "tudo" = sem filtro.
+    const p = firstOf(input[names.periodo]);
+    if (p === "tudo" || p === "todos") {
+      return { kind: "tudo", start: null, end: null, label: "Tudo", params: { [names.periodo]: "tudo" } };
+    }
+    const de = firstOf(input[names.de]);
+    const ate = firstOf(input[names.ate]);
+    if (de != null || ate != null) {
+      const dm = (de ?? "").slice(0, 7);
+      const am = (ate ?? "").slice(0, 7);
+      if (YM_MONTH_RE.test(dm) && YM_MONTH_RE.test(am)) {
+        const [lo, hi] = dm <= am ? [dm, am] : [am, dm];
+        return {
+          kind: "custom",
+          start: `${lo}-01`,
+          end: `${hi}-01`, // marcador do mês final (o loader soma o mês inteiro)
+          label:
+            lo === hi
+              ? capitalizeFirst(monthYearLabel(lo))
+              : `${capitalizeFirst(monthYearLabel(lo))} a ${capitalizeFirst(monthYearLabel(hi))}`,
+          params: { [names.de]: lo, [names.ate]: hi },
+        };
+      }
+      return { kind: "tudo", start: null, end: null, label: "Tudo", params: {}, invalid: true };
+    }
+    return { kind: "tudo", start: null, end: null, label: "Tudo", params: {} };
+  }
+
+  // Mês único (Acompanhamento/Pontuação) → ?mes=YYYY-MM, sem futuro.
+  const mes = firstOf(input[names.mes]);
+  let ym = mes && YM_MONTH_RE.test(mes) ? mes : curMonth;
+  if (ym > curMonth) ym = curMonth;
+  if (config.minMonth && ym < config.minMonth) ym = config.minMonth;
+  return monthSingleValue(ym, names);
+}
+
+// PeriodValue de um atalho (para o componente: navegar com `.params` e detectar
+// qual atalho está ativo comparando start/end).
+export function shortcutPeriodValue(s: ShortcutId, config: PeriodConfig): PeriodValue {
+  return shortcutValue(s, config, periodParamNames(config));
+}
+
+// Query string dos parâmetros do período (back-links que preservam o filtro).
+export function periodValueQuery(v: PeriodValue): string {
+  return new URLSearchParams(v.params).toString();
+}
+
+// Fragmento humano para encaixar em frases ("Visão geral · {…}", "Tempo
+// trabalhado {…}", "Progresso {…}").
+export function periodPhrase(v: PeriodValue): string {
+  if (v.kind === "tudo" || (!v.start && !v.end)) return "em todo o período";
+  if (v.kind === "ontem") return "ontem";
+  if (v.kind === "hoje") return "hoje";
+  if (v.kind === "mes" && v.start) return `em ${monthYearLabel(v.start.slice(0, 7))}`;
+  if (v.start && v.end) {
+    return v.start === v.end
+      ? `em ${brDate(v.start)}`
+      : `de ${brDate(v.start)} a ${brDate(v.end)}`;
+  }
+  return "em todo o período";
 }

@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Wrench, SlidersHorizontal, X, ChevronDown } from "lucide-react";
-import { addDays, brtToday, brtYesterday, brDate } from "@/lib/period";
+import { addDays, brDate, type PeriodValue } from "@/lib/period";
+import PeriodPicker from "@/components/PeriodPicker";
 import { loadCompanyTimeline } from "./actions";
-import { CALIB_START } from "./constants";
+import { CALIB_START, CALIBRATION_PERIOD_CONFIG } from "./constants";
 
 // O gráfico (recharts) do bloco "Por dia" carrega sob demanda, fora do First Load
 // JS da rota de calibração. Placeholder com a mesma altura (h-64) do gráfico, para
@@ -75,23 +76,22 @@ type Agg = {
 export default function CalibrationView({
   rows, period, includeAuto, people,
 }: {
-  rows: ComparisonRow[]; period: { start: string; end: string; label: string };
+  rows: ComparisonRow[]; period: PeriodValue;
   includeAuto: boolean; people: PersonOpt[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [base, setBase] = useState<Base>("out");
+  const [, startNav] = useTransition();
 
-  function setRange(start: string, end: string) {
-    const sp = new URLSearchParams(searchParams?.toString());
-    sp.set("de", start); sp.set("ate", end);
-    router.push(`${pathname}?${sp.toString()}`);
-  }
   function setAuto(exclude: boolean) {
     const sp = new URLSearchParams(searchParams?.toString());
     if (exclude) sp.delete("auto"); else sp.set("auto", "1");
-    router.push(`${pathname}?${sp.toString()}`);
+    // Filtro na mesma página: sem rolar ao topo, mantendo o conteúdo atual.
+    startNav(() => {
+      router.push(`${pathname}?${sp.toString()}`, { scroll: false });
+    });
   }
 
   const estOf = (c: Co) => (base === "out" ? c.estOut : c.estTotal);
@@ -133,36 +133,11 @@ export default function CalibrationView({
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   }
 
-  const today = brtToday();
-  const shortcuts = [
-    { key: "hoje", label: "Hoje", start: today, end: today },
-    { key: "ontem", label: "Ontem", start: brtYesterday(), end: brtYesterday() },
-    { key: "semana", label: "Esta semana", start: mondayOf(today), end: today },
-    { key: "inicio", label: "Desde o início", start: CALIB_START, end: today },
-  ];
-
   return (
     <div className="space-y-8">
       {/* Período + menus */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-fg-subtle">Período: <span className="font-medium text-fg-muted">{period.label}</span></span>
-          <div className="inline-flex flex-wrap gap-1">
-            {shortcuts.map((s) => {
-              const active = period.start === s.start && period.end === s.end;
-              return (
-                <button key={s.key} type="button" onClick={() => setRange(s.start, s.end)} aria-pressed={active}
-                  className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition ${active ? "border-risd bg-risd text-white" : "border-line bg-surface text-fg-muted hover:border-risd/50 hover:text-fg"}`}>
-                  {s.label}
-                </button>
-              );
-            })}
-            <input type="date" value={period.start} max={period.end} onChange={(e) => e.target.value && setRange(e.target.value, period.end)} aria-label="Início"
-              className="rounded-lg border border-line bg-canvas px-2 py-1 text-xs text-fg shadow-sm focus:border-risd focus:outline-none" />
-            <input type="date" value={period.end} min={period.start} onChange={(e) => e.target.value && setRange(period.start, e.target.value)} aria-label="Fim"
-              className="rounded-lg border border-line bg-canvas px-2 py-1 text-xs text-fg shadow-sm focus:border-risd focus:outline-none" />
-          </div>
-        </div>
+        <PeriodPicker value={period} config={CALIBRATION_PERIOD_CONFIG} />
 
         <div className="flex items-center gap-2">
           <Menu label="Opções" icon={<SlidersHorizontal className="h-4 w-4" />}>
@@ -381,7 +356,7 @@ function DailyChart({ byPerson, rows }: { byPerson: Agg[]; rows: ComparisonRow[]
 }
 
 // -------------------------------------------------------- bloco 3 (por empresa)
-function PersonCompanies({ p, base, estOf, period }: { p: Agg; base: Base; estOf: (c: Co) => number; period: { start: string; end: string } }) {
+function PersonCompanies({ p, base, estOf, period }: { p: Agg; base: Base; estOf: (c: Co) => number; period: PeriodValue }) {
   const [open, setOpen] = useState(true);
   const [sel, setSel] = useState<Co | null>(null);
 
@@ -502,13 +477,16 @@ function Collapsible({ title, subtitle, children }: { title: string; subtitle?: 
 
 type TL = { kind: "estimada" | "cronometro"; started_at: string; ended_at: string | null; minutes: number; team_msgs: number | null; client_msgs: number | null; in_task: boolean | null; auto_closed: boolean | null };
 
-function CompanyPanel({ person, co, period, onClose }: { person: Agg; co: Co; period: { start: string; end: string }; onClose: () => void }) {
+function CompanyPanel({ person, co, period, onClose }: { person: Agg; co: Co; period: PeriodValue; onClose: () => void }) {
   const [rows, setRows] = useState<TL[] | null>(null);
+  // Calibração nunca usa "Tudo"; mas o tipo é string|null, então garantimos valor.
+  const start = period.start ?? CALIB_START;
+  const end = period.end ?? start;
   useEffect(() => {
     let alive = true;
-    loadCompanyTimeline(period.start, period.end, person.id, co.id).then((r) => { if (alive) setRows(r as TL[]); });
+    loadCompanyTimeline(start, end, person.id, co.id).then((r) => { if (alive) setRows(r as TL[]); });
     return () => { alive = false; };
-  }, [person.id, co.id, period.start, period.end]);
+  }, [person.id, co.id, start, end]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);

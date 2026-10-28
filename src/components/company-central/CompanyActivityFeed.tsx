@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Avatar from "@/components/Avatar";
 import { FilterBar, SearchBox, EmptyState } from "@/components/ListControls";
 import { ComboFilter } from "@/components/Combobox";
-import { DateRangeField } from "@/components/DateField";
+import PeriodPicker from "@/components/PeriodPicker";
+import { resolvePeriodValue, type PeriodConfig } from "@/lib/period";
 import { formatDuration } from "@/lib/format";
 import {
   activityTypeLabel,
@@ -31,20 +33,79 @@ import {
 
 type Status = "idle" | "loading" | "ready" | "error";
 
+// Seletor de período do Histórico. Params namespaced (h*) porque esta lista vive
+// DENTRO da "Visão geral" (overview), lado a lado com o filtro do topo
+// (periodo/de/ate) — os nomes próprios evitam que um atropele o outro. O período
+// alimenta filters.from/to (as server actions já os aceitam). Padrão = Tudo.
+const HISTORY_PERIOD_CONFIG: PeriodConfig = {
+  barShortcuts: ["ontem", "hoje", "tudo"],
+  popoverShortcuts: ["7d", "30d", "este_mes", "mes_passado"],
+  default: "tudo",
+  params: { periodo: "hperiodo", de: "hde", ate: "hate", mes: "hmes" },
+};
+
 export default function CompanyActivityFeed({
   companyId,
 }: {
   companyId: string;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Período resolvido da URL (fonte da verdade do recorte por data).
+  const periodValue = useMemo(
+    () =>
+      resolvePeriodValue(
+        {
+          hperiodo: searchParams.get("hperiodo") ?? undefined,
+          hde: searchParams.get("hde") ?? undefined,
+          hate: searchParams.get("hate") ?? undefined,
+          hmes: searchParams.get("hmes") ?? undefined,
+        },
+        HISTORY_PERIOD_CONFIG
+      ),
+    [searchParams]
+  );
+
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<ActivityItem[]>([]);
   const [total, setTotal] = useState(0);
   const [authors, setAuthors] = useState<ActivityAuthor[]>([]);
   const [types, setTypes] = useState<ActivityType[]>([]);
-  const [filters, setFilters] = useState<ActivityFilters>(EMPTY_ACTIVITY_FILTERS);
+  // from/to são DERIVADOS do período (URL); search/type/author são estado local.
+  const [filters, setFilters] = useState<ActivityFilters>(() => ({
+    ...EMPTY_ACTIVITY_FILTERS,
+    from: periodValue.start ?? "",
+    to: periodValue.end ?? "",
+  }));
   const [loadingMore, setLoadingMore] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  // URL do período mudou → reflete em filters.from/to (dispara o refetch pelo
+  // efeito de filtersKey, já existente).
+  useEffect(() => {
+    setFilters((f) => {
+      const from = periodValue.start ?? "";
+      const to = periodValue.end ?? "";
+      if (f.from === from && f.to === to) return f;
+      return { ...f, from, to };
+    });
+  }, [periodValue.start, periodValue.end]);
+
+  const [, startNav] = useTransition();
+
+  // Limpa o período na URL (usado pelo "Limpar filtros"). Navegação de filtro:
+  // sem rolar ao topo e sem descartar o conteúdo atual.
+  function clearPeriodParams() {
+    const sp = new URLSearchParams(searchParams?.toString());
+    for (const k of ["hperiodo", "hde", "hate", "hmes"]) sp.delete(k);
+    const qs = sp.toString();
+    startNav(() => {
+      router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    });
+  }
 
   const sectionRef = useRef<HTMLDivElement>(null);
   const startedRef = useRef(false); // já disparou a 1ª carga?
@@ -190,6 +251,11 @@ export default function CompanyActivityFeed({
         Os filtros abaixo valem só para esta lista de eventos.
       </p>
 
+      {/* Período (seletor padrão do sistema) — próprio desta lista (params h*). */}
+      <div className="mb-3">
+        <PeriodPicker value={periodValue} config={HISTORY_PERIOD_CONFIG} />
+      </div>
+
       {/* Filtros — mesmos componentes das outras telas. Ficam disponíveis assim
           que a seção carrega. */}
       <FilterBar>
@@ -213,11 +279,6 @@ export default function CompanyActivityFeed({
           ariaLabel="Filtrar por pessoa"
           searchPlaceholder="Buscar pessoa…"
           options={authorOptions}
-        />
-        <DateRangeField
-          startValue={filters.from}
-          endValue={filters.to}
-          onChange={(from, to) => setFilters((f) => ({ ...f, from, to }))}
         />
       </FilterBar>
 
@@ -249,13 +310,16 @@ export default function CompanyActivityFeed({
           )}
           {(filters.from || filters.to) && (
             <FilterPill
-              label={`Período: ${filters.from || "…"} – ${filters.to || "…"}`}
-              onClear={() => setFilters((f) => ({ ...f, from: "", to: "" }))}
+              label={`Período: ${periodValue.label}`}
+              onClear={clearPeriodParams}
             />
           )}
           <button
             type="button"
-            onClick={() => setFilters(EMPTY_ACTIVITY_FILTERS)}
+            onClick={() => {
+              setFilters(EMPTY_ACTIVITY_FILTERS);
+              clearPeriodParams();
+            }}
             className="ml-1 rounded-full border border-line px-3 py-1 font-medium text-fg-muted transition hover:border-risd/50 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
           >
             Limpar filtros

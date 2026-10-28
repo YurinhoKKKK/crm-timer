@@ -1,5 +1,6 @@
 "use client";
 
+import { useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 export type PersonOption = { id: string; full_name: string };
@@ -17,12 +18,16 @@ export default function SessoesControls({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const [, startNav] = useTransition();
 
   function go(nextDia: string, nextPessoa: string | null) {
     const sp = new URLSearchParams();
     sp.set("dia", nextDia);
     if (nextPessoa) sp.set("pessoa", nextPessoa);
-    router.push(`${pathname}?${sp.toString()}`);
+    // Filtro na mesma página: sem rolar ao topo, sem descartar o conteúdo atual.
+    startNav(() => {
+      router.push(`${pathname}?${sp.toString()}`, { scroll: false });
+    });
   }
 
   return (

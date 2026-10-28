@@ -224,7 +224,22 @@
       "Bash(curl -s -o /dev/null -w \"3000 login: %{http_code}\\\\n\" http://localhost:3000/login)",
       "mcp__claude_ai_Supabase__query_logs",
       "Bash(python -c 'import json;d=json.load\\(open\\(r'\\\\''C:\\\\Users\\\\renat\\\\.claude\\\\projects\\\\C--Users-renat-OneDrive-Desktop-crm-timer\\\\49bd88d1-27dc-4888-852c-3186ecd1dd19\\\\tool-results\\\\mcp-claude_ai_Supabase-get_advisors-1790606476114.txt'\\\\'',encoding='\\\\''utf-8'\\\\''\\)\\); *)",
-      "PowerShell(npm install *)"
+      "PowerShell(npm install *)",
+      "Bash(grep -nE \"^#{1,3} \" ESPECIFICACAO.md)",
+      "Bash(grep -nE \"^#{1,3} |^## Passo|^### Passo|Fase|FASE\" ROTEIRO_PROMPTS.md)",
+      "Bash(git rev-list *)",
+      "Bash(git *)",
+      "Bash(grep -vE '^\\\\s*$')",
+      "PowerShell($conns = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue; if \\($conns\\) { $conns.OwningProcess | Sort-Object -Unique | ForEach-Object { try { $p = Get-Process -Id $_ -ErrorAction Stop; Write-Output \\(\"Stopping PID {0} \\({1}\\)\" -f $p.Id, $p.ProcessName\\); Stop-Process -Id $_ -Force } catch {} } } else { Write-Output \"Nada escutando na porta 3000.\" })",
+      "PowerShell(foreach \\($port in 3000,3001\\) { $conns = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue; if \\($conns\\) { $conns.OwningProcess | Sort-Object -Unique | ForEach-Object { try { $p = Get-Process -Id $_ -ErrorAction Stop; Write-Output \\(\"Port {0}: stopping PID {1} \\({2}\\)\" -f $port, $p.Id, $p.ProcessName\\); Stop-Process -Id $_ -Force } catch {} } } else { Write-Output \\(\"Port {0}: livre\" -f $port\\) } }; Start-Sleep -Milliseconds 700; foreach \\($port in 3000,3001\\) { $c = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue; if \\($c\\) { Write-Output \\(\"Port {0}: AINDA em uso\" -f $port\\) } else { Write-Output \\(\"Port {0}: livre agora\" -f $port\\) } })",
+      "PowerShell(foreach \\($port in 3000,3001\\) { $conns = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue; if \\($conns\\) { $conns.OwningProcess | Sort-Object -Unique | ForEach-Object { try { $p = Get-Process -Id $_ -ErrorAction Stop; Write-Output \\(\"Port {0}: stopping PID {1}\" -f $port, $p.Id\\); Stop-Process -Id $_ -Force } catch {} } } }; Start-Sleep -Milliseconds 700; foreach \\($port in 3000,3001\\) { $c = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue; if \\($c\\) { Write-Output \\(\"Port {0}: AINDA em uso\" -f $port\\) } else { Write-Output \\(\"Port {0}: livre\" -f $port\\) } })",
+      "Bash(md5sum __TRACKED_VAR__/payload_0134_ref.sql __TRACKED_VAR__/payload_0134_mine.sql)",
+      "Bash(echo \"exit_push=$?\")",
+      "Bash(npm -v)",
+      "Bash(set -e)",
+      "Bash(export GIT_LITERAL_PATHSPECS=1)",
+      "Bash(echo \"push_exit=$?\")",
+      "PowerShell(npx tsc --noEmit; if \\($?\\) { \"TYPECHECK OK\" })"
     ]
   }
 }

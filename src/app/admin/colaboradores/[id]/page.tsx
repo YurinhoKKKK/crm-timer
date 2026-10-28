@@ -14,11 +14,12 @@ import AdjustableTaskList, {
 } from "./AdjustableTaskList";
 import { type CompanyCategoryTime } from "../../CategoryTimeByCompanyChart";
 import CategoryTimeByCompanyChartLazy from "../../CategoryTimeByCompanyChartLazy";
-import PeriodPicker from "../../PeriodPicker";
+import PeriodPicker from "@/components/PeriodPicker";
 import {
-  resolveDashboardPeriod,
-  dashboardQuery,
-  dashboardPhrase,
+  resolvePeriodValue,
+  periodValueQuery,
+  periodPhrase,
+  DASHBOARD_PERIOD_CONFIG,
 } from "@/lib/period";
 import { loadPeriodInstances } from "@/lib/instance-status";
 import { STANDARD_KEY } from "@/lib/task-category";
@@ -76,7 +77,7 @@ export default async function CollaboratorDetailPage({
 }) {
   const { supabase, profile } = await guardRole(["admin"]);
 
-  const period = resolveDashboardPeriod(searchParams ?? {});
+  const period = resolvePeriodValue(searchParams ?? {}, DASHBOARD_PERIOD_CONFIG);
   const start = period.start;
   const end = period.end;
 
@@ -320,13 +321,13 @@ export default async function CollaboratorDetailPage({
       user={{ name: profile.full_name, role: "admin", avatarUrl: profile.avatarUrl }}
       title="Detalhe do colaborador"
       subtitle={personName}
-      back={{ href: `/admin?${dashboardQuery(period)}`, label: "Dashboard" }}
+      back={{ href: `/admin?${periodValueQuery(period)}`, label: "Dashboard" }}
     >
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-sm font-medium text-fg-muted">
-          Visão geral · {dashboardPhrase(period)}
+          Visão geral · {periodPhrase(period)}
         </h2>
-        <PeriodPicker value={period} />
+        <PeriodPicker value={period} config={DASHBOARD_PERIOD_CONFIG} />
       </div>
 
       {error ? (

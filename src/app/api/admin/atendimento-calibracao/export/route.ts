@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase-server";
-import { resolveDashboardPeriod } from "@/lib/period";
+import { resolvePeriodValue } from "@/lib/period";
+import { CALIBRATION_PERIOD_CONFIG } from "@/app/admin/atendimento-calibracao/constants";
 import {
   buildAttendanceWorkbook,
   attendanceExportFilename,
@@ -32,11 +33,14 @@ export async function GET(request: Request) {
   }
 
   const sp = new URL(request.url).searchParams;
-  const period = resolveDashboardPeriod({
-    periodo: sp.get("periodo") ?? undefined,
-    de: sp.get("de") ?? undefined,
-    ate: sp.get("ate") ?? undefined,
-  });
+  const period = resolvePeriodValue(
+    {
+      periodo: sp.get("periodo") ?? undefined,
+      de: sp.get("de") ?? undefined,
+      ate: sp.get("ate") ?? undefined,
+    },
+    CALIBRATION_PERIOD_CONFIG
+  );
 
   const { data, error } = await supabase.rpc("attendance_admin_report", {
     p_start: period.start,

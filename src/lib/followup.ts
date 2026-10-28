@@ -1,4 +1,5 @@
 import type { createClient } from "@/lib/supabase-server";
+import type { PeriodConfig } from "@/lib/period";
 
 // Acompanhamento de clientes — tipos e helpers da tela que responde "quem está
 // esfriando?". Desde a migration 0150 o contato é medido SÓ pelas mensagens do
@@ -108,7 +109,20 @@ export function clampTab(raw: string | string[] | undefined): FollowupTab {
 // mês corrente aparece como "em andamento". Datas em BRT (a virada de mês segue
 // America/Sao_Paulo, como todo o resto do app).
 const TZ = "America/Sao_Paulo";
-const FIRST_MONTH = "2026-09";
+export const FIRST_MONTH = "2026-09";
+
+// Config do PeriodPicker (modo MÊS) do Acompanhamento e da Pontuação: só a grade
+// de meses, de FIRST_MONTH até o mês corrente (sem futuro), sem intervalo livre.
+// Escreve ?mes=YYYY-MM. Módulo neutro → importável pela página (server) e pelas
+// views (client).
+export const FOLLOWUP_PERIOD_CONFIG: PeriodConfig = {
+  mode: "month",
+  minMonth: FIRST_MONTH,
+  allowFuture: false,
+  default: "hoje", // ignorado no modo mês (cai no mês corrente)
+  barShortcuts: [],
+  popoverShortcuts: [],
+};
 
 export type MonthOption = { value: string; label: string; current: boolean };
 

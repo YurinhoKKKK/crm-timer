@@ -1,5 +1,5 @@
 import type { createClient } from "@/lib/supabase-server";
-import { brtToday } from "@/lib/period";
+import type { PeriodConfig } from "@/lib/period";
 
 // Visão de capacidade da equipe (admin-only). Responde "como distribuir novos
 // clientes" e "quem está sobrecarregado" — NÃO é ranking de produtividade nem
@@ -17,29 +17,16 @@ import { brtToday } from "@/lib/period";
 
 type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
 
-export const CAPACITY_PERIODS = [
-  "mes_atual",
-  "mes_anterior",
-  "30d",
-  "tudo",
-] as const;
-export type CapacityPeriod = (typeof CAPACITY_PERIODS)[number];
-
-export const PERIOD_LABEL: Record<CapacityPeriod, string> = {
-  mes_atual: "Mês atual",
-  mes_anterior: "Mês anterior",
-  "30d": "Últimos 30 dias",
-  tudo: "Tudo",
+// Config do PeriodPicker da seção "Atendimento por WhatsApp" (params namespaced
+// wde/wate, independentes do período das tarefas). Vive aqui (módulo neutro) para
+// a página (server) poder importar sem cair no gotcha "const de 'use client' vira
+// {}". Fim INCLUSIVO: as RPCs de atendimento tratam p_end como inclusivo.
+export const ATTENDANCE_PERIOD_CONFIG: PeriodConfig = {
+  barShortcuts: [],
+  popoverShortcuts: ["7d", "30d", "este_mes", "mes_passado"],
+  default: "30d",
+  params: { periodo: "wperiodo", de: "wde", ate: "wate", mes: "wmes" },
 };
-
-export function clampCapacityPeriod(
-  raw: string | string[] | undefined
-): CapacityPeriod {
-  const v = (Array.isArray(raw) ? raw[0] : raw) ?? "";
-  return (CAPACITY_PERIODS as readonly string[]).includes(v)
-    ? (v as CapacityPeriod)
-    : "30d"; // padrão
-}
 
 export type CapacityGroupSlice = { name: string; count: number };
 
@@ -114,40 +101,18 @@ export type CapacityRow = {
   actHasActivity: boolean;
 };
 
-// Janela do período em datas BRT (YYYY-MM-DD). `end` é EXCLUSIVO; null = sem
-// limite (até agora, ou — no "tudo" — sem limite inferior). Só "mês anterior"
-// precisa de limite superior.
-export function periodRange(period: CapacityPeriod): {
-  start: string | null;
-  end: string | null;
-} {
-  const today = brtToday(); // 'YYYY-MM-DD' BRT
-  const ym = today.slice(0, 7); // 'YYYY-MM'
-
-  if (period === "tudo") return { start: null, end: null };
-
-  if (period === "mes_atual") return { start: `${ym}-01`, end: null };
-
-  if (period === "mes_anterior") {
-    const [y, m] = ym.split("-").map(Number);
-    const prev = new Date(Date.UTC(y, m - 2, 1)); // m-2: mês anterior (0-based)
-    const prevStart = prev.toISOString().slice(0, 10);
-    return { start: prevStart, end: `${ym}-01` };
-  }
-
-  // 30d: janela móvel de 30 dias até hoje (inclusive), sem limite superior.
-  const d = new Date(`${today}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() - 29);
-  return { start: d.toISOString().slice(0, 10), end: null };
-}
+// Janela do período (datas BRT YYYY-MM-DD). `end` é EXCLUSIVO aqui (a RPC
+// team_capacity compara < p_end); null = sem limite. O PeriodPicker entrega `end`
+// INCLUSIVO — a página converte (end + 1 dia) antes de passar para cá.
+export type CapacityWindow = { start: string | null; end: string | null };
 
 // Carrega a linha de cada pessoa. O escopo/segurança é do banco (is_admin()
 // dentro da RPC); a página ainda barra por cargo antes de chegar aqui.
 export async function loadCapacity(
   supabase: SupabaseServer,
-  period: CapacityPeriod
+  window: CapacityWindow
 ): Promise<CapacityRow[]> {
-  const { start, end } = periodRange(period);
+  const { start, end } = window;
   const { data, error } = await supabase.rpc("team_capacity", {
     p_start: start,
     p_end: end,

@@ -1,17 +1,19 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Avatar from "@/components/Avatar";
 import { avatarUrl } from "@/lib/avatar";
 import { FilterBar, SearchBox, norm } from "@/components/ListControls";
 import { formatDurationBR } from "@/lib/timer";
+import PeriodPicker from "@/components/PeriodPicker";
 import {
-  CAPACITY_PERIODS,
-  PERIOD_LABEL,
+  type PeriodValue,
+  CAPACITY_TASKS_PERIOD_CONFIG,
+} from "@/lib/period";
+import {
   toHours,
-  type CapacityPeriod,
   type CapacityRow,
+  type CapacityWindow,
   type AnyDrilldownScope,
 } from "@/lib/capacity";
 import CapacityDrilldownPanel, {
@@ -46,10 +48,14 @@ function groupBreakdown(slices: CapacityRow["carteiraByGroup"]): string {
 export default function CapacityView({
   rows,
   period,
+  window,
   drilldownFetcher,
 }: {
   rows: CapacityRow[];
-  period: CapacityPeriod;
+  period: PeriodValue;
+  // Janela já convertida para o contrato das RPCs (end EXCLUSIVO); usada no
+  // drill-down para bater com os números das células.
+  window: CapacityWindow;
   drilldownFetcher?: DrilldownFetcher; // só a prévia mock injeta; produção usa o default
 }) {
   const [query, setQuery] = useState("");
@@ -63,7 +69,15 @@ export default function CapacityView({
     count: number
   ) => {
     if (count <= 0) return;
-    setDrill({ personId: r.personId, personName: r.name || "(sem nome)", scope, count, period });
+    setDrill({
+      personId: r.personId,
+      personName: r.name || "(sem nome)",
+      scope,
+      count,
+      start: window.start,
+      end: window.end,
+      periodLabel: period.label,
+    });
   };
 
   const filtered = useMemo(() => {
@@ -312,25 +326,14 @@ function ColaboradoresTable({
   onOpen,
 }: {
   rows: CapacityRow[];
-  period: CapacityPeriod;
+  period: PeriodValue;
   empty: boolean;
   onOpen: OpenDrill;
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
   const [sort, setSort] = useState<{ key: ColabKey; desc: boolean }>({
     key: "hours",
     desc: true,
   });
-
-  function setPeriod(p: CapacityPeriod) {
-    const params = new URLSearchParams(searchParams.toString());
-    if (p === "30d") params.delete("periodo");
-    else params.set("periodo", p);
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-  }
 
   const sorted = useMemo(() => {
     const val = (r: CapacityRow): number | string => {
@@ -373,14 +376,14 @@ function ColaboradoresTable({
       </div>
 
       {/* O período afeta SÓ esta tabela; por isso o filtro mora aqui. */}
-      <FilterBar>
-        <PeriodTabs period={period} onChange={setPeriod} />
-        <span className="self-center text-xs text-fg-subtle">
+      <div className="flex flex-wrap items-center gap-2">
+        <PeriodPicker value={period} config={CAPACITY_TASKS_PERIOD_CONFIG} />
+        <span className="text-xs text-fg-subtle">
           O período afeta só esta tabela.
         </span>
-      </FilterBar>
+      </div>
 
-      {period === "tudo" && (
+      {period.kind === "tudo" && (
         <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
           <strong>“Tudo”</strong> é o acumulado histórico — favorece quem está há
           mais tempo na casa. Para comparar carga atual, prefira um período.
@@ -425,9 +428,9 @@ function ColaboradoresTable({
               <th
                 colSpan={3}
                 className="border-l border-line/60 px-3 pt-2 pb-0.5 text-center text-[11px] font-semibold uppercase tracking-wide text-fg-subtle"
-                title={`Execução no período: ${PERIOD_LABEL[period]}.`}
+                title={`Execução no período: ${period.label}.`}
               >
-                Atividade · {PERIOD_LABEL[period]}
+                Atividade · {period.label}
               </th>
             </tr>
             <tr className="border-b border-line text-fg-muted">
@@ -672,40 +675,6 @@ function Th({
         </span>
       </button>
     </th>
-  );
-}
-
-function PeriodTabs({
-  period,
-  onChange,
-}: {
-  period: CapacityPeriod;
-  onChange: (p: CapacityPeriod) => void;
-}) {
-  return (
-    <div
-      role="tablist"
-      aria-label="Período de análise da atividade"
-      className="flex shrink-0 rounded-lg border border-line bg-surface p-0.5"
-    >
-      {CAPACITY_PERIODS.map((p) => {
-        const active = period === p;
-        return (
-          <button
-            key={p}
-            type="button"
-            role="tab"
-            aria-selected={active}
-            onClick={() => onChange(p)}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd ${
-              active ? "bg-brand-tint text-risd" : "text-fg-muted hover:text-fg"
-            }`}
-          >
-            {PERIOD_LABEL[p]}
-          </button>
-        );
-      })}
-    </div>
   );
 }
 

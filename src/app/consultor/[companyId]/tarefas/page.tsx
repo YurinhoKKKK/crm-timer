@@ -6,7 +6,7 @@ import {
   normalizeStatusFilter,
   statusListTitle,
 } from "@/lib/instance-status";
-import { resolvePeriod, periodQuery } from "@/lib/period";
+import { resolvePeriodValue, periodValueQuery, CENTRAL_PERIOD_CONFIG } from "@/lib/period";
 import InstanceStatusList from "@/app/admin/instancias/InstanceStatusList";
 
 // Drill-down do funil da central da empresa (consultor): lista dedicada com
@@ -24,7 +24,7 @@ export default async function ConsultorEmpresaTarefasPage({
   const { supabase, profile } = await guardRole(["consultor"]);
 
   const filter = normalizeStatusFilter(searchParams?.status);
-  const period = resolvePeriod(searchParams);
+  const period = resolvePeriodValue(searchParams, CENTRAL_PERIOD_CONFIG);
 
   const [{ data: companyData }, list] = await Promise.all([
     supabase
@@ -57,7 +57,7 @@ export default async function ConsultorEmpresaTarefasPage({
         items.length === 1 ? "" : "s"
       }`}
       back={{
-        href: `/consultor/${company.id}?${periodQuery(period)}`,
+        href: `/consultor/${company.id}?${periodValueQuery(period)}`,
         label: company.name,
       }}
     >

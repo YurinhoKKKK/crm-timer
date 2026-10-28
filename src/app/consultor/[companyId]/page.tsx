@@ -6,7 +6,7 @@ import CompanyCentralTabs from "@/components/company-central/CompanyCentralTabs"
 import CompanyListings from "@/components/company-central/CompanyListings";
 import CompanyNotes from "@/components/company-central/CompanyNotes";
 import { loadCompanyCentral } from "@/lib/company-central";
-import { resolvePeriod } from "@/lib/period";
+import { resolvePeriodValue, CENTRAL_PERIOD_CONFIG } from "@/lib/period";
 import { loadCompanyListings, loadListingValidations } from "@/lib/listing";
 import { loadCompanyNotes } from "@/lib/notes";
 import {
@@ -42,7 +42,7 @@ export default async function ConsultorEmpresaPage({
   };
 }) {
   const { supabase, profile } = await guardRole(["consultor"]);
-  const period = resolvePeriod(searchParams);
+  const period = resolvePeriodValue(searchParams, CENTRAL_PERIOD_CONFIG);
   const { range: revRange, invalid: revInvalid } = parseRevenueRange(
     searchParams?.fatDe,
     searchParams?.fatAte

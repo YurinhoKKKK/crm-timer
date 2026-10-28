@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import FollowupView from "@/components/followup/FollowupView";
 import ScoresPanel from "@/components/followup/ScoresPanel";
@@ -69,6 +69,7 @@ export default function FollowupTabs({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [, startNav] = useTransition();
 
   // Filtros de consultor/colaborador do quadro — no pai para sobreviverem à troca
   // de aba e alimentarem o link de exportação da Pontuação (decisão 4). Trocar o
@@ -86,7 +87,10 @@ export default function FollowupTabs({
     const params = new URLSearchParams(searchParams.toString());
     if (next === "acompanhamento") params.delete("aba");
     else params.set("aba", next);
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    // Troca de aba (mesma página): sem rolar ao topo, mantendo o conteúdo atual.
+    startNav(() => {
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    });
   }
 
   const isAdmin = role === "admin";

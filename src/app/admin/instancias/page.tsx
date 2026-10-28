@@ -5,7 +5,7 @@ import {
   normalizeStatusFilter,
   statusListTitle,
 } from "@/lib/instance-status";
-import { resolveDashboardPeriod, dashboardQuery } from "@/lib/period";
+import { resolvePeriodValue, periodValueQuery, DASHBOARD_PERIOD_CONFIG } from "@/lib/period";
 import InstanceStatusList from "./InstanceStatusList";
 
 // Drill-down do dashboard (admin): lista de tarefas por status/atrasadas no
@@ -19,7 +19,7 @@ export default async function InstanciasPage({
   const { supabase, profile } = await guardRole(["admin"]);
 
   const filter = normalizeStatusFilter(searchParams?.status);
-  const period = resolveDashboardPeriod(searchParams ?? {});
+  const period = resolvePeriodValue(searchParams ?? {}, DASHBOARD_PERIOD_CONFIG);
 
   const { error, items, truncated, labelsByCompany } = filter
     ? await loadPeriodInstances(supabase, {
@@ -36,7 +36,7 @@ export default async function InstanciasPage({
       subtitle={`${truncated ? "300+" : items.length} tarefa${
         items.length === 1 ? "" : "s"
       }`}
-      back={{ href: `/admin?${dashboardQuery(period)}`, label: "Dashboard" }}
+      back={{ href: `/admin?${periodValueQuery(period)}`, label: "Dashboard" }}
     >
       {!filter ? (
         <div className="rounded-2xl border border-line bg-surface p-12 text-center text-fg-subtle shadow-card">

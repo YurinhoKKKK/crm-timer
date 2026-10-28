@@ -11,6 +11,8 @@ import {
   setCompanyChannels,
 } from "@/app/revenue-actions";
 import RevenueForm from "@/components/company-central/RevenueForm";
+import PeriodPicker from "@/components/PeriodPicker";
+import { resolvePeriodValue, type PeriodConfig } from "@/lib/period";
 import {
   SALES_CHANNELS,
   CHANNEL_LABEL,
@@ -18,8 +20,6 @@ import {
   formatPercentBR,
   monthLabel,
   rangeLabel,
-  yearOf,
-  monthNumberOf,
   type RevenueInsights,
   type RevenueMonthDetail,
   type RevenueOverview,
@@ -27,6 +27,21 @@ import {
   type SalesChannel,
   type Variation,
 } from "@/lib/revenue";
+
+// Faturamento: intervalo de MESES (2 cliques na grade) via PeriodPicker em modo
+// mês. Params namespaced fat* para coexistir com o filtro da Central na mesma
+// URL. "Tudo" = sem filtro (limpa). Sem calendário de dias (sem intervalo livre
+// de dias). O servidor (página) continua resolvendo a RevenueRange por
+// parseRevenueRange sobre fatDe/fatAte (YYYY-MM).
+const REVENUE_PERIOD_CONFIG: PeriodConfig = {
+  mode: "month",
+  monthRange: true,
+  allowFuture: false,
+  default: "tudo",
+  barShortcuts: ["tudo"],
+  popoverShortcuts: [],
+  params: { periodo: "fatPeriodo", de: "fatDe", ate: "fatAte", mes: "fatMes" },
+};
 
 // Estado do detalhe de um mês carregado sob demanda (autoria + histórico).
 type DetailState = RevenueMonthDetail | "loading" | "error";
@@ -53,11 +68,6 @@ const RevenueChart = dynamic(
     ),
   }
 );
-
-const MONTH_NAMES = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
-];
 
 // Aba "Faturamento" da central da empresa. Fatia 1 = canais + tabela + lançamento;
 // Fatia 2 = cartões + gráfico + variação; e agora o filtro por período (mês de
@@ -96,6 +106,16 @@ export default function CompanyRevenue({
   const filtered = overview.filtered;
   const recordsInView = insights.summary.accumulated.monthsWithRecord;
   const rangeLbl = rangeLabel(overview.rangeStart, overview.rangeEnd);
+
+  // Valor do PeriodPicker (modo mês) a partir dos params fat* da URL.
+  const periodValue = resolvePeriodValue(
+    {
+      fatPeriodo: searchParams.get("fatPeriodo") ?? undefined,
+      fatDe: searchParams.get("fatDe") ?? undefined,
+      fatAte: searchParams.get("fatAte") ?? undefined,
+    },
+    REVENUE_PERIOD_CONFIG
+  );
 
   const displayChannels = useMemo<SalesChannel[]>(() => {
     const withHistory = new Set<SalesChannel>(
@@ -140,13 +160,10 @@ export default function CompanyRevenue({
     p.set("aba", "faturamento");
     mut(p);
     const qs = p.toString();
-    router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  };
-  const applyRange = (de: string, ate: string) =>
-    pushParams((p) => {
-      p.set("fatDe", de);
-      p.set("fatAte", ate);
+    startTransition(() => {
+      router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     });
+  };
   const clearRange = () =>
     pushParams((p) => {
       p.delete("fatDe");
@@ -192,12 +209,10 @@ export default function CompanyRevenue({
         </p>
       )}
 
-      <PeriodFilter
-        overview={overview}
-        range={range}
-        filtered={filtered}
-        onApply={applyRange}
-        onClear={clearRange}
+      <PeriodPicker
+        value={periodValue}
+        config={REVENUE_PERIOD_CONFIG}
+        extraParams={{ aba: "faturamento" }}
       />
 
       {recordsInView > 0 && (
@@ -265,121 +280,6 @@ export default function CompanyRevenue({
         onSaved={refresh}
       />
     </section>
-  );
-}
-
-// --- Filtro por período ------------------------------------------------------
-function PeriodFilter({
-  overview,
-  range,
-  filtered,
-  onApply,
-  onClear,
-}: {
-  overview: RevenueOverview;
-  range: RevenueRange;
-  filtered: boolean;
-  onApply: (de: string, ate: string) => void;
-  onClear: () => void;
-}) {
-  // Defaults dos seletores: o intervalo aplicado, ou (em Tudo) todo o intervalo
-  // de dados que o banco devolveu.
-  const defStart = range.start ?? overview.rangeStart;
-  const defEnd = range.end ?? overview.rangeEnd;
-  const [sy, setSy] = useState(yearOf(defStart));
-  const [sm, setSm] = useState(monthNumberOf(defStart));
-  const [ey, setEy] = useState(yearOf(defEnd));
-  const [em, setEm] = useState(monthNumberOf(defEnd));
-
-  const years = useMemo(() => {
-    const set = new Set<number>();
-    const cy = yearOf(overview.currentMonth);
-    for (let y = cy - 5; y <= cy + 1; y++) set.add(y);
-    for (const m of overview.months) set.add(yearOf(m.month));
-    set.add(yearOf(defStart));
-    set.add(yearOf(defEnd));
-    return Array.from(set).sort((a, b) => b - a);
-  }, [overview.currentMonth, overview.months, defStart, defEnd]);
-
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const apply = () => onApply(`${sy}-${pad(sm)}`, `${ey}-${pad(em)}`);
-  // Intervalo invertido é barrado aqui também (o servidor já cairia em Tudo).
-  const inverted = `${sy}-${pad(sm)}` > `${ey}-${pad(em)}`;
-
-  const sel =
-    "rounded-lg border border-line bg-surface px-2.5 py-2 text-sm text-fg shadow-sm transition focus:border-risd focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd focus-visible:ring-offset-2 focus-visible:ring-offset-canvas";
-
-  return (
-    <div className="rounded-2xl border border-line bg-surface p-4 shadow-card sm:p-5">
-      <div className="flex flex-wrap items-end gap-x-3 gap-y-3">
-        <div>
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-fg-subtle">
-            De
-          </label>
-          <div className="flex gap-2">
-            <select aria-label="Mês de início" value={sm} onChange={(e) => setSm(Number(e.target.value))} className={sel}>
-              {MONTH_NAMES.map((n, i) => (
-                <option key={i} value={i + 1}>{n}</option>
-              ))}
-            </select>
-            <select aria-label="Ano de início" value={sy} onChange={(e) => setSy(Number(e.target.value))} className={sel}>
-              {years.map((y) => (<option key={y} value={y}>{y}</option>))}
-            </select>
-          </div>
-        </div>
-
-        <div>
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-fg-subtle">
-            Até
-          </label>
-          <div className="flex gap-2">
-            <select aria-label="Mês de fim" value={em} onChange={(e) => setEm(Number(e.target.value))} className={sel}>
-              {MONTH_NAMES.map((n, i) => (
-                <option key={i} value={i + 1}>{n}</option>
-              ))}
-            </select>
-            <select aria-label="Ano de fim" value={ey} onChange={(e) => setEy(Number(e.target.value))} className={sel}>
-              {years.map((y) => (<option key={y} value={y}>{y}</option>))}
-            </select>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={apply}
-            disabled={inverted}
-            className={btnPrimary}
-            title={inverted ? "O início não pode ser depois do fim" : undefined}
-          >
-            Aplicar
-          </button>
-          <button
-            type="button"
-            onClick={onClear}
-            disabled={!filtered}
-            className={btnSecondary}
-          >
-            Tudo
-          </button>
-        </div>
-
-        <p className="ml-auto self-center text-sm text-fg-muted">
-          {filtered ? (
-            <>
-              Período: <strong className="font-medium text-fg">{rangeLabel(overview.rangeStart, overview.rangeEnd)}</strong>
-            </>
-          ) : (
-            <>Mostrando <strong className="font-medium text-fg">tudo</strong></>
-          )}
-        </p>
-      </div>
-      {inverted && (
-        <p className="mt-2 text-xs text-red-600 dark:text-red-400">
-          O mês de início não pode ser depois do mês de fim.
-        </p>
-      )}
-    </div>
   );
 }
 

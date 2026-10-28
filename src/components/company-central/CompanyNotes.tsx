@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
+import PeriodPicker from "@/components/PeriodPicker";
+import { resolvePeriodValue, type PeriodConfig } from "@/lib/period";
 import AttachmentList from "@/components/rich-text/Attachments";
 import type { CompanyNoteView, NoteAttachmentMeta } from "@/lib/notes";
 import type { NoteArea } from "@/lib/types";
@@ -57,16 +59,25 @@ function stripTags(html: string): string {
 
 type SortKey = "recentes" | "antigas";
 
-function periodCutoff(p: string): number | null {
-  const now = new Date();
-  if (p === "hoje") {
-    const d = new Date(now);
-    d.setHours(0, 0, 0, 0);
-    return d.getTime();
-  }
-  if (p === "7d") return now.getTime() - 7 * 86400_000;
-  if (p === "30d") return now.getTime() - 30 * 86400_000;
-  return null;
+// Seletor de período das Atualizações. Params namespaced (n*) para coexistir na
+// MESMA URL com o filtro da "Visão geral" (periodo/de/ate) sem se atropelarem.
+// Padrão = Tudo (antes era "Qualquer data"). Filtra client-side por created_at.
+const NOTES_PERIOD_CONFIG: PeriodConfig = {
+  barShortcuts: ["ontem", "hoje", "tudo"],
+  popoverShortcuts: ["7d", "30d", "este_mes", "mes_passado"],
+  default: "tudo",
+  params: { periodo: "nperiodo", de: "nde", ate: "nate", mes: "nmes" },
+};
+
+// Data BRT (YYYY-MM-DD) de um timestamp ISO — para comparar com start/end (datas
+// puras BRT) por string, sem depender do fuso do navegador.
+function brtDateOf(iso: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso));
 }
 
 // Seção de anotações da empresa (passo 24): busca por conteúdo/autor, filtros
@@ -86,6 +97,7 @@ export default function CompanyNotes({
   notes: CompanyNoteView[];
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -98,10 +110,24 @@ export default function CompanyNotes({
   const [query, setQuery] = useState("");
   const [author, setAuthor] = useState("");
   const [area, setArea] = useState("");
-  const [period, setPeriod] = useState("");
   const [visibility, setVisibility] = useState("");
   const [has, setHas] = useState("");
   const [sort, setSort] = useState<SortKey>("recentes");
+
+  // Período (URL namespaced n*). Resolve client-side; filtra as notas por data.
+  const periodValue = useMemo(
+    () =>
+      resolvePeriodValue(
+        {
+          nperiodo: searchParams.get("nperiodo") ?? undefined,
+          nde: searchParams.get("nde") ?? undefined,
+          nate: searchParams.get("nate") ?? undefined,
+          nmes: searchParams.get("nmes") ?? undefined,
+        },
+        NOTES_PERIOD_CONFIG
+      ),
+    [searchParams]
+  );
 
   // Pré-processa uma vez por carga: texto puro para busca + flags de conteúdo.
   const enriched = useMemo(
@@ -124,7 +150,7 @@ export default function CompanyNotes({
 
   const filtered = useMemo(() => {
     const q = norm(query.trim());
-    const cutoff = periodCutoff(period);
+    const { start, end } = periodValue;
     const out = enriched
       .filter(({ note: n, text, hasImage }) => {
         if (q && !text.includes(q)) return false;
@@ -132,8 +158,11 @@ export default function CompanyNotes({
         if (area === "__none__" && n.areas.length > 0) return false;
         if (area && area !== "__none__" && !n.areas.includes(area as NoteArea))
           return false;
-        if (cutoff !== null && new Date(n.createdAtISO).getTime() < cutoff)
-          return false;
+        if (start || end) {
+          const d = brtDateOf(n.createdAtISO);
+          if (start && d < start) return false;
+          if (end && d > end) return false;
+        }
         if (visibility === "cliente" && !n.visibleToClient) return false;
         if (visibility === "interna" && n.visibleToClient) return false;
         if (has === "anexo" && n.attachments.length === 0) return false;
@@ -146,7 +175,7 @@ export default function CompanyNotes({
       return sort === "antigas" ? cmp : -cmp;
     });
     return out;
-  }, [enriched, query, author, area, period, visibility, has, sort]);
+  }, [enriched, query, author, area, periodValue, visibility, has, sort]);
 
   const { visible, hasMore, remaining, showMore } = usePaged(filtered);
 
@@ -279,6 +308,16 @@ export default function CompanyNotes({
       )}
 
       {notes.length > 0 && (
+        <div className="mb-3">
+          <PeriodPicker
+            value={periodValue}
+            config={NOTES_PERIOD_CONFIG}
+            extraParams={{ aba: "notes" }}
+          />
+        </div>
+      )}
+
+      {notes.length > 0 && (
         <FilterBar>
           <SearchBox
             value={query}
@@ -300,17 +339,6 @@ export default function CompanyNotes({
             options={[
               ...NOTE_AREAS.map((a) => ({ value: a.value, label: a.label })),
               { value: "__none__", label: "Sem área" },
-            ]}
-          />
-          <SelectFilter
-            value={period}
-            onChange={setPeriod}
-            allLabel="Qualquer data"
-            ariaLabel="Filtrar por período"
-            options={[
-              { value: "hoje", label: "Hoje" },
-              { value: "7d", label: "Últimos 7 dias" },
-              { value: "30d", label: "Últimos 30 dias" },
             ]}
           />
           <SelectFilter

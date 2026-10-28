@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { brDate, monthYearLabel } from "@/lib/period";
 import ExportAttendanceButton from "./ExportAttendanceButton";
@@ -50,11 +50,15 @@ export default function AttendanceReport({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [, startNav] = useTransition();
 
   function setGroup(g: Grouping) {
     const sp = new URLSearchParams(searchParams?.toString());
     sp.set("group", g);
-    router.push(`${pathname}?${sp.toString()}`);
+    // Filtro na mesma página: sem rolar ao topo, sem descartar o conteúdo atual.
+    startNav(() => {
+      router.push(`${pathname}?${sp.toString()}`, { scroll: false });
+    });
   }
 
   // Separa medições confiáveis (encerradas pela pessoa) das auto-encerradas.

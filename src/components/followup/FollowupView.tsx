@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { avatarUrl } from "@/lib/avatar";
 import ResponsibleChips from "@/components/ResponsibleChips";
 import { SearchBox, FilterBar, ShowMore, usePaged, norm } from "@/components/ListControls";
-import { type BoardRow, type DayColor, type MonthOption } from "@/lib/followup";
+import { type BoardRow, type DayColor, type MonthOption, FOLLOWUP_PERIOD_CONFIG } from "@/lib/followup";
+import { resolvePeriodValue } from "@/lib/period";
 import { FAROL_UI } from "@/components/followup/FarolBadge";
-import MonthSelect from "@/components/followup/MonthSelect";
+import PeriodPicker from "@/components/PeriodPicker";
 import CompanyHistoryPanel from "@/components/followup/CompanyHistoryPanel";
 
 // Preferência de ordem (pior/melhor primeiro) guardada por usuário.
@@ -116,10 +116,6 @@ export default function FollowupView({
   recovering: boolean;
   onRecoveringChange: (v: boolean) => void;
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
   const [query, setQuery] = useState("");
   const [color, setColor] = useState<DayColor | "">("");
   const [worstFirst, setWorstFirst] = useState(true);
@@ -213,11 +209,8 @@ export default function FollowupView({
 
   const { visible, hasMore, remaining, showMore } = usePaged(filtered, 25);
 
-  function setMonth(m: string) {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("mes", m);
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-  }
+  // Período (modo mês) resolvido a partir do mês já validado no servidor.
+  const periodValue = resolvePeriodValue({ mes: month }, FOLLOWUP_PERIOD_CONFIG);
 
   const total = base.length;
   const colorBands: DayColor[] = ["verde", "amarelo", "vermelho"];
@@ -228,14 +221,8 @@ export default function FollowupView({
 
   return (
     <div className="space-y-6">
+      <PeriodPicker value={periodValue} config={FOLLOWUP_PERIOD_CONFIG} />
       <FilterBar>
-        <MonthSelect
-          id="mes-acompanhamento"
-          month={month}
-          options={monthOptions}
-          onChange={setMonth}
-          ariaLabel="Mês do acompanhamento"
-        />
         <SearchBox value={query} onChange={setQuery} placeholder="Buscar empresa…" />
         {role === "admin" && consultantOptions.length > 0 && (
           <select

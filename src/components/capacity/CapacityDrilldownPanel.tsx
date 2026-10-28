@@ -9,11 +9,9 @@ import LabelChips from "@/components/LabelChips";
 import { avatarUrl } from "@/lib/avatar";
 import { formatDurationBR } from "@/lib/timer";
 import {
-  PERIOD_LABEL,
   toHours,
   isTaskScope,
   isMeetingsScope,
-  type CapacityPeriod,
   type DrilldownScope,
   type AnyDrilldownScope,
 } from "@/lib/capacity";
@@ -31,7 +29,11 @@ export type DrilldownTarget = {
   personName: string;
   scope: AnyDrilldownScope;
   count: number; // nº de itens; em "horas" é o total de SEGUNDOS (vira horas no título)
-  period: CapacityPeriod;
+  // Janela do período (datas BRT; `end` EXCLUSIVO, como a RPC espera) + rótulo
+  // humano para o cabeçalho do painel.
+  start: string | null;
+  end: string | null;
+  periodLabel: string;
 };
 
 // A busca é injetável só para a rota de PRÉVIA (mock sem login) poder exibir a
@@ -39,7 +41,8 @@ export type DrilldownTarget = {
 export type DrilldownFetcher = (
   personId: string,
   scope: DrilldownScope,
-  period: CapacityPeriod
+  start: string | null,
+  end: string | null
 ) => Promise<{ error: string | null; companies?: DrilldownCompany[] }>;
 
 // Substantivo do recorte, concordando com a contagem. É o que vai no título:
@@ -159,7 +162,7 @@ export default function CapacityDrilldownPanel({
   const [pending, startTransition] = useTransition();
   const [navId, setNavId] = useState<string | null>(null);
 
-  const { personId, personName, scope, count, period } = target;
+  const { personId, personName, scope, count, start, end, periodLabel } = target;
   const taskScope = isTaskScope(scope);
   const meetingsScope = isMeetingsScope(scope);
 
@@ -169,18 +172,18 @@ export default function CapacityDrilldownPanel({
     setError(null);
     // ATIVIDADE → TAREFAS; "reunioes" → REUNIÕES cronometradas; demais → EMPRESAS.
     const load = isMeetingsScope(scope)
-      ? getCapacityMeetingsDrilldown(personId, period).then((res) => {
+      ? getCapacityMeetingsDrilldown(personId, start, end).then((res) => {
           if (!active) return;
           if (res.error) setError(res.error);
           else setMeetings(res.meetings ?? []);
         })
       : isTaskScope(scope)
-      ? getCapacityTaskDrilldown(personId, scope, period).then((res) => {
+      ? getCapacityTaskDrilldown(personId, scope, start, end).then((res) => {
           if (!active) return;
           if (res.error) setError(res.error);
           else setTasks(res.tasks ?? []);
         })
-      : fetcher(personId, scope as DrilldownScope, period).then((res) => {
+      : fetcher(personId, scope as DrilldownScope, start, end).then((res) => {
           if (!active) return;
           if (res.error) setError(res.error);
           else setCompanies(res.companies ?? []);
@@ -191,7 +194,7 @@ export default function CapacityDrilldownPanel({
     return () => {
       active = false;
     };
-  }, [personId, scope, period, fetcher]);
+  }, [personId, scope, start, end, fetcher]);
 
   // Fechar por Esc (clique fora é o backdrop abaixo).
   useEffect(() => {
@@ -226,7 +229,7 @@ export default function CapacityDrilldownPanel({
         <header className="flex items-start justify-between gap-3 border-b border-line p-5">
           <div className="min-w-0">
             <p className="text-xs uppercase tracking-wide text-fg-subtle">
-              {periodScoped ? `Detalhe · ${PERIOD_LABEL[period]}` : "Detalhe · situação atual"}
+              {periodScoped ? `Detalhe · ${periodLabel}` : "Detalhe · situação atual"}
             </p>
             <h2 className="truncate text-lg font-semibold text-fg">{personName}</h2>
             <p className="mt-1 text-sm text-risd">{subtitle}</p>

@@ -2,8 +2,6 @@
 
 import { createClient } from "@/lib/supabase-server";
 import {
-  periodRange,
-  type CapacityPeriod,
   type DrilldownScope,
   type TaskDrilldownScope,
 } from "@/lib/capacity";
@@ -45,7 +43,8 @@ export type DrilldownCompany = {
 export async function getCapacityDrilldown(
   personId: string,
   scope: DrilldownScope,
-  period: CapacityPeriod
+  start: string | null,
+  end: string | null
 ): Promise<{ error: string | null; companies?: DrilldownCompany[] }> {
   const supabase = await createClient();
   const {
@@ -54,9 +53,7 @@ export async function getCapacityDrilldown(
   if (!user) return { error: "Sessão expirada. Faça login novamente." };
 
   // Período só faz diferença em "empresas" (atendidas no período); nos recortes
-  // de carteira a RPC ignora o intervalo (foto do agora).
-  const { start, end } = periodRange(period);
-
+  // de carteira a RPC ignora o intervalo (foto do agora). `end` é exclusivo.
   const { data, error } = await supabase.rpc("team_capacity_drilldown", {
     p_person: personId,
     p_scope: scope,
@@ -129,7 +126,8 @@ export type DrilldownTask = {
 export async function getCapacityTaskDrilldown(
   personId: string,
   scope: TaskDrilldownScope,
-  period: CapacityPeriod
+  start: string | null,
+  end: string | null
 ): Promise<{ error: string | null; tasks?: DrilldownTask[] }> {
   const supabase = await createClient();
   const {
@@ -137,7 +135,6 @@ export async function getCapacityTaskDrilldown(
   } = await supabase.auth.getUser();
   if (!user) return { error: "Sessão expirada. Faça login novamente." };
 
-  const { start, end } = periodRange(period);
   const { data, error } = await supabase.rpc("team_capacity_task_drilldown", {
     p_person: personId,
     p_scope: scope,
@@ -185,7 +182,8 @@ export type DrilldownMeeting = {
 
 export async function getCapacityMeetingsDrilldown(
   personId: string,
-  period: CapacityPeriod
+  start: string | null,
+  end: string | null
 ): Promise<{ error: string | null; meetings?: DrilldownMeeting[] }> {
   const supabase = await createClient();
   const {
@@ -193,7 +191,6 @@ export async function getCapacityMeetingsDrilldown(
   } = await supabase.auth.getUser();
   if (!user) return { error: "Sessão expirada. Faça login novamente." };
 
-  const { start, end } = periodRange(period);
   const { data, error } = await supabase.rpc("capacity_person_meetings", {
     p_person: personId,
     p_start: start,

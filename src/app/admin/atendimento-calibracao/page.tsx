@@ -1,41 +1,24 @@
 import { guardRole } from "@/components/guardRole";
 import AppShell from "@/components/AppShell";
-import { brtToday, brDate } from "@/lib/period";
+import { resolvePeriodValue } from "@/lib/period";
 import { loadDigisacSyncStatus } from "@/lib/digisac-sync";
 import DigisacSyncHeader from "./DigisacSyncHeader";
 import CalibrationView, { type ComparisonRow, type PersonOpt } from "./CalibrationView";
-import { CALIB_START } from "./constants";
+import { CALIBRATION_PERIOD_CONFIG } from "./constants";
 
 // Tela admin-only da CALIBRAÇÃO do contador de atendimento Digisac. Objetivo único:
 // a estimativa está acertando? Compara estimado × cronometrado para quem calibra.
 // Tudo agregado no banco (attendance_comparison). force-dynamic: números ao vivo.
 export const dynamic = "force-dynamic";
 
-const YMD = /^\d{4}-\d{2}-\d{2}$/;
-
-function resolvePeriod(sp: { de?: string; ate?: string }) {
-  const today = brtToday();
-  const de = sp.de, ate = sp.ate;
-  const valid = de && ate && YMD.test(de) && YMD.test(ate) && de <= ate;
-  const start = valid ? de! : CALIB_START;
-  const end = valid ? ate! : today;
-  const label =
-    start === CALIB_START && end === today
-      ? "Desde o início da calibração"
-      : start === end
-        ? brDate(start)
-        : `${brDate(start)} a ${brDate(end)}`;
-  return { start, end, label };
-}
-
 export default async function AtendimentoCalibracaoPage({
   searchParams,
 }: {
-  searchParams: { de?: string; ate?: string; auto?: string };
+  searchParams: { [key: string]: string | string[] | undefined };
 }) {
   const { supabase, profile } = await guardRole(["admin"]);
 
-  const period = resolvePeriod(searchParams ?? {});
+  const period = resolvePeriodValue(searchParams ?? {}, CALIBRATION_PERIOD_CONFIG);
   const includeAuto = searchParams?.auto === "1";
 
   const [comparison, syncStatus, peopleRes] = await Promise.all([

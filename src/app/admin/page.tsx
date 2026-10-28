@@ -3,7 +3,7 @@ import { guardRole } from "@/components/guardRole";
 import { perfRoute } from "@/lib/perf";
 import AppShell from "@/components/AppShell";
 import type { TaskStatus } from "@/lib/types";
-import PeriodPicker from "./PeriodPicker";
+import PeriodPicker from "@/components/PeriodPicker";
 import { type CompanyCategoryTime } from "./CategoryTimeByCompanyChart";
 import CategoryTimeByCompanyChartLazy from "./CategoryTimeByCompanyChartLazy";
 import { STANDARD_KEY } from "@/lib/task-category";
@@ -11,9 +11,10 @@ import CollaboratorSummary, {
   type CollaboratorRow,
 } from "./CollaboratorSummary";
 import {
-  resolveDashboardPeriod,
-  dashboardQuery,
-  dashboardPhrase,
+  resolvePeriodValue,
+  periodValueQuery,
+  periodPhrase,
+  DASHBOARD_PERIOD_CONFIG,
 } from "@/lib/period";
 
 type Named = { id: string; name: string };
@@ -64,10 +65,10 @@ export default async function AdminPage({
 }) {
   const { supabase, profile } = await guardRole(["admin"]);
 
-  const period = resolveDashboardPeriod(searchParams ?? {});
+  const period = resolvePeriodValue(searchParams ?? {}, DASHBOARD_PERIOD_CONFIG);
   const start = period.start;
   const end = period.end;
-  const periodQ = dashboardQuery(period);
+  const periodQ = periodValueQuery(period);
 
   // Contagens por status, atrasadas e total/concluídas por responsável são
   // AGREGADAS NO BANCO (task_status_counts / collaborator_task_counts). Antes
@@ -270,9 +271,9 @@ export default async function AdminPage({
     >
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-sm font-medium text-fg-muted">
-          Visão geral · {dashboardPhrase(period)}
+          Visão geral · {periodPhrase(period)}
         </h2>
-        <PeriodPicker value={period} />
+        <PeriodPicker value={period} config={DASHBOARD_PERIOD_CONFIG} />
       </div>
 
       {instancesError ? (

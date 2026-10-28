@@ -1,17 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import Avatar from "@/components/Avatar";
 import { avatarUrl } from "@/lib/avatar";
 import { FAROL_UI } from "@/components/followup/FarolBadge";
-import MonthSelect from "@/components/followup/MonthSelect";
+import PeriodPicker from "@/components/PeriodPicker";
+import { resolvePeriodValue } from "@/lib/period";
 import { getScoresDetail } from "@/app/acompanhamento/actions";
-import type {
-  DayColor,
-  MonthOption,
-  ScoreDetailRow,
-  ScoreMonthRow,
+import {
+  FOLLOWUP_PERIOD_CONFIG,
+  type DayColor,
+  type MonthOption,
+  type ScoreDetailRow,
+  type ScoreMonthRow,
 } from "@/lib/followup";
 
 const TZ = "America/Sao_Paulo";
@@ -59,10 +60,6 @@ export default function ScoresPanel({
   collaboratorId: string;
   recovering: boolean;
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
   const [openKey, setOpenKey] = useState<string | null>(null);
   // Cache por colaborador das grades já buscadas (evita rebater a RPC).
   const [details, setDetails] = useState<Record<string, ScoreDetailRow[]>>({});
@@ -84,14 +81,15 @@ export default function ScoresPanel({
     return `/api/admin/acompanhamento/export?${params.toString()}`;
   }, [month, consultantId, collaboratorId, recovering]);
 
-  function setMonth(m: string) {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("mes", m);
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-    // Troca de mês invalida as grades abertas (o cache é por chave sem o mês).
+  // Período (modo mês) resolvido do mês já validado no servidor; o PeriodPicker
+  // navega sozinho em ?mes.
+  const periodValue = resolvePeriodValue({ mes: month }, FOLLOWUP_PERIOD_CONFIG);
+
+  // Troca de mês invalida as grades abertas (o cache é por chave sem o mês).
+  useEffect(() => {
     setOpenKey(null);
     setDetails({});
-  }
+  }, [month]);
 
   async function toggle(collaboratorId: string | null) {
     const k = keyOf(collaboratorId);
@@ -119,16 +117,7 @@ export default function ScoresPanel({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <label className="text-sm text-fg-muted" htmlFor="mes-pontuacao">
-          Mês
-        </label>
-        <MonthSelect
-          id="mes-pontuacao"
-          month={month}
-          options={monthOptions}
-          onChange={setMonth}
-          ariaLabel="Mês da pontuação"
-        />
+        <PeriodPicker value={periodValue} config={FOLLOWUP_PERIOD_CONFIG} />
         {isCurrent && (
           <span className="rounded-full border border-slate-500/30 bg-slate-500/10 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-300">
             Mês em andamento — ainda muda até o fim do mês

@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Loader2, X, Search } from "lucide-react";
-import { addDays, brtYesterday, brtToday, brDate, lastDayOfMonth, shiftMonth } from "@/lib/period";
+import PeriodPicker from "@/components/PeriodPicker";
+import { type PeriodValue } from "@/lib/period";
+import { ATTENDANCE_PERIOD_CONFIG } from "@/lib/capacity";
 import { loadPersonClients, loadClientPeople } from "@/app/admin/capacidade/attendance-actions";
 
 // Seção "Atendimento por WhatsApp" da Capacidade (admin-only), em três abas: Resumo,
@@ -53,20 +54,18 @@ type Tab = "resumo" | "pessoas" | "clientes";
 export default function AttendanceCapacity({
   period, params, summary, clients, people,
 }: {
-  period: AtPeriod; params: AtParams | null;
+  period: PeriodValue; params: AtParams | null;
   summary: SummaryRow[]; clients: ClientRow[]; people: PersonRow[];
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>("resumo");
 
-  function setPeriod(start: string, end: string) {
-    const sp = new URLSearchParams(searchParams?.toString());
-    sp.set("wde", start);
-    sp.set("wate", end);
-    router.push(`${pathname}?${sp.toString()}`);
-  }
+  // Subcomponentes de drill-down usam start/end como string (sem "tudo" aqui, o
+  // período sempre tem as duas pontas).
+  const at: AtPeriod = {
+    start: period.start ?? "",
+    end: period.end ?? "",
+    label: period.label,
+  };
 
   const geral = summary.find((s) => s.dim === "geral");
   const byModel = summary.filter((s) => s.dim === "modelo");
@@ -76,15 +75,6 @@ export default function AttendanceCapacity({
   const teamOutTask = useMemo(() => people.reduce((s, p) => s + num(p.out_task_hours), 0), [people]);
   const topClients = useMemo(() => [...clients].sort((a, b) => num(b.monthly_hours) - num(a.monthly_hours)).slice(0, 5), [clients]);
   const topPeople = useMemo(() => [...people].sort((a, b) => num(b.out_task_hours) - num(a.out_task_hours)).slice(0, 5), [people]);
-
-  const y = brtYesterday();
-  const ym = brtToday().slice(0, 7);
-  const presets = [
-    { label: "30 dias", start: addDays(y, -29), end: y },
-    { label: "7 dias", start: addDays(y, -6), end: y },
-    { label: "Este mês", start: `${ym}-01`, end: y >= `${ym}-01` ? y : `${ym}-01` },
-    { label: "Mês passado", start: `${shiftMonth(ym, -1)}-01`, end: lastDayOfMonth(shiftMonth(ym, -1)) },
-  ];
 
   return (
     <section className="mt-10 space-y-5">
@@ -97,24 +87,7 @@ export default function AttendanceCapacity({
 
       {/* Período (vale para as três abas) + abas */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-fg-subtle">Período: <span className="font-medium text-fg-muted">{period.label}</span></span>
-          <div className="inline-flex flex-wrap gap-1">
-            {presets.map((pr) => {
-              const active = period.start === pr.start && period.end === pr.end;
-              return (
-                <button key={pr.label} type="button" onClick={() => setPeriod(pr.start, pr.end)} aria-pressed={active}
-                  className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition ${active ? "border-risd bg-risd text-white" : "border-line bg-surface text-fg-muted hover:border-risd/50 hover:text-fg"}`}>
-                  {pr.label}
-                </button>
-              );
-            })}
-            <input type="date" value={period.start} max={period.end} onChange={(e) => e.target.value && setPeriod(e.target.value, period.end)}
-              className="rounded-lg border border-line bg-canvas px-2 py-1 text-xs text-fg shadow-sm focus:border-risd focus:outline-none" />
-            <input type="date" value={period.end} min={period.start} onChange={(e) => e.target.value && setPeriod(period.start, e.target.value)}
-              className="rounded-lg border border-line bg-canvas px-2 py-1 text-xs text-fg shadow-sm focus:border-risd focus:outline-none" />
-          </div>
-        </div>
+        <PeriodPicker value={period} config={ATTENDANCE_PERIOD_CONFIG} />
         <div role="tablist" aria-label="Visão" className="inline-flex rounded-xl border border-line bg-surface p-1 shadow-card">
           {(["resumo", "pessoas", "clientes"] as Tab[]).map((t) => (
             <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}
@@ -140,8 +113,8 @@ export default function AttendanceCapacity({
           onVerClientes={() => setTab("clientes")} onVerPessoas={() => setTab("pessoas")}
         />
       )}
-      {tab === "pessoas" && <PessoasTab people={people} period={period} />}
-      {tab === "clientes" && <ClientesTab clients={clients} median={median} period={period} />}
+      {tab === "pessoas" && <PessoasTab people={people} period={at} />}
+      {tab === "clientes" && <ClientesTab clients={clients} median={median} period={at} />}
     </section>
   );
 }

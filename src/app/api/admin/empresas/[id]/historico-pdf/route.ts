@@ -37,6 +37,9 @@ import HistoricoPdfDocument, {
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+// Gerar o PDF (carregar o @react-pdf no cold start + paginar as RPCs + render)
+// pode passar do timeout curto padrão. 60s cabe no Hobby e sobra no Pro.
+export const maxDuration = 60;
 
 type ActivityRpcItem = {
   id: string;
@@ -52,6 +55,7 @@ export async function GET(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  try {
   const companyId = params.id;
   const supabase = await createClient();
 
@@ -217,11 +221,23 @@ export async function GET(
     generatedAtStamp: brtNowStamp(),
   };
 
-  const body = await renderToBuffer(
-    React.createElement(HistoricoPdfDocument, { cover, groups }) as React.ReactElement
-  );
-  // Carimba o rodapé ("Documento interno…" + "Página X de Y") em cada página.
-  const buffer = await stampHistoricoFooter(new Uint8Array(body));
+  let buffer: Uint8Array;
+  try {
+    const body = await renderToBuffer(
+      React.createElement(HistoricoPdfDocument, { cover, groups }) as React.ReactElement
+    );
+    // Carimba o rodapé ("Documento interno…" + "Página X de Y") em cada página.
+    buffer = await stampHistoricoFooter(new Uint8Array(body));
+  } catch (err) {
+    // A renderização é a etapa que mais varia por ambiente (@react-pdf/pdf-lib).
+    // Loga (aparece nos logs da função na Vercel) e devolve a mensagem real.
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[historico-pdf] falha ao renderizar o PDF:", err);
+    return NextResponse.json(
+      { error: `Falha ao gerar o PDF: ${message}` },
+      { status: 500 }
+    );
+  }
 
   const filename = buildHistoricoFilename(company.name, brtToday());
   return new NextResponse(buffer as unknown as BodyInit, {
@@ -232,6 +248,16 @@ export async function GET(
       "Cache-Control": "no-store",
     },
   });
+  } catch (err) {
+    // Rede de segurança: qualquer falha inesperada (fetch de dados, parse,
+    // ambiente) vira uma resposta com a mensagem real (e log na função).
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[historico-pdf] erro inesperado:", err);
+    return NextResponse.json(
+      { error: `Falha ao exportar o PDF: ${message}` },
+      { status: 500 }
+    );
+  }
 }
 
 async function fetchActivityPage(

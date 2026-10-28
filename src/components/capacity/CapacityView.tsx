@@ -12,6 +12,8 @@ import {
 } from "@/lib/period";
 import {
   toHours,
+  isMeetingsScope,
+  CAPACITY_CONSULTANTS_PERIOD_CONFIG,
   type CapacityRow,
   type CapacityWindow,
   type AnyDrilldownScope,
@@ -49,6 +51,8 @@ export default function CapacityView({
   rows,
   period,
   window,
+  consultPeriod,
+  consultWindow,
   drilldownFetcher,
 }: {
   rows: CapacityRow[];
@@ -56,6 +60,10 @@ export default function CapacityView({
   // Janela já convertida para o contrato das RPCs (end EXCLUSIVO); usada no
   // drill-down para bater com os números das células.
   window: CapacityWindow;
+  // Período PRÓPRIO da seção Consultores (cde/cate) — controla "Horas em reunião"
+  // e o drill-down de reuniões. `consultWindow.end` também é EXCLUSIVO.
+  consultPeriod: PeriodValue;
+  consultWindow: CapacityWindow;
   drilldownFetcher?: DrilldownFetcher; // só a prévia mock injeta; produção usa o default
 }) {
   const [query, setQuery] = useState("");
@@ -63,20 +71,23 @@ export default function CapacityView({
 
   // Abre o painel de drill-down. Valor zero não abre (célula não é clicável).
   // Em "horas" o count é o total de SEGUNDOS (o painel formata como horas).
+  // Reuniões seguem o período PRÓPRIO dos Consultores (cde/cate); os demais
+  // recortes seguem a janela/rótulo das tarefas (Colaboradores).
   const openDrill = (
     r: CapacityRow,
     scope: AnyDrilldownScope,
     count: number
   ) => {
     if (count <= 0) return;
+    const meetings = isMeetingsScope(scope);
     setDrill({
       personId: r.personId,
       personName: r.name || "(sem nome)",
       scope,
       count,
-      start: window.start,
-      end: window.end,
-      periodLabel: period.label,
+      start: meetings ? consultWindow.start : window.start,
+      end: meetings ? consultWindow.end : window.end,
+      periodLabel: meetings ? consultPeriod.label : period.label,
     });
   };
 
@@ -112,7 +123,12 @@ export default function CapacityView({
         <SearchBox value={query} onChange={setQuery} placeholder="Buscar pessoa…" />
       </FilterBar>
 
-      <ConsultoresTable rows={consultores} empty={rows.length > 0} onOpen={openDrill} />
+      <ConsultoresTable
+        rows={consultores}
+        period={consultPeriod}
+        empty={rows.length > 0}
+        onOpen={openDrill}
+      />
 
       <ColaboradoresTable
         rows={colaboradores}
@@ -183,10 +199,12 @@ type OpenDrill = (r: CapacityRow, scope: AnyDrilldownScope, count: number) => vo
 
 function ConsultoresTable({
   rows,
+  period,
   empty,
   onOpen,
 }: {
   rows: CapacityRow[];
+  period: PeriodValue;
   empty: boolean;
   onOpen: OpenDrill;
 }) {
@@ -232,9 +250,16 @@ function ConsultoresTable({
     <section className="space-y-2">
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-base font-semibold text-fg">Consultores</h2>
-        <p className="text-xs text-fg-subtle">
-          Carteira de clientes — inclui administradores com carteira.
-        </p>
+      </div>
+
+      {/* Período PRÓPRIO desta seção (params cde/cate): afeta SÓ "Horas em
+          reunião". Carteira/Alerta/Parados são foto do agora. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <PeriodPicker value={period} config={CAPACITY_CONSULTANTS_PERIOD_CONFIG} />
+        <span className="text-xs text-fg-subtle">
+          Carteira, Alerta e Parados: situação atual. Horas em reunião: período
+          selecionado.
+        </span>
       </div>
 
       {sorted.length === 0 ? (

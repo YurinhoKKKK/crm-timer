@@ -28,6 +28,18 @@ export const ATTENDANCE_PERIOD_CONFIG: PeriodConfig = {
   params: { periodo: "wperiodo", de: "wde", ate: "wate", mes: "wmes" },
 };
 
+// Config do PeriodPicker da seção "Consultores" (params namespaced cde/cate,
+// independentes do período das tarefas e do de atendimento). Controla SÓ a coluna
+// "Horas em reunião" (o resto da tabela — carteira/alerta/parados — é foto do
+// agora). Mesmos atalhos e padrão (30 dias) da Capacidade de tarefas. Vive aqui
+// (módulo neutro) para a página (server) poder importar.
+export const CAPACITY_CONSULTANTS_PERIOD_CONFIG: PeriodConfig = {
+  barShortcuts: [],
+  popoverShortcuts: ["7d", "30d", "este_mes", "mes_passado"],
+  default: "30d",
+  params: { periodo: "cperiodo", de: "cde", ate: "cate", mes: "cmes" },
+};
+
 export type CapacityGroupSlice = { name: string; count: number };
 
 // ------------------------------------------------------- RECORTES DO DRILL-DOWN
@@ -178,6 +190,32 @@ export async function loadCapacity(
     hasColabCarteira: r.has_colab_carteira,
     colabOutOfPortfolio: r.colab_out_of_portfolio,
   }));
+}
+
+// Horas em reunião por pessoa no período da seção Consultores (params cde/cate).
+// RPC leve (capacity_consultant_meetings) que reusa a MESMA regra de soma de
+// reunião do team_capacity (migration 0161), para a coluna "Horas em reunião"
+// seguir o filtro próprio dos Consultores sem chamar team_capacity de novo.
+// `window.end` é EXCLUSIVO (a página converte o `end` inclusivo somando 1 dia).
+export async function loadConsultantMeetings(
+  supabase: SupabaseServer,
+  window: CapacityWindow
+): Promise<Map<string, number>> {
+  const { data, error } = await supabase.rpc("capacity_consultant_meetings", {
+    p_start: window.start,
+    p_end: window.end,
+  });
+  const map = new Map<string, number>();
+  if (error) {
+    console.error("[capacidade] capacity_consultant_meetings falhou:", error);
+    return map;
+  }
+  for (const r of (data as
+    | { consultant_id: string; meeting_seconds: number | string }[]
+    | null) ?? []) {
+    map.set(r.consultant_id, Number(r.meeting_seconds));
+  }
+  return map;
 }
 
 // Horas (uma casa) a partir de segundos — a carga é medida em hora, não em

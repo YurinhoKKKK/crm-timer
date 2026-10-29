@@ -270,6 +270,10 @@ export const DASHBOARD_PERIOD_CONFIG: PeriodConfig = {
   barShortcuts: ["ontem", "hoje", "tudo"],
   popoverShortcuts: ["7d", "30d", "este_mes", "mes_passado"],
   default: "hoje",
+  // Dashboard e detalhe do colaborador aceitam datas futuras: uma tarefa com
+  // prazo à frente pode já ter sido trabalhada (ex.: Listagem com prazo amanhã
+  // feita hoje), e o filtro precisa alcançá-la.
+  allowFuture: true,
 };
 
 export const CENTRAL_PERIOD_CONFIG: PeriodConfig = {

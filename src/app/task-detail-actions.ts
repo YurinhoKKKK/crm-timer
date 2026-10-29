@@ -57,6 +57,7 @@ export type TaskDetail = {
   totalSeconds: number;
   companyId: string;
   companyName: string;
+  collaboratorId: string;
   collaboratorName: string;
   collaboratorAvatarUrl: string | null;
   kindLabel: string | null; // Única | Diária | Listagem de marcas
@@ -75,6 +76,11 @@ export type TaskDetail = {
   // Cancelada pela rotina de expiração automática (0135)? Timestamp (ISO) de
   // quando ocorreu — a leitura usa para exibir o motivo. null = não foi.
   autoExpiredAt: string | null;
+  // Ajuste de tempo pelo painel (migration 0164): só admin. Se houver timer
+  // rodando (trecho aberto), o formulário dá lugar a um aviso — o ajuste é
+  // recusado até pausar.
+  canAdjustTime: boolean;
+  runningTimer: { sinceISO: string; byName: string; byAvatarUrl: string | null } | null;
 };
 
 type InstanceRow = {
@@ -143,22 +149,34 @@ export async function getTaskDetail(
 
   // Satélites em paralelo. Cada leitura tem a própria RLS (ta_select,
   // lb_select, lr_select) alinhada à visibilidade da tarefa.
-  const [labels, adjustmentsRes, listing, listingResults] = await Promise.all([
-    loadCompanyLabels(supabase, task.company_id),
-    supabase
-      .from("time_adjustments")
-      .select("old_seconds, new_seconds, reason, created_at, adjusted_by")
-      .eq("task_id", task.id)
-      .order("created_at", { ascending: false }),
-    task.template_id
-      ? loadListingByTemplate(supabase, task.template_id)
-      : Promise.resolve(null),
-    finished && task.template_id
-      ? loadListingResults(supabase, task.id)
-      : Promise.resolve([] as ListingResultView[]),
-  ]);
+  const [labels, adjustmentsRes, listing, listingResults, runningRes] =
+    await Promise.all([
+      loadCompanyLabels(supabase, task.company_id),
+      supabase
+        .from("time_adjustments")
+        .select("old_seconds, new_seconds, reason, created_at, adjusted_by")
+        .eq("task_id", task.id)
+        .order("created_at", { ascending: false }),
+      task.template_id
+        ? loadListingByTemplate(supabase, task.template_id)
+        : Promise.resolve(null),
+      finished && task.template_id
+        ? loadListingResults(supabase, task.id)
+        : Promise.resolve([] as ListingResultView[]),
+      // Trecho aberto (timer rodando). RLS te_select libera o admin a ver todos.
+      supabase
+        .from("time_entries")
+        .select("started_at, collaborator_id")
+        .eq("task_id", task.id)
+        .is("ended_at", null)
+        .order("started_at", { ascending: true })
+        .limit(1),
+    ]);
 
   const adjustmentRows = (adjustmentsRes.data as AdjustmentRow[]) ?? [];
+  const runningRow =
+    (runningRes.data as { started_at: string; collaborator_id: string }[] | null)?.[0] ??
+    null;
 
   // Nome+foto (responsável, criador e quem ajustou) via display_profiles —
   // legível por qualquer cargo, em uma única chamada em lote.
@@ -166,10 +184,20 @@ export async function getTaskDetail(
     task.collaborator_id,
     template?.created_by,
     ...adjustmentRows.map((a) => a.adjusted_by),
+    runningRow?.collaborator_id,
   ]);
 
   const collaborator = people.get(task.collaborator_id);
   const creator = describeInstanceCreator(template, task.created_at, people);
+
+  const runningTimer = runningRow
+    ? {
+        sinceISO: runningRow.started_at,
+        byName: people.get(runningRow.collaborator_id)?.name ?? "alguém",
+        byAvatarUrl: people.get(runningRow.collaborator_id)?.avatarUrl ?? null,
+      }
+    : null;
+  const canAdjustTime = role === "admin";
 
   const adjustments: TaskDetailAdjustment[] = adjustmentRows.map((a) => ({
     oldSeconds: a.old_seconds,
@@ -254,6 +282,7 @@ export async function getTaskDetail(
       totalSeconds: task.total_seconds,
       companyId: task.company_id,
       companyName: first(task.company)?.name ?? "(empresa removida)",
+      collaboratorId: task.collaborator_id,
       collaboratorName: collaborator?.name ?? "(sem responsável)",
       collaboratorAvatarUrl: collaborator?.avatarUrl ?? null,
       kindLabel,
@@ -268,6 +297,8 @@ export async function getTaskDetail(
       clientHidden: task.client_hidden,
       canToggleClientHidden,
       autoExpiredAt,
+      canAdjustTime,
+      runningTimer,
     },
   };
 }

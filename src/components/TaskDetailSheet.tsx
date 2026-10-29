@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { STATUS_META, isOverdue } from "@/lib/status";
 import { formatDuration, formatDue } from "@/lib/format";
-import { btnPrimary, btnSecondary } from "@/lib/ui";
+import { btnPrimary, btnSecondary, inputClass, labelClass } from "@/lib/ui";
+import { adjustTaskTime } from "@/app/admin/colaboradores/[id]/actions";
 import Person from "@/components/Person";
 import LabelChips from "@/components/LabelChips";
 import CreatorMeta from "@/components/CreatorMeta";
@@ -49,6 +50,13 @@ export default function TaskDetailSheet({
     return () => {
       active = false;
     };
+  }, [taskId]);
+
+  // Recarrega o detalhe (após um ajuste de tempo) sem fechar o painel.
+  const reload = useCallback(() => {
+    getTaskDetail(taskId).then((res) => {
+      if (!res.error) setDetail(res.detail ?? null);
+    });
   }, [taskId]);
 
   useEffect(() => {
@@ -196,6 +204,11 @@ export default function TaskDetailSheet({
                     ))}
                   </ul>
                 </div>
+              )}
+
+              {/* Ajuste de tempo pelo admin (migration 0164) */}
+              {detail.canAdjustTime && (
+                <AdjustTimeSection detail={detail} onDone={reload} />
               )}
 
               {/* Descrição e instruções */}
@@ -504,6 +517,180 @@ function ClientVisibilityToggle({
       )}
     </div>
   );
+}
+
+// Seção "Ajustar tempo" do painel (admin). Mesmo formulário da lista do
+// colaborador (novo tempo + justificativa obrigatória), reutilizando a mesma
+// action/RPC. Com timer rodando, o formulário dá lugar a um aviso — o ajuste é
+// recusado no banco até pausar.
+function AdjustTimeSection({
+  detail,
+  onDone,
+}: {
+  detail: TaskDetail;
+  onDone: () => void;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [hours, setHours] = useState(Math.floor(detail.totalSeconds / 3600));
+  const [minutes, setMinutes] = useState(
+    Math.floor((detail.totalSeconds % 3600) / 60)
+  );
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function reset() {
+    setHours(Math.floor(detail.totalSeconds / 3600));
+    setMinutes(Math.floor((detail.totalSeconds % 3600) / 60));
+    setReason("");
+    setError(null);
+  }
+
+  // Timer rodando: sem formulário, só o aviso.
+  if (detail.runningTimer) {
+    return (
+      <div className="rounded-lg border border-amber-300/60 bg-amber-50 p-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+        <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+          Ajuste de tempo
+        </p>
+        <p className="mt-1 text-xs text-amber-800 dark:text-amber-200/90">
+          Timer rodando agora (desde {formatTime(detail.runningTimer.sinceISO)} por{" "}
+          {detail.runningTimer.byName}). Peça para pausar antes de ajustar.
+        </p>
+      </div>
+    );
+  }
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!reason.trim()) {
+      setError("A justificativa do ajuste é obrigatória.");
+      return;
+    }
+    const newSeconds = hours * 3600 + minutes * 60;
+    const { error: actionError } = await adjustTaskTime(
+      detail.id,
+      detail.collaboratorId,
+      newSeconds,
+      reason,
+      detail.companyId
+    );
+    if (actionError) {
+      setError(actionError);
+      return;
+    }
+    setOpen(false);
+    setReason("");
+    onDone();
+    startTransition(() => router.refresh());
+  }
+
+  return (
+    <div className="rounded-lg border border-line bg-surface-2/40 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-fg">Ajuste de tempo</p>
+        {!open && (
+          <button
+            type="button"
+            onClick={() => {
+              reset();
+              setOpen(true);
+            }}
+            className={btnSecondary}
+          >
+            Ajustar tempo
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <form onSubmit={save} className="mt-3 space-y-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="w-24">
+              <label htmlFor="adj-h" className={labelClass}>
+                Horas
+              </label>
+              <input
+                id="adj-h"
+                type="number"
+                min={0}
+                max={999}
+                value={hours}
+                onChange={(e) => setHours(Math.max(0, Number(e.target.value) || 0))}
+                className={inputClass}
+              />
+            </div>
+            <div className="w-24">
+              <label htmlFor="adj-m" className={labelClass}>
+                Minutos
+              </label>
+              <input
+                id="adj-m"
+                type="number"
+                min={0}
+                max={59}
+                value={minutes}
+                onChange={(e) =>
+                  setMinutes(Math.min(59, Math.max(0, Number(e.target.value) || 0)))
+                }
+                className={inputClass}
+              />
+            </div>
+            <p className="pb-2 text-xs text-fg-subtle">
+              Atual: {formatDuration(detail.totalSeconds)}
+            </p>
+          </div>
+          <div>
+            <label htmlFor="adj-r" className={labelClass}>
+              Justificativa <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="adj-r"
+              type="text"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Ex.: esqueceu de pausar o timer"
+              required
+              className={inputClass}
+            />
+          </div>
+          {error && (
+            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          )}
+          <div className="flex items-center gap-2">
+            <button
+              type="submit"
+              disabled={isPending || !reason.trim()}
+              className={btnPrimary}
+            >
+              {isPending ? "Salvando…" : "Salvar ajuste"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                reset();
+                setOpen(false);
+              }}
+              className={btnSecondary}
+            >
+              Cancelar
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
+// HH:MM (BRT) — usado no aviso de timer rodando.
+function formatTime(value: string): string {
+  return new Date(value).toLocaleTimeString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function formatTaskDate(d: string): string {

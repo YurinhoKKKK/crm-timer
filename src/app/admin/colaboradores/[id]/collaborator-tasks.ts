@@ -43,11 +43,35 @@ export type CollaboratorTask = {
   // Entrou na lista SÓ pelo trabalho no período (prazo fora do período e não
   // atrasada) → recebe o selo "Trabalhada no período · prazo DD/MM".
   onlyByWork: boolean;
+  // Criador da tarefa (task_templates.created_by) — mesma fonte/regras do
+  // describeInstanceCreator. name/id nulos = criada pelo sistema.
+  creator: {
+    id: string | null;
+    name: string | null;
+    avatarUrl: string | null;
+    fromStandard: boolean;
+    systemGenerated: boolean;
+    hasOrigin: boolean;
+  };
   adjustments: Adjustment[]; // mais recente primeiro
 };
 
 // Opção de filtro de tipo (categoria/modelo).
 export type TypeOption = { key: string; label: string };
+
+// Opção de filtro de criador (foto + nome vêm do facet).
+export type CreatorOption = { id: string; name: string; avatarUrl: string | null };
+
+// Sufixo de origem do criador, igual ao detalhe da tarefa: tarefa padrão →
+// "· Padrão diária"; gerada pela recorrência → "· Recorrente"; senão vazio.
+export function creatorOriginSuffix(c: {
+  fromStandard: boolean;
+  systemGenerated: boolean;
+}): string {
+  if (c.fromStandard) return "· Padrão diária";
+  if (c.systemGenerated) return "· Recorrente";
+  return "";
+}
 
 // Rótulo de exibição do "tipo": categorias viram o rótulo PT (via categoryLabel);
 // modelos padrão mantêm o próprio título. Vale tanto para a linha quanto para o

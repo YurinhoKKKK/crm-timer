@@ -22,13 +22,16 @@ import {
 import { ComboFilter } from "@/components/Combobox";
 import { inputClass, labelClass, btnPrimary, btnSecondary } from "@/lib/ui";
 import TaskDetailLink from "@/components/TaskDetailLink";
+import Avatar from "@/components/Avatar";
 import {
+  creatorOriginSuffix,
   displayTypeLabel,
   dueDayMonth,
   groupByDueDay,
   normalizeOrder,
   TASK_ORDER_OPTIONS,
   type CollaboratorTask,
+  type CreatorOption,
   type TaskOrder,
   type TypeOption,
 } from "./collaborator-tasks";
@@ -42,6 +45,7 @@ const PARAM = {
   status: "fstatus",
   company: "fempresa",
   type: "ftipo",
+  creator: "fcriador",
   order: "fordem",
   search: "fbusca",
 } as const;
@@ -50,6 +54,7 @@ type Committed = {
   status: string;
   companyId: string;
   type: string;
+  creatorId: string;
   order: TaskOrder;
   search: string;
 };
@@ -59,13 +64,14 @@ function committedFromParams(sp: URLSearchParams): Committed {
     status: sp.get(PARAM.status) ?? "",
     companyId: sp.get(PARAM.company) ?? "",
     type: sp.get(PARAM.type) ?? "",
+    creatorId: sp.get(PARAM.creator) ?? "",
     order: normalizeOrder(sp.get(PARAM.order) ?? undefined),
     search: sp.get(PARAM.search) ?? "",
   };
 }
 
 function sigOf(c: Committed): string {
-  return [c.status, c.companyId, c.type, c.order, c.search].join("|");
+  return [c.status, c.companyId, c.type, c.creatorId, c.order, c.search].join("|");
 }
 
 function formatDateTime(value: string): string {
@@ -85,6 +91,7 @@ export default function CollaboratorTaskList({
   end,
   companies,
   types,
+  creators,
   initialTasks,
   initialTotal,
   todayYmd,
@@ -95,6 +102,7 @@ export default function CollaboratorTaskList({
   end: string | null;
   companies: SelectOption[];
   types: TypeOption[];
+  creators: CreatorOption[];
   initialTasks: CollaboratorTask[];
   initialTotal: number;
   todayYmd: string;
@@ -169,6 +177,7 @@ export default function CollaboratorTaskList({
       status: committed.status,
       companyId: committed.companyId,
       type: committed.type,
+      creatorId: committed.creatorId,
       search: committed.search,
       order: committed.order,
       limit: PAGE_SIZE,
@@ -198,6 +207,7 @@ export default function CollaboratorTaskList({
       status: committed.status,
       companyId: committed.companyId,
       type: committed.type,
+      creatorId: committed.creatorId,
       search: committed.search,
       order: committed.order,
       limit: PAGE_SIZE,
@@ -228,6 +238,7 @@ export default function CollaboratorTaskList({
       status: committed.status,
       companyId: committed.companyId,
       type: committed.type,
+      creatorId: committed.creatorId,
       search: committed.search,
       order: committed.order,
       limit: Math.max(PAGE_SIZE, data.tasks.length),
@@ -251,6 +262,10 @@ export default function CollaboratorTaskList({
   const typeOptions: SelectOption[] = useMemo(
     () => types.map((t) => ({ value: t.key, label: displayTypeLabel(t.key, t.label) })),
     [types]
+  );
+  const creatorOptions: SelectOption[] = useMemo(
+    () => creators.map((c) => ({ value: c.id, label: c.name })),
+    [creators]
   );
 
   return (
@@ -286,6 +301,14 @@ export default function CollaboratorTaskList({
           ariaLabel="Filtrar por tipo de tarefa"
           searchPlaceholder="Buscar tipo…"
           options={typeOptions}
+        />
+        <ComboFilter
+          value={committed.creatorId}
+          onChange={(v) => pushParams({ creator: v })}
+          allLabel="Todos os criadores"
+          ariaLabel="Filtrar por criador"
+          searchPlaceholder="Buscar criador…"
+          options={creatorOptions}
         />
         <SelectFilter
           value={committed.status}
@@ -461,6 +484,24 @@ function TaskRow({
             <span>Prazo: {formatDue(task.dueAt)}</span>
             {task.finishedAt && (
               <span>Concluída em {formatDateTime(task.finishedAt)}</span>
+            )}
+            {task.creator.hasOrigin && task.creator.name ? (
+              <span className="inline-flex items-center gap-1">
+                Criada por
+                <Avatar
+                  name={task.creator.name}
+                  url={task.creator.avatarUrl}
+                  size={16}
+                />
+                <span className="text-fg-muted">{task.creator.name}</span>
+                {creatorOriginSuffix(task.creator) && (
+                  <span className="text-fg-subtle">
+                    {creatorOriginSuffix(task.creator)}
+                  </span>
+                )}
+              </span>
+            ) : (
+              <span>Criada pelo sistema</span>
             )}
           </div>
         </div>

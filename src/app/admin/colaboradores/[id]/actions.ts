@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase-server";
 import { addDays } from "@/lib/period";
+import { avatarUrl } from "@/lib/avatar";
 import type { TaskStatus } from "@/lib/types";
 import type { Adjustment, CollaboratorTask, TaskOrder } from "./collaborator-tasks";
 
@@ -135,6 +136,12 @@ type PageRow = {
   type_key: string;
   type_label: string;
   only_by_work: boolean;
+  created_by: string | null;
+  creator_name: string | null;
+  creator_avatar_path: string | null;
+  from_standard: boolean;
+  system_generated: boolean;
+  has_origin: boolean;
   adjustment_count: number;
   adjustments: Adjustment[] | null;
   total_count: number;
@@ -147,6 +154,7 @@ export type LoadTasksInput = {
   status: string;
   companyId: string;
   type: string;
+  creatorId: string;
   search: string;
   order: TaskOrder;
   limit: number;
@@ -169,6 +177,7 @@ export async function loadCollaboratorTasks(
     p_status: input.status || null,
     p_company: input.companyId || null,
     p_type: input.type || null,
+    p_creator: input.creatorId || null,
     p_search: input.search.trim() || null,
     p_order: input.order,
     p_limit: input.limit,
@@ -191,6 +200,14 @@ export async function loadCollaboratorTasks(
     typeKey: r.type_key,
     typeLabel: r.type_label,
     onlyByWork: r.only_by_work,
+    creator: {
+      id: r.created_by,
+      name: r.creator_name,
+      avatarUrl: avatarUrl(r.creator_avatar_path),
+      fromStandard: r.from_standard,
+      systemGenerated: r.system_generated,
+      hasOrigin: r.has_origin,
+    },
     adjustments: r.adjustments ?? [],
   }));
   return { error: null, tasks, total };

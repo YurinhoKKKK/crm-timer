@@ -14,7 +14,11 @@ import {
   loadCollaboratorTasks,
   loadCollaboratorActivities,
 } from "./actions";
-import { normalizeOrder, type TypeOption } from "./collaborator-tasks";
+import {
+  normalizeOrder,
+  type CreatorOption,
+  type TypeOption,
+} from "./collaborator-tasks";
 import { type CompanyCategoryTime } from "../../CategoryTimeByCompanyChart";
 import CategoryTimeByCompanyChartLazy from "../../CategoryTimeByCompanyChartLazy";
 import PeriodPicker from "@/components/PeriodPicker";
@@ -59,6 +63,7 @@ export default async function CollaboratorDetailPage({
     status: firstOf(sp.fstatus),
     companyId: firstOf(sp.fempresa),
     type: firstOf(sp.ftipo),
+    creatorId: firstOf(sp.fcriador),
     search: firstOf(sp.fbusca),
     order: normalizeOrder(firstOf(sp.fordem) || undefined),
   };
@@ -160,12 +165,18 @@ export default async function CollaboratorDetailPage({
   const facets = (facetsRes.data as {
     companies: { id: string; name: string }[];
     types: TypeOption[];
-  } | null) ?? { companies: [], types: [] };
+    creators: { id: string; name: string; avatar_path: string | null }[];
+  } | null) ?? { companies: [], types: [], creators: [] };
   const companyOptions: SelectOption[] = (facets.companies ?? []).map((c) => ({
     value: c.id,
     label: c.name,
   }));
   const typeOptions: TypeOption[] = facets.types ?? [];
+  const creatorOptions: CreatorOption[] = (facets.creators ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    avatarUrl: avatarUrl(c.avatar_path),
+  }));
 
   // --- Tempo por empresa QUEBRADO POR CATEGORIA (mesmo gráfico da dashboard) ---
   // Nomes das empresas referenciadas pelo tempo (inclui empresas com trabalho no
@@ -425,6 +436,7 @@ export default async function CollaboratorDetailPage({
               end={end}
               companies={companyOptions}
               types={typeOptions}
+              creators={creatorOptions}
               initialTasks={firstPage.tasks}
               initialTotal={firstPage.total}
               todayYmd={todayYmd}

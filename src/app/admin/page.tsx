@@ -10,6 +10,10 @@ import { STANDARD_KEY } from "@/lib/task-category";
 import CollaboratorSummary, {
   type CollaboratorRow,
 } from "./CollaboratorSummary";
+import AtrasosDashboardCard, {
+  type AtrasoTopPerson,
+} from "./AtrasosDashboardCard";
+import { resolvePeople } from "@/lib/creator";
 import {
   resolvePeriodValue,
   periodValueQuery,
@@ -87,6 +91,7 @@ export default async function AdminPage({
     { data: collaboratorTimeData },
     { data: companyCategoryData },
     { data: companyStandardData },
+    { data: atrasosData },
   ] = await Promise.all([
     perf.timed(
       "rpc task_status_counts",
@@ -129,6 +134,12 @@ export default async function AdminPage({
     perf.timed(
       "rpc time_by_company_standard",
       supabase.rpc("time_by_company_standard", { p_start: start, p_end: end })
+    ),
+    // Quadro "Atrasos" (sem padrão diárias): 3 totais + pessoas que mais atrasam
+    // por criador/responsável, numa única ida agregada (migration 0166).
+    perf.timed(
+      "rpc atrasos_dashboard",
+      supabase.rpc("atrasos_dashboard", { p_start: start, p_end: end })
     ),
   ]);
   perf.done();
@@ -263,6 +274,39 @@ export default async function AdminPage({
       timeLabel: formatDuration(seconds),
     }));
 
+  // --- Quadro "Atrasos" (migration 0166) ---
+  type RawAtrasoPerson = { id: string; late: number; total: number; on_time_pct: number };
+  const atrasos = (atrasosData as {
+    totals: { completed_late: number; open_overdue: number; expired: number };
+    creators: RawAtrasoPerson[];
+    responsibles: RawAtrasoPerson[];
+  } | null) ?? {
+    totals: { completed_late: 0, open_overdue: 0, expired: 0 },
+    creators: [],
+    responsibles: [],
+  };
+  const atrasoPeople = await resolvePeople(supabase, [
+    ...atrasos.creators.map((r) => r.id),
+    ...atrasos.responsibles.map((r) => r.id),
+  ]);
+  const toTop = (r: RawAtrasoPerson): AtrasoTopPerson => {
+    const p = atrasoPeople.get(r.id);
+    return {
+      id: r.id,
+      name: p?.name ?? "(sem nome)",
+      avatarUrl: p?.avatarUrl ?? null,
+      late: Number(r.late),
+      onTimePct: Number(r.on_time_pct ?? 0),
+    };
+  };
+  const atrasoTotals = {
+    completedLate: Number(atrasos.totals?.completed_late ?? 0),
+    openOverdue: Number(atrasos.totals?.open_overdue ?? 0),
+    expired: Number(atrasos.totals?.expired ?? 0),
+  };
+  const atrasoCreators = atrasos.creators.map(toTop);
+  const atrasoResponsibles = atrasos.responsibles.map(toTop);
+
   return (
     <AppShell
       user={{ name: profile.full_name, role: "admin", avatarUrl: profile.avatarUrl }}
@@ -359,12 +403,20 @@ export default async function AdminPage({
           </section>
 
           {/* Resumo por colaborador */}
-          <section className="mb-2 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
+          <section className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6">
             <h3 className="mb-4 text-sm font-semibold text-fg">
               Resumo por responsável
             </h3>
             <CollaboratorSummary rows={collaboratorRows} periodQuery={periodQ} />
           </section>
+
+          {/* Atrasos (quadro resumido → tela /admin/atrasos) */}
+          <AtrasosDashboardCard
+            totals={atrasoTotals}
+            creators={atrasoCreators}
+            responsibles={atrasoResponsibles}
+            periodQuery={periodQ}
+          />
         </>
       )}
     </AppShell>

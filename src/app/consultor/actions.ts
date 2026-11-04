@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase-server";
+import { timerRunningMessage } from "@/lib/timer-message";
 
 type UpdateTaskInstanceInput = {
   title: string;
@@ -40,6 +41,16 @@ export async function updateTaskInstance(
   } = await supabase.auth.getUser();
   if (!user) {
     return { error: "Sessão expirada. Faça login novamente." };
+  }
+
+  // Trava de timer (decisão 2): recusa a edição se a ocorrência tiver trecho
+  // aberto (time_entries.ended_at is null). A validação é no banco; aqui só
+  // traduz o nome para a mensagem.
+  const { data: timerOwner } = await supabase.rpc("instance_timer_block", {
+    p_task: taskId,
+  });
+  if (timerOwner) {
+    return { error: timerRunningMessage(timerOwner as string) };
   }
 
   const { error } = await supabase

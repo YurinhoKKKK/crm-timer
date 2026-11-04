@@ -16,6 +16,8 @@ import {
   applyCompanyStandards,
   type CompanyStandardAssignment,
 } from "@/lib/standard-link";
+import { timerRunningMessage, timerMessageFromError } from "@/lib/timer-message";
+import { KEEP_WITH_PERSON } from "@/lib/reassign";
 
 const VALID_CATEGORIES: TaskCategory[] = [
   "cadastro",
@@ -348,7 +350,10 @@ export type CollaboratorRemovalWarning = {
 export async function setCompanyCollaborators(
   companyId: string,
   collaboratorIds: string[],
-  confirmRemovals = false
+  confirmRemovals = false,
+  // Mapa removidoId -> destinoId (um dos que ficam) OU KEEP_WITH_PERSON. Só é
+  // consultado quando confirmRemovals = true (decisão 4).
+  reassignments: Record<string, string> = {}
 ): Promise<{
   error: string | null;
   needsConfirm?: CollaboratorRemovalWarning[];
@@ -419,6 +424,30 @@ export async function setCompanyCollaborators(
           name: nameById.get(w.collaboratorId) ?? "(colaborador)",
         })),
       };
+    }
+  }
+
+  // Reatribuição (decisão 4): para cada pessoa que sai COM destino escolhido,
+  // passa modelos + instâncias abertas (a_fazer/iniciada) dela nesta empresa
+  // para o destino, via RPC única (mesma regra do timer rodando, que recusa com
+  // raise). Roda ANTES de mexer no vínculo: se a RPC recusar (timer), nada foi
+  // alterado. "Manter com a pessoa" = não entra aqui (tarefas seguem com ela).
+  if (confirmRemovals) {
+    for (const fromId of toRemove) {
+      const toId = reassignments[fromId];
+      if (!toId || toId === KEEP_WITH_PERSON) continue;
+      if (!desired.has(toId)) {
+        return { error: "Destino da reatribuição inválido." };
+      }
+      const { error: reErr } = await supabase.rpc(
+        "reassign_company_collaborator_tasks",
+        { p_company: companyId, p_from: fromId, p_to: toId }
+      );
+      if (reErr) {
+        return {
+          error: timerMessageFromError(reErr.message) ?? reErr.message,
+        };
+      }
     }
   }
 
@@ -863,6 +892,17 @@ export async function updateTaskTemplate(
   } = await supabase.auth.getUser();
   if (!user) {
     return { error: "Sessão expirada. Faça login novamente." };
+  }
+
+  // Trava de timer (decisão 2): com a propagação agora atingindo 'iniciada', não
+  // se edita o molde se alguma ocorrência afetada estiver com trecho aberto
+  // (time_entries.ended_at is null). Validação no banco (template_timer_block);
+  // vale para QUALQUER campo, não só o responsável.
+  const { data: timerOwner } = await supabase.rpc("template_timer_block", {
+    p_template: templateId,
+  });
+  if (timerOwner) {
+    return { error: timerRunningMessage(timerOwner as string) };
   }
 
   // Na edição NÃO recategorizamos nem trocamos o título/template_type; e o TIPO

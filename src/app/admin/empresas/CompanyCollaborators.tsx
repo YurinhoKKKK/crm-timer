@@ -6,6 +6,7 @@ import {
   setCompanyCollaborators,
   type CollaboratorRemovalWarning,
 } from "../actions";
+import { KEEP_WITH_PERSON } from "@/lib/reassign";
 
 type CollaboratorOption = { id: string; full_name: string; email: string };
 type Status = "idle" | "saving" | "saved" | "error";
@@ -39,9 +40,16 @@ export default function CompanyCollaborators({
   const [confirm, setConfirm] = useState<CollaboratorRemovalWarning[] | null>(
     null
   );
+  // Destino escolhido por pessoa removida (removidoId -> destinoId | KEEP).
+  const [reassign, setReassign] = useState<Record<string, string>>({});
   const [, startTransition] = useTransition();
 
   const dirty = !sameSet(selected, selectedIds);
+
+  // Nome exibível por id (para os selects de "Passar para").
+  const nameById = new Map(
+    collaborators.map((c) => [c.id, c.full_name || c.email] as const)
+  );
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -54,14 +62,15 @@ export default function CompanyCollaborators({
     setConfirm(null);
   }
 
-  async function persist(confirmRemovals: boolean) {
+  async function persist(confirmRemovals: boolean, reassignMap = reassign) {
     setStatus("saving");
     setErrorMsg(null);
 
     const { error, needsConfirm } = await setCompanyCollaborators(
       companyId,
       Array.from(selected),
-      confirmRemovals
+      confirmRemovals,
+      reassignMap
     );
 
     if (error) {
@@ -71,6 +80,14 @@ export default function CompanyCollaborators({
     }
 
     if (needsConfirm && needsConfirm.length > 0) {
+      // Candidatos a receber as tarefas = quem FICA (conjunto desejado). Quem
+      // está ENTRANDO (desejado − original). Padrão: se entrou exatamente uma
+      // pessoa, ela recebe tudo; senão, "Manter com a pessoa" (decisão 4).
+      const added = Array.from(selected).filter((id) => !selectedIds.includes(id));
+      const def = added.length === 1 ? added[0] : KEEP_WITH_PERSON;
+      const initial: Record<string, string> = {};
+      for (const w of needsConfirm) initial[w.collaboratorId] = def;
+      setReassign(initial);
       setStatus("idle");
       setConfirm(needsConfirm);
       return;
@@ -157,18 +174,55 @@ export default function CompanyCollaborators({
             Confirmar remoção de responsável
           </p>
           <p className="mt-1 text-amber-800/90 dark:text-amber-200/90">
-            As tarefas em aberto abaixo ficarão <strong>sem vínculo</strong> (não
-            são apagadas nem trocam de responsável — continuam com a pessoa, só
-            fora da carteira dela nesta empresa):
+            Escolha para quem passar as tarefas em aberto de cada pessoa que sai,
+            ou mantenha com ela (nesse caso as tarefas ficam <strong>sem
+            vínculo</strong> — não são apagadas, continuam com a pessoa, só fora
+            da carteira dela nesta empresa).
           </p>
-          <ul className="mt-2 list-disc space-y-0.5 pl-5 text-amber-800/90 dark:text-amber-200/90">
-            {confirm.map((w) => (
-              <li key={w.collaboratorId}>
-                <strong>{w.name}</strong>: {w.openTasks} tarefa
-                {w.openTasks === 1 ? "" : "s"} em aberto
-              </li>
-            ))}
+          <ul className="mt-2 space-y-2">
+            {confirm.map((w) => {
+              // Candidatos = quem FICA (conjunto desejado), menos a própria
+              // pessoa (ela está saindo, mas por garantia não se auto-seleciona).
+              const candidates = Array.from(selected).filter(
+                (id) => id !== w.collaboratorId
+              );
+              return (
+                <li key={w.collaboratorId} className="text-amber-900 dark:text-amber-100">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span>
+                      <strong>{w.name}</strong>: {w.openTasks} tarefa
+                      {w.openTasks === 1 ? "" : "s"} em aberto
+                    </span>
+                    <label className="flex items-center gap-1.5">
+                      <span className="text-xs text-amber-800/90 dark:text-amber-200/90">
+                        Passar para:
+                      </span>
+                      <select
+                        value={reassign[w.collaboratorId] ?? KEEP_WITH_PERSON}
+                        onChange={(e) =>
+                          setReassign((prev) => ({
+                            ...prev,
+                            [w.collaboratorId]: e.target.value,
+                          }))
+                        }
+                        className="rounded-md border border-amber-400/70 bg-surface px-2 py-1 text-sm text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 dark:border-amber-500/40"
+                      >
+                        <option value={KEEP_WITH_PERSON}>Manter com a pessoa</option>
+                        {candidates.map((id) => (
+                          <option key={id} value={id}>
+                            {nameById.get(id) ?? "(colaborador)"}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
+          {status === "error" && errorMsg && (
+            <p className="mt-2 text-sm text-red-700 dark:text-red-300">{errorMsg}</p>
+          )}
           <div className="mt-3 flex items-center gap-2">
             <button
               type="button"
@@ -176,14 +230,16 @@ export default function CompanyCollaborators({
               disabled={status === "saving"}
               className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 disabled:opacity-50"
             >
-              Remover mesmo assim
+              {status === "saving" ? "Aplicando…" : "Confirmar remoção"}
             </button>
             <button
               type="button"
               onClick={() => {
                 setSelected(new Set(selectedIds));
                 setConfirm(null);
+                setReassign({});
                 setStatus("idle");
+                setErrorMsg(null);
               }}
               className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-fg-muted transition hover:text-fg"
             >

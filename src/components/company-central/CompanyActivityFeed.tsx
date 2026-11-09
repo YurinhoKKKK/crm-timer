@@ -7,15 +7,19 @@ import { FilterBar, SearchBox, EmptyState } from "@/components/ListControls";
 import { ComboFilter } from "@/components/Combobox";
 import PeriodPicker from "@/components/PeriodPicker";
 import HistoricoPdfButton from "@/components/company-central/HistoricoPdfButton";
+import ResponsiblesTimeline from "@/components/company-central/ResponsiblesTimeline";
 import { resolvePeriodValue, type PeriodConfig } from "@/lib/period";
 import { formatDuration } from "@/lib/format";
 import {
+  activityAuthorName,
+  activityChangeLines,
   activityTypeLabel,
   EMPTY_ACTIVITY_FILTERS,
   formatActivityAt,
   hasActiveFilters,
   isExpandable,
   type ActivityAuthor,
+  type ActivityCategory,
   type ActivityFilters,
   type ActivityItem,
   type ActivityType,
@@ -23,6 +27,7 @@ import {
 import {
   loadCompanyActivity,
   loadCompanyActivityAuthors,
+  loadCompanyActivityCategories,
   loadCompanyActivityTypes,
 } from "@/app/company-activity-actions";
 
@@ -75,6 +80,9 @@ export default function CompanyActivityFeed({
   const [total, setTotal] = useState(0);
   const [authors, setAuthors] = useState<ActivityAuthor[]>([]);
   const [types, setTypes] = useState<ActivityType[]>([]);
+  const [categories, setCategories] = useState<ActivityCategory[]>([]);
+  // Aba dentro do histórico: linha do tempo de eventos vs. de responsáveis.
+  const [view, setView] = useState<"feed" | "responsaveis">("feed");
   // from/to são DERIVADOS do período (URL); search/type/author são estado local.
   const [filters, setFilters] = useState<ActivityFilters>(() => ({
     ...EMPTY_ACTIVITY_FILTERS,
@@ -112,6 +120,7 @@ export default function CompanyActivityFeed({
   const startedRef = useRef(false); // já disparou a 1ª carga?
   const authorsRef = useRef(false); // já buscou a lista de autores?
   const typesRef = useRef(false); // já buscou a lista de tipos?
+  const categoriesRef = useRef(false); // já buscou a lista de categorias?
   const reqRef = useRef(0); // token anti-corrida: só a resposta mais nova vale
 
   const filtersKey = useMemo(() => JSON.stringify(filters), [filters]);
@@ -134,12 +143,21 @@ export default function CompanyActivityFeed({
     if (!res.error) setTypes(res.types);
   }, [companyId]);
 
+  // Idem para as CATEGORIAS presentes (alimenta o filtro por categoria).
+  const loadCategories = useCallback(async () => {
+    if (categoriesRef.current) return;
+    categoriesRef.current = true;
+    const res = await loadCompanyActivityCategories(companyId);
+    if (!res.error) setCategories(res.categories);
+  }, [companyId]);
+
   // (Re)carrega a PRIMEIRA página com os filtros atuais (substitui a lista).
   const loadFirst = useCallback(async () => {
     const token = ++reqRef.current;
     setStatus("loading");
     void loadAuthors();
     void loadTypes();
+    void loadCategories();
     const res = await loadCompanyActivity(companyId, 0, filters);
     if (token !== reqRef.current) return; // chegou uma resposta mais nova
     if (res.error) {
@@ -151,7 +169,7 @@ export default function CompanyActivityFeed({
     setTotal(res.total);
     setItems(res.items);
     setStatus("ready");
-  }, [companyId, filters, loadAuthors, loadTypes]);
+  }, [companyId, filters, loadAuthors, loadTypes, loadCategories]);
 
   // Próxima página (anexa). Offset = quantos já temos.
   async function loadMore() {
@@ -227,6 +245,10 @@ export default function CompanyActivityFeed({
     () => types.map((t) => ({ value: t.value, label: t.label })),
     [types]
   );
+  const categoryOptions = useMemo(
+    () => categories.map((c) => ({ value: c.value, label: c.label })),
+    [categories]
+  );
 
   const active = hasActiveFilters(filters);
   const canLoadMore = status === "ready" && items.length < total;
@@ -236,10 +258,10 @@ export default function CompanyActivityFeed({
       ref={sectionRef}
       className="mb-6 rounded-2xl border border-line bg-surface p-5 shadow-card sm:p-6"
     >
-      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-fg">Histórico de atividades</h3>
         <div className="flex items-center gap-3">
-          {status === "ready" && (
+          {view === "feed" && status === "ready" && (
             <span className="text-xs text-fg-subtle">
               {active
                 ? `${total} ${total === 1 ? "resultado" : "resultados"}`
@@ -249,6 +271,34 @@ export default function CompanyActivityFeed({
           <HistoricoPdfButton companyId={companyId} />
         </div>
       </div>
+
+      {/* Abas: linha do tempo de EVENTOS (padrão) vs. de RESPONSÁVEIS. */}
+      <div className="mb-4 inline-flex rounded-lg border border-line bg-surface-2 p-0.5 text-xs font-medium">
+        {(
+          [
+            ["feed", "Histórico"],
+            ["responsaveis", "Responsáveis"],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setView(key)}
+            className={`rounded-md px-3 py-1.5 transition ${
+              view === key
+                ? "bg-surface text-fg shadow-card"
+                : "text-fg-muted hover:text-fg"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === "responsaveis" ? (
+        <ResponsiblesTimeline companyId={companyId} active={view === "responsaveis"} />
+      ) : (
+      <>
       {/* O filtro de período AQUI é próprio desta lista de eventos — não tem
           relação com o filtro do topo (Visão geral), que recorta os cartões. */}
       <p className="mb-4 text-xs text-fg-subtle">
@@ -267,6 +317,14 @@ export default function CompanyActivityFeed({
           value={filters.search}
           onChange={(v) => setFilters((f) => ({ ...f, search: v }))}
           placeholder="Buscar no conteúdo…"
+        />
+        <ComboFilter
+          value={filters.category}
+          onChange={(v) => setFilters((f) => ({ ...f, category: v }))}
+          allLabel="Todas as categorias"
+          ariaLabel="Filtrar por categoria"
+          searchPlaceholder="Buscar categoria…"
+          options={categoryOptions}
         />
         <ComboFilter
           value={filters.type}
@@ -293,6 +351,15 @@ export default function CompanyActivityFeed({
             <FilterPill
               label={`“${filters.search}”`}
               onClear={() => setFilters((f) => ({ ...f, search: "" }))}
+            />
+          )}
+          {filters.category && (
+            <FilterPill
+              label={
+                categories.find((c) => c.value === filters.category)?.label ??
+                filters.category
+              }
+              onClear={() => setFilters((f) => ({ ...f, category: "" }))}
             />
           )}
           {filters.type && (
@@ -360,8 +427,14 @@ export default function CompanyActivityFeed({
           <ol className="space-y-4">
             {items.map((a) => {
               const isOpen = expanded.has(a.id);
-              const expandable = isExpandable(a);
+              const hasText = isExpandable(a);
+              const changeLines = activityChangeLines(a.meta);
+              const expandable = hasText || changeLines.length > 0;
               const seconds = a.meta.seconds ?? 0;
+              // Tempo TOTAL da tarefa (conclusão) — enriquece a linha sem 2º evento.
+              const total = a.meta.taskTotalSeconds ?? 0;
+              const showTotal = total > 0 && total !== seconds;
+              const authorName = activityAuthorName(a);
               return (
                 <li
                   key={a.id}
@@ -370,12 +443,8 @@ export default function CompanyActivityFeed({
                   <span className="absolute -left-[5px] top-1.5 h-2 w-2 rounded-full bg-risd" />
                   <div className="flex flex-wrap items-center gap-2 text-xs text-fg-subtle">
                     <span className="inline-flex items-center gap-1.5 font-medium text-fg">
-                      <Avatar
-                        name={a.authorName ?? "—"}
-                        url={a.authorAvatar}
-                        size={18}
-                      />
-                      {a.authorName ?? "—"}
+                      <Avatar name={authorName} url={a.authorAvatar} size={18} />
+                      {authorName}
                     </span>
                     <span>·</span>
                     <span>{formatActivityAt(a.at)}</span>
@@ -391,6 +460,14 @@ export default function CompanyActivityFeed({
                         </span>
                       </>
                     )}
+                    {showTotal && (
+                      <>
+                        <span>·</span>
+                        <span className="font-mono tabular-nums text-fg-subtle">
+                          total {formatDuration(total)}
+                        </span>
+                      </>
+                    )}
                     {a.meta.sentWhatsapp && (
                       <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
                         WhatsApp
@@ -399,8 +476,25 @@ export default function CompanyActivityFeed({
                   </div>
 
                   <p className="mt-1 whitespace-pre-wrap text-sm text-fg-muted">
-                    {isOpen ? a.content : a.summary}
+                    {isOpen && hasText ? a.content : a.summary}
                   </p>
+
+                  {isOpen && changeLines.length > 0 && (
+                    <dl className="mt-2 space-y-1 rounded-lg border border-line bg-surface-2/60 px-3 py-2 text-xs">
+                      {changeLines.map((c, i) => (
+                        <div key={i} className="flex flex-wrap gap-x-2">
+                          {c.label && (
+                            <dt className="font-medium text-fg-muted">{c.label}:</dt>
+                          )}
+                          <dd className="text-fg">
+                            {c.note
+                              ? c.note
+                              : `${c.from ?? ""} → ${c.to ?? ""}`}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
 
                   {expandable && (
                     <button
@@ -408,7 +502,13 @@ export default function CompanyActivityFeed({
                       onClick={() => toggle(a.id)}
                       className="mt-1 text-xs font-medium text-risd underline-offset-2 transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-risd"
                     >
-                      {isOpen ? "Ler menos" : "Ler mais"}
+                      {isOpen
+                        ? hasText
+                          ? "Ler menos"
+                          : "Ocultar detalhes"
+                        : hasText
+                          ? "Ler mais"
+                          : "Ver detalhes"}
                     </button>
                   )}
                 </li>
@@ -431,6 +531,8 @@ export default function CompanyActivityFeed({
             </div>
           )}
         </>
+      )}
+      </>
       )}
     </section>
   );

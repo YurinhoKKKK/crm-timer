@@ -4,9 +4,11 @@ import { createClient } from "@/lib/supabase-server";
 import {
   ACTIVITY_PAGE_SIZE,
   type ActivityAuthor,
+  type ActivityCategory,
   type ActivityFilters,
   type ActivityItem,
   type ActivityType,
+  type ResponsiblePeriod,
 } from "@/lib/company-activity";
 
 // Leitura do histórico de atividades (Fatia 1). A agregação/ordenação/filtragem/
@@ -48,6 +50,7 @@ export async function loadCompanyActivity(
     p_author: filters.authorId || null,
     p_from: filters.from || null,
     p_to: filters.to || null,
+    p_categories: filters.category ? [filters.category] : null,
   });
 
   if (error) {
@@ -104,4 +107,47 @@ export async function loadCompanyActivityTypes(
   if (error) return { error: "Não foi possível carregar os tipos.", types: [] };
 
   return { error: null, types: (data as ActivityType[] | null) ?? [] };
+}
+
+// Categorias presentes nesta empresa (filtro por CATEGORIA). Rótulos do banco.
+export async function loadCompanyActivityCategories(
+  companyId: string
+): Promise<{ error: string | null; categories: ActivityCategory[] }> {
+  if (!companyId) return { error: "Empresa inválida.", categories: [] };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Sessão expirada.", categories: [] };
+
+  const { data, error } = await supabase.rpc("company_activity_categories", {
+    p_company: companyId,
+  });
+  if (error)
+    return { error: "Não foi possível carregar as categorias.", categories: [] };
+
+  return { error: null, categories: (data as ActivityCategory[] | null) ?? [] };
+}
+
+// Linha do tempo de responsáveis (consultor/colaborador) da empresa. A RLS da
+// RPC (SECURITY INVOKER) é a fronteira — quem já vê a empresa, vê os períodos.
+export async function loadCompanyResponsibleTimeline(
+  companyId: string
+): Promise<{ error: string | null; periods: ResponsiblePeriod[] }> {
+  if (!companyId) return { error: "Empresa inválida.", periods: [] };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Sessão expirada.", periods: [] };
+
+  const { data, error } = await supabase.rpc("company_responsible_timeline", {
+    p_company: companyId,
+  });
+  if (error)
+    return { error: "Não foi possível carregar os responsáveis.", periods: [] };
+
+  return { error: null, periods: (data as ResponsiblePeriod[] | null) ?? [] };
 }

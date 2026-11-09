@@ -41,6 +41,13 @@ export type CoverInfo = {
   periodLabel: string;
   generatedBy: string;
   generatedAtStamp: string;
+  // Linha do tempo de responsáveis (já formatada na rota).
+  responsibles: {
+    name: string;
+    roleLabel: string;
+    rangeLabel: string;
+    reconstructed: boolean;
+  }[];
 };
 
 // Paleta Monvatti.
@@ -86,6 +93,23 @@ const styles = StyleSheet.create({
     fontFamily: "Helvetica-Bold",
   },
   metaValue: { flex: 1, fontSize: 9, color: INK },
+  // --- Responsáveis (linha do tempo no topo) ---
+  sectionHeading: {
+    fontSize: 10,
+    fontFamily: "Helvetica-Bold",
+    color: INK,
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  respRow: { flexDirection: "row", marginBottom: 3 },
+  respName: {
+    width: 150,
+    fontSize: 9,
+    color: INK,
+    fontFamily: "Helvetica-Bold",
+  },
+  respMeta: { flex: 1, fontSize: 9, color: MUTED },
+  respRecon: { color: "#B45309" },
   // --- Mês ---
   monthHeading: {
     fontSize: 13,
@@ -286,6 +310,27 @@ export default function HistoricoPdfDocument({
           />
         </View>
         <View style={styles.rule} />
+
+        {/* Responsáveis (períodos por pessoa e papel) */}
+        {cover.responsibles.length > 0 && (
+          <>
+            <Text style={styles.sectionHeading}>Responsáveis</Text>
+            {cover.responsibles.map((r, i) => (
+              <View key={i} style={styles.respRow}>
+                <Text style={styles.respName}>{pdfText(r.name)}</Text>
+                <Text style={styles.respMeta}>
+                  {pdfText(r.roleLabel)} · {pdfText(r.rangeLabel)}
+                  {r.reconstructed ? (
+                    <Text style={styles.respRecon}>
+                      {"  "}· reconstruído (aproximado)
+                    </Text>
+                  ) : null}
+                </Text>
+              </View>
+            ))}
+            <View style={[styles.rule, { marginTop: 8 }]} />
+          </>
+        )}
 
         {/* Linha do tempo */}
         {groups.length === 0 ? (

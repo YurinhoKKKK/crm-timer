@@ -193,7 +193,7 @@ export async function GET(
       kind: "activity",
       at: it.at,
       typeLabel: it.typeLabel || it.type,
-      authorName: it.authorName || "—",
+      authorName: it.authorName || "Sistema",
       content: it.content || it.summary || "",
     }));
   } else {
@@ -208,6 +208,40 @@ export async function GET(
     }
   }
 
+  // --- Linha do tempo de RESPONSÁVEIS (topo do PDF) ---
+  const { data: respRows } = await supabase.rpc("company_responsible_timeline", {
+    p_company: companyId,
+  });
+  const fmtDay = (d: string | null) => {
+    if (!d) return "hoje";
+    const [y, m, dd] = d.split("-");
+    return `${dd}/${m}/${y}`;
+  };
+  const responsibles = (
+    (respRows as
+      | {
+          role: "consultor" | "colaborador";
+          name: string;
+          startDate: string;
+          endDate: string | null;
+          source: "registrado" | "reconstruido";
+        }[]
+      | null) ?? []
+  )
+    .slice()
+    .sort((a, b) => {
+      if (a.role !== b.role) return a.role === "consultor" ? -1 : 1;
+      if (!a.endDate && b.endDate) return -1;
+      if (a.endDate && !b.endDate) return 1;
+      return b.startDate.localeCompare(a.startDate);
+    })
+    .map((r) => ({
+      name: r.name,
+      roleLabel: r.role === "consultor" ? "Consultor" : "Colaborador",
+      rangeLabel: `${fmtDay(r.startDate)} até ${fmtDay(r.endDate)}`,
+      reconstructed: r.source === "reconstruido",
+    }));
+
   // --- Monta a linha do tempo e renderiza ---
   const groups = groupByMonth([...activityEntries, ...noteEntries]);
   const cover: CoverInfo = {
@@ -219,6 +253,7 @@ export async function GET(
     periodLabel: period.label,
     generatedBy: profile.full_name,
     generatedAtStamp: brtNowStamp(),
+    responsibles,
   };
 
   let buffer: Uint8Array;
@@ -277,6 +312,7 @@ async function fetchActivityPage(
     p_author: null,
     p_from: from,
     p_to: to,
+    p_categories: null,
   });
   if (error) return { error: true, total: 0, items: [] };
   const payload = (data as { total?: number; items?: ActivityRpcItem[] } | null) ?? {};

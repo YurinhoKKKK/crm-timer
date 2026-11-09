@@ -285,46 +285,17 @@ export async function setCompanyConsultants(
     return { error: "Sessão expirada. Faça login novamente." };
   }
 
-  const desired = new Set(consultantIds);
-
-  const { data: current, error: readError } = await supabase
-    .from("company_consultants")
-    .select("consultant_id")
-    .eq("company_id", companyId);
-  if (readError) {
-    return { error: readError.message };
-  }
-
-  const currentIds = new Set(
-    (current ?? []).map((r) => (r as { consultant_id: string }).consultant_id)
-  );
-
-  const toRemove = Array.from(currentIds).filter((id) => !desired.has(id));
-  const toAdd = Array.from(desired).filter((id) => !currentIds.has(id));
-
-  if (toRemove.length > 0) {
-    const { error: deleteError } = await supabase
-      .from("company_consultants")
-      .delete()
-      .eq("company_id", companyId)
-      .in("consultant_id", toRemove);
-    if (deleteError) {
-      return { error: deleteError.message };
-    }
-  }
-
-  if (toAdd.length > 0) {
-    const { error: insertError } = await supabase
-      .from("company_consultants")
-      .insert(
-        toAdd.map((consultantId) => ({
-          company_id: companyId,
-          consultant_id: consultantId,
-        }))
-      );
-    if (insertError) {
-      return { error: insertError.message };
-    }
+  // A diferença (quem saiu / quem entrou) e os eventos de histórico vivem no
+  // banco: a RPC set_company_consultants faz o diff e, quando é uma TROCA na
+  // mesma ação (saiu um, entrou outro), grava UM evento 'consultor_trocado'
+  // {de,para} em vez de dois soltos (migration 0168). Adição/remoção isolada
+  // continua como antes (gatilho por linha). Admin-only (gate na própria RPC).
+  const { error } = await supabase.rpc("set_company_consultants", {
+    p_company: companyId,
+    p_ids: Array.from(new Set(consultantIds)),
+  });
+  if (error) {
+    return { error: error.message };
   }
 
   revalidatePath("/admin/empresas");
@@ -451,29 +422,16 @@ export async function setCompanyCollaborators(
     }
   }
 
-  if (toRemove.length > 0) {
-    const { error: deleteError } = await supabase
-      .from("company_collaborators")
-      .delete()
-      .eq("company_id", companyId)
-      .in("collaborator_id", toRemove);
-    if (deleteError) {
-      return { error: deleteError.message };
-    }
-  }
-
-  if (toAdd.length > 0) {
-    const { error: insertError } = await supabase
-      .from("company_collaborators")
-      .insert(
-        toAdd.map((collaboratorId) => ({
-          company_id: companyId,
-          collaborator_id: collaboratorId,
-        }))
-      );
-    if (insertError) {
-      return { error: insertError.message };
-    }
+  // Mutação final no banco: a RPC set_company_collaborators_apply remove+insere
+  // e, na TROCA (saiu um, entrou outro), grava UM 'colaborador_trocado' {de,para}
+  // (migration 0168), suprimindo os eventos por linha. O repasse em lote já saiu
+  // como 'tarefas_repassadas' na reassign_company_collaborator_tasks acima.
+  const { error: applyError } = await supabase.rpc(
+    "set_company_collaborators_apply",
+    { p_company: companyId, p_remove: toRemove, p_add: toAdd }
+  );
+  if (applyError) {
+    return { error: applyError.message };
   }
 
   revalidatePath("/admin/empresas");

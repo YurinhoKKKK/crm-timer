@@ -58,9 +58,18 @@ export type ResponsiblePeriod = {
   role: "consultor" | "colaborador";
   name: string;
   avatar: string | null;
-  startDate: string; // "AAAA-MM-DD"
+  startDate: string | null; // "AAAA-MM-DD"; null = início não registrado (consultor reconstruído sem evento de adição)
   endDate: string | null; // null = período atual
   source: "registrado" | "reconstruido";
+  startApprox: boolean; // período reconstruído mais antigo do colaborador: início é dos DADOS, não a entrada real ("desde pelo menos")
+};
+
+// Retorno da RPC company_responsible_timeline: períodos + data global de
+// referência (1º registro de troca de responsável do sistema), usada no texto
+// "antes de DD/MM/AAAA (início não registrado)" dos consultores sem início.
+export type ResponsibleTimeline = {
+  refDate: string | null; // "AAAA-MM-DD"
+  periods: ResponsiblePeriod[];
 };
 
 // Filtros da tela. Tudo opcional; vazio = sem recorte (o histórico inteiro).

@@ -212,33 +212,54 @@ export async function GET(
   const { data: respRows } = await supabase.rpc("company_responsible_timeline", {
     p_company: companyId,
   });
-  const fmtDay = (d: string | null) => {
-    if (!d) return "hoje";
+  const timeline = respRows as
+    | {
+        refDate: string | null;
+        periods: {
+          role: "consultor" | "colaborador";
+          name: string;
+          startDate: string | null;
+          endDate: string | null;
+          source: "registrado" | "reconstruido";
+          startApprox: boolean;
+        }[];
+      }
+    | null;
+  const fmtDay = (d: string) => {
     const [y, m, dd] = d.split("-");
     return `${dd}/${m}/${y}`;
   };
-  const responsibles = (
-    (respRows as
-      | {
-          role: "consultor" | "colaborador";
-          name: string;
-          startDate: string;
-          endDate: string | null;
-          source: "registrado" | "reconstruido";
-        }[]
-      | null) ?? []
-  )
+  // Mesmo tratamento do componente ResponsiblesTimeline (0169): start null ->
+  // "antes de <ref>"; startApprox -> "desde pelo menos"; fim null -> "hoje".
+  const rangeLabel = (r: {
+    startDate: string | null;
+    endDate: string | null;
+    startApprox: boolean;
+  }): string => {
+    const end = r.endDate ? fmtDay(r.endDate) : "hoje";
+    if (r.startDate === null) {
+      const start = timeline?.refDate
+        ? `antes de ${fmtDay(timeline.refDate)}`
+        : "início não registrado";
+      return `${start} até ${end}`;
+    }
+    const start = r.startApprox
+      ? `desde pelo menos ${fmtDay(r.startDate)}`
+      : fmtDay(r.startDate);
+    return `${start} até ${end}`;
+  };
+  const responsibles = (timeline?.periods ?? [])
     .slice()
     .sort((a, b) => {
       if (a.role !== b.role) return a.role === "consultor" ? -1 : 1;
       if (!a.endDate && b.endDate) return -1;
       if (a.endDate && !b.endDate) return 1;
-      return b.startDate.localeCompare(a.startDate);
+      return (b.startDate ?? "").localeCompare(a.startDate ?? "");
     })
     .map((r) => ({
       name: r.name,
       roleLabel: r.role === "consultor" ? "Consultor" : "Colaborador",
-      rangeLabel: `${fmtDay(r.startDate)} até ${fmtDay(r.endDate)}`,
+      rangeLabel: rangeLabel(r),
       reconstructed: r.source === "reconstruido",
     }));
 

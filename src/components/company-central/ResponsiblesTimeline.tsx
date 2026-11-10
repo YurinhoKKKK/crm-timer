@@ -16,10 +16,28 @@ import type { ResponsiblePeriod } from "@/lib/company-activity";
 type Status = "idle" | "loading" | "ready" | "error";
 
 // Data "AAAA-MM-DD" -> "DD/MM/AAAA" (sem fuso: é data pura do banco).
-function fmtDate(d: string | null): string {
-  if (!d) return "hoje";
+function fmtDay(d: string): string {
   const [y, m, day] = d.split("-");
   return `${day}/${m}/${y}`;
+}
+
+// Texto do intervalo de um período, tratando os casos da reconstrução (0169):
+//  · start null  -> "antes de DD/MM/AAAA" (consultor sem evento de adição; a
+//    data de referência é o 1º registro de troca do sistema). Sem refDate:
+//    "início não registrado".
+//  · startApprox -> "desde pelo menos DD/MM/AAAA" (período reconstruído mais
+//    antigo do colaborador: é o início dos DADOS, não a entrada real).
+//  · fim null    -> "hoje".
+function rangeLabel(p: ResponsiblePeriod, refDate: string | null): string {
+  const end = p.endDate ? fmtDay(p.endDate) : "hoje";
+  if (p.startDate === null) {
+    const start = refDate ? `antes de ${fmtDay(refDate)}` : "início não registrado";
+    return `${start} até ${end}`;
+  }
+  const start = p.startApprox
+    ? `desde pelo menos ${fmtDay(p.startDate)}`
+    : fmtDay(p.startDate);
+  return `${start} até ${end}`;
 }
 
 export default function ResponsiblesTimeline({
@@ -32,6 +50,7 @@ export default function ResponsiblesTimeline({
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const [periods, setPeriods] = useState<ResponsiblePeriod[]>([]);
+  const [refDate, setRefDate] = useState<string | null>(null);
   const loadedRef = useRef(false);
 
   // Carrega sob demanda na 1ª vez que a aba "Responsáveis" é aberta.
@@ -46,6 +65,7 @@ export default function ResponsiblesTimeline({
         return;
       }
       setPeriods(res.periods);
+      setRefDate(res.refDate);
       setStatus("ready");
     });
   }, [active, companyId]);
@@ -61,7 +81,8 @@ export default function ResponsiblesTimeline({
     const sort = (a: ResponsiblePeriod, b: ResponsiblePeriod) => {
       if (!a.endDate && b.endDate) return -1;
       if (a.endDate && !b.endDate) return 1;
-      return b.startDate.localeCompare(a.startDate);
+      // start null = início não registrado -> ordena como o mais antigo ("").
+      return (b.startDate ?? "").localeCompare(a.startDate ?? "");
     };
     byRole.consultor.sort(sort);
     byRole.colaborador.sort(sort);
@@ -116,8 +137,16 @@ export default function ResponsiblesTimeline({
                     </span>
                     <span className="text-xs text-fg-subtle">
                       · {role === "consultor" ? "Consultor" : "Colaborador"} ·{" "}
-                      {fmtDate(p.startDate)} até {fmtDate(p.endDate)}
+                      {rangeLabel(p, refDate)}
                     </span>
+                    {p.startDate === null && (
+                      <span
+                        className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-fg-subtle dark:bg-white/10"
+                        title="A pessoa já era responsável antes de começarmos a registrar as trocas; o início exato não foi registrado."
+                      >
+                        início não registrado
+                      </span>
+                    )}
                     {p.source === "reconstruido" && (
                       <span
                         className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"

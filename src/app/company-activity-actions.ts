@@ -9,6 +9,7 @@ import {
   type ActivityItem,
   type ActivityType,
   type ResponsiblePeriod,
+  type ResponsibleTimeline,
 } from "@/lib/company-activity";
 
 // Leitura do histórico de atividades (Fatia 1). A agregação/ordenação/filtragem/
@@ -134,20 +135,21 @@ export async function loadCompanyActivityCategories(
 // RPC (SECURITY INVOKER) é a fronteira — quem já vê a empresa, vê os períodos.
 export async function loadCompanyResponsibleTimeline(
   companyId: string
-): Promise<{ error: string | null; periods: ResponsiblePeriod[] }> {
-  if (!companyId) return { error: "Empresa inválida.", periods: [] };
+): Promise<{ error: string | null; refDate: string | null; periods: ResponsiblePeriod[] }> {
+  if (!companyId) return { error: "Empresa inválida.", refDate: null, periods: [] };
 
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { error: "Sessão expirada.", periods: [] };
+  if (!user) return { error: "Sessão expirada.", refDate: null, periods: [] };
 
   const { data, error } = await supabase.rpc("company_responsible_timeline", {
     p_company: companyId,
   });
   if (error)
-    return { error: "Não foi possível carregar os responsáveis.", periods: [] };
+    return { error: "Não foi possível carregar os responsáveis.", refDate: null, periods: [] };
 
-  return { error: null, periods: (data as ResponsiblePeriod[] | null) ?? [] };
+  const tl = data as ResponsibleTimeline | null;
+  return { error: null, refDate: tl?.refDate ?? null, periods: tl?.periods ?? [] };
 }

@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase-server";
+import { avatarUrl } from "@/lib/avatar";
 import {
   ACTIVITY_PAGE_SIZE,
   type ActivityAuthor,
@@ -151,5 +152,13 @@ export async function loadCompanyResponsibleTimeline(
     return { error: "Não foi possível carregar os responsáveis.", refDate: null, periods: [] };
 
   const tl = data as ResponsibleTimeline | null;
-  return { error: null, refDate: tl?.refDate ?? null, periods: tl?.periods ?? [] };
+  // A RPC devolve avatar = profiles.avatar_path (caminho no storage). Resolver
+  // para a URL pública do bucket "avatars" aqui, como as outras telas — senão o
+  // <Avatar> usaria o caminho cru como src (imagem quebrada). Null mantém o
+  // fallback de iniciais.
+  const periods = (tl?.periods ?? []).map((p) => ({
+    ...p,
+    avatar: avatarUrl(p.avatar),
+  }));
+  return { error: null, refDate: tl?.refDate ?? null, periods };
 }

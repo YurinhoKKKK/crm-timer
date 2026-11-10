@@ -28,10 +28,11 @@ import AssignmentPicker, {
   type PickerItem,
   type PickerRow,
 } from "@/components/AssignmentPicker";
+import { tradeHint } from "@/lib/company-name";
 
 const WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
-type CompanyOption = { id: string; name: string };
+type CompanyOption = { id: string; name: string; tradeName?: string | null };
 type PersonOption = { id: string; full_name: string; email: string };
 
 // Filtro por situação. Padrão "ativos" para os moldes desativados na
@@ -161,6 +162,7 @@ function StandardRow({
   const companyItems: PickerItem[] = companies.map((c) => ({
     id: c.id,
     label: c.name,
+    hint: tradeHint(c.name, c.tradeName) ?? undefined,
   }));
 
   function patch(p: Partial<StandardFormValue>) {

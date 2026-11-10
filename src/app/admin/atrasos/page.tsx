@@ -3,6 +3,8 @@ import AppShell from "@/components/AppShell";
 import PeriodPicker from "@/components/PeriodPicker";
 import { resolvePeople } from "@/lib/creator";
 import type { SelectOption } from "@/components/ListControls";
+import type { ComboOption } from "@/components/Combobox";
+import { tradeHint } from "@/lib/company-name";
 import {
   resolvePeriodValue,
   periodValueQuery,
@@ -127,9 +129,20 @@ export default async function AtrasosPage({
     responsibles: { id: string; name: string }[];
   } | null) ?? { companies: [], types: [], creators: [], responsibles: [] };
 
-  const companyOptions: SelectOption[] = (facets.companies ?? []).map((c) => ({
+  // Mapa lateral id→nome fantasia (mesma RLS do usuário); atrasos_facets não
+  // devolve trade_name, então o hint (busca por fantasia) vem daqui.
+  const { data: tradeRows } = await supabase.from("companies").select("id, trade_name");
+  const tradeByCompany: Record<string, string | null> = Object.fromEntries(
+    ((tradeRows as { id: string; trade_name: string | null }[] | null) ?? []).map((r) => [
+      r.id,
+      r.trade_name,
+    ])
+  );
+
+  const companyOptions: ComboOption[] = (facets.companies ?? []).map((c) => ({
     value: c.id,
     label: c.name,
+    hint: tradeHint(c.name, tradeByCompany[c.id]) ?? undefined,
   }));
   const typeOptions: SelectOption[] = (facets.types ?? []).map((t) => ({
     value: t.key,

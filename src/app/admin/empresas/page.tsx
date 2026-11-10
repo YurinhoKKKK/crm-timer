@@ -35,6 +35,7 @@ type CollaboratorLink = {
 type CompanyRow = {
   id: string;
   name: string;
+  trade_name: string | null;
   whatsapp_contact_id: string | null;
   whatsapp_group_name: string | null;
   group_id: string | null;
@@ -73,7 +74,7 @@ export default async function EmpresasPage() {
     supabase
       .from("companies")
       .select(
-        "id, name, whatsapp_contact_id, whatsapp_group_name, group_id, company_details(started_on, ends_on)",
+        "id, name, trade_name, whatsapp_contact_id, whatsapp_group_name, group_id, company_details(started_on, ends_on)",
         { count: "exact" }
       )
       .order("name", { ascending: true })
@@ -171,6 +172,7 @@ export default async function EmpresasPage() {
     return {
     id: c.id,
     name: c.name,
+    tradeName: c.trade_name,
     whatsappGroupName: c.whatsapp_group_name,
     whatsappContactId: c.whatsapp_contact_id,
     consultants: (consultantsByCompany.get(c.id) ?? []).map((x) => ({

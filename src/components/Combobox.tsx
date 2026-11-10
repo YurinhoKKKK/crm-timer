@@ -94,7 +94,11 @@ export default function Combobox({
   const filtered = useMemo(() => {
     const q = norm(query.trim());
     if (!q) return options;
-    return options.filter((o) => norm(o.label).includes(q));
+    // Casa o rótulo OU o texto secundário (hint). Nos seletores de empresa o
+    // hint é o nome fantasia, então "aiva" encontra "354. PAGNAN… (Aiva)".
+    return options.filter(
+      (o) => norm(o.label).includes(q) || (o.hint ? norm(o.hint).includes(q) : false)
+    );
   }, [options, query]);
 
   const PANEL_MAX = 320; // altura estimada do painel (busca + lista)

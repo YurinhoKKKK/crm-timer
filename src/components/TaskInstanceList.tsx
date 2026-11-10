@@ -9,7 +9,7 @@ import {
   isOverdue,
 } from "@/lib/status";
 import { formatDuration, formatDue } from "@/lib/format";
-import { ComboFilter } from "@/components/Combobox";
+import { ComboFilter, type ComboOption } from "@/components/Combobox";
 import LabelChips from "@/components/LabelChips";
 import Person from "@/components/Person";
 import TaskDetailLink from "@/components/TaskDetailLink";
@@ -43,6 +43,9 @@ export type TaskInstanceItem = {
   kind: TaskKind | null;
   companyId: string;
   companyName: string;
+  // Nome fantasia da empresa (cinza + busca) — a página que monta a lista o
+  // repassa ao filtro de empresa. Opcional: ausente ⇒ sem subtexto.
+  companyTradeName?: string | null;
   collaboratorId: string;
   collaboratorName: string;
   collaboratorAvatarUrl?: string | null;
@@ -65,7 +68,8 @@ export default function TaskInstanceList({
 }: {
   items: TaskInstanceItem[];
   panel: "consultor" | "colaborador" | "admin";
-  companies: SelectOption[];
+  // ComboFilter: aceita `hint` (nome fantasia em cinza + busca por ele).
+  companies: ComboOption[];
   collaborators?: SelectOption[];
   // Quando true, a query limitou a lista à janela mais recente (Passo 18).
   truncated?: boolean;

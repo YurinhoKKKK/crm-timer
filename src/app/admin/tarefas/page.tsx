@@ -16,9 +16,15 @@ import {
 } from "@/lib/company-groups";
 import { avatarUrl } from "@/lib/avatar";
 import { perfRoute } from "@/lib/perf";
+import { tradeHint } from "@/lib/company-name";
 
-type Option = { id: string; name: string };
-type CompanyRow = { id: string; name: string; group_id: string | null };
+type Option = { id: string; name: string; tradeName?: string | null };
+type CompanyRow = {
+  id: string;
+  name: string;
+  trade_name: string | null;
+  group_id: string | null;
+};
 type PersonOption = { id: string; full_name: string; email: string };
 
 type TemplateRow = {
@@ -63,7 +69,7 @@ export default async function TarefasPage() {
       "companies",
       supabase
         .from("companies")
-        .select("id, name, group_id")
+        .select("id, name, trade_name, group_id")
         .order("name", { ascending: true })
     ),
     perf.timed(
@@ -115,7 +121,11 @@ export default async function TarefasPage() {
   ]);
 
   const companyRows = (companiesData as CompanyRow[]) ?? [];
-  const companies: Option[] = companyRows.map((c) => ({ id: c.id, name: c.name }));
+  const companies: Option[] = companyRows.map((c) => ({
+    id: c.id,
+    name: c.name,
+    tradeName: c.trade_name,
+  }));
   // Empresa → nome do grupo PARADO (alimenta a faixa + confirmação do NewTaskForm).
   const groupByCompany = new Map<string, string | null>();
   for (const c of companyRows) groupByCompany.set(c.id, resolveCompanyGroupId(c));
@@ -209,7 +219,11 @@ export default async function TarefasPage() {
     assignments: linksByStandard.get(s.id) ?? [],
   }));
 
-  const companyOptions = companies.map((c) => ({ id: c.id, name: c.name }));
+  const companyOptions = companies.map((c) => ({
+    id: c.id,
+    name: c.name,
+    tradeName: c.tradeName,
+  }));
 
   return (
     <AppShell
@@ -266,7 +280,11 @@ export default async function TarefasPage() {
             ) : (
               <TaskTemplateList
                 templates={templates}
-                companies={companies.map((c) => ({ value: c.id, label: c.name }))}
+                companies={companies.map((c) => ({
+                  value: c.id,
+                  label: c.name,
+                  hint: tradeHint(c.name, c.tradeName) ?? undefined,
+                }))}
                 collaborators={collaborators.map((p) => ({
                   value: p.id,
                   label: p.full_name || p.email,

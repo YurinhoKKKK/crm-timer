@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { History } from "lucide-react";
-import { FilterBar, SearchBox, EmptyState, norm } from "@/components/ListControls";
+import { FilterBar, SearchBox, EmptyState } from "@/components/ListControls";
+import { matchesCompany, tradeHint } from "@/lib/company-name";
 import GroupSection from "@/components/company-groups/GroupSection";
 import { groupCompanies, type CompanyGroup } from "@/lib/company-groups";
 import AnchoredPopover from "@/components/AnchoredPopover";
@@ -150,6 +151,7 @@ function StatusChip({ status }: { status: CsNpsStatus | null }) {
 
 type CellCtx = {
   userId: string; // usuário atual (autor das atualizações do CS).
+  tradeByCompany: Record<string, string | null>; // nome fantasia por empresa (exibição em cinza)
   onOpenCompany: (id: string) => void;
   openingId: string | null;
   setCompanyNps: (row: CsRow, status: CsNpsStatus | null) => void;
@@ -182,6 +184,11 @@ function EmpresaCell({ row, ctx }: { row: CsRow; ctx: CellCtx }) {
         <span className="line-clamp-2 font-medium text-fg transition group-hover/co:text-risd">
           {row.name}
         </span>
+        {tradeHint(row.name, ctx.tradeByCompany[row.id]) && (
+          <span className="block truncate text-xs text-fg-subtle">
+            {tradeHint(row.name, ctx.tradeByCompany[row.id])}
+          </span>
+        )}
         {ctx.openingId === row.id && (
           <span className="mt-0.5 block text-xs text-fg-subtle">Abrindo…</span>
         )}
@@ -718,12 +725,14 @@ function CsSection({
 export default function CsBoard({
   companies,
   groups,
+  tradeByCompany,
   userId,
   alertaId,
   riscoId,
 }: {
   companies: CsRow[];
   groups: CompanyGroup[];
+  tradeByCompany: Record<string, string | null>;
   userId: string;
   alertaId: string | null;
   riscoId: string | null;
@@ -877,10 +886,10 @@ export default function CsBoard({
   }
 
   const filtered = useMemo(() => {
-    const q = norm(search.trim());
+    const q = search.trim();
     if (!q) return rows;
-    return rows.filter((c) => norm(c.name).includes(q));
-  }, [rows, search]);
+    return rows.filter((c) => matchesCompany(q, c.name, tradeByCompany[c.id]));
+  }, [rows, search, tradeByCompany]);
 
   const sections = useMemo(() => groupCompanies(filtered, groups), [filtered, groups]);
   const visibleSections = filtersActive
@@ -889,6 +898,7 @@ export default function CsBoard({
 
   const ctx: CellCtx = {
     userId,
+    tradeByCompany,
     onOpenCompany: openCompany,
     openingId,
     setCompanyNps: doSetCompanyNps,

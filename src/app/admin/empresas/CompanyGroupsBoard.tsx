@@ -25,6 +25,7 @@ import {
   type CompanyGroup,
 } from "@/lib/company-groups";
 import GroupSectionShell from "@/components/company-groups/GroupSection";
+import { matchesCompany, tradeHint } from "@/lib/company-name";
 import GroupDialog from "./GroupDialog";
 import ChurnReasonDialog from "./ChurnReasonDialog";
 import LabelManager from "./LabelManager";
@@ -40,6 +41,7 @@ import {
 export type CompanyItem = {
   id: string;
   name: string;
+  tradeName: string | null; // nome fantasia (companies.trade_name)
   whatsappGroupName: string | null;
   whatsappContactId: string | null;
   consultants: { id: string; name: string; avatarUrl?: string | null }[];
@@ -161,7 +163,7 @@ export default function CompanyGroupsBoard({
   const filtered = useMemo(() => {
     const q = norm(search.trim());
     return items.filter((c) => {
-      if (q && !norm(c.name).includes(q)) return false;
+      if (q && !matchesCompany(q, c.name, c.tradeName)) return false;
       if (consultantId && !c.consultants.some((x) => x.id === consultantId))
         return false;
       if (labelFilter.size > 0) {
@@ -815,6 +817,12 @@ function CompanyRow({
           <LabelChips labels={company.labels} />
           <NewClientChip startedOn={company.startedOn} />
         </div>
+        {/* Nome fantasia em cinza, abaixo do nome. */}
+        {tradeHint(company.name, company.tradeName) && (
+          <span className="block text-xs text-fg-subtle truncate">
+            {tradeHint(company.name, company.tradeName)}
+          </span>
+        )}
         {company.whatsappGroupName || company.whatsappContactId ? (
           <span className="mt-1 block text-sm text-fg-muted">
             WhatsApp: {company.whatsappGroupName ?? "(sem nome)"}

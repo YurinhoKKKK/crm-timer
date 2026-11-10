@@ -87,6 +87,17 @@ export default async function ColaboradorPage() {
     companies.map((c) => c.id)
   );
 
+  // Mapa lateral id→nome fantasia (mesma RLS do usuário); a RPC
+  // collaborator_portfolio não devolve trade_name, então o grid recebe o fantasia
+  // por aqui (campo tradeName dos itens → busca/exibição em cinza no grid).
+  const { data: tradeRows } = await supabase.from("companies").select("id, trade_name");
+  const tradeByCompany: Record<string, string | null> = Object.fromEntries(
+    ((tradeRows as { id: string; trade_name: string | null }[] | null) ?? []).map((r) => [
+      r.id,
+      r.trade_name,
+    ])
+  );
+
   return (
     <AppShell
       user={{
@@ -124,6 +135,7 @@ export default async function ColaboradorPage() {
             (c): CompanyCardItem => ({
               id: c.id,
               name: c.name,
+              tradeName: tradeByCompany[c.id] ?? null,
               href: `/colaborador/${c.id}`,
               done: c.done,
               total: c.total,

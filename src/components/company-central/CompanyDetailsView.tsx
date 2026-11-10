@@ -197,6 +197,13 @@ function ReadView({ data }: { data: CompanyDetails }) {
         </Field>
 
         <Field
+          label="Nome fantasia"
+          hint="Usado nas buscas de empresa (além da razão social e do número) e exibido abaixo do nome. O nome/título da empresa não muda."
+        >
+          {data.tradeName ? data.tradeName : <Empty />}
+        </Field>
+
+        <Field
           label="Closer"
           hint="Preenchido automaticamente pelo CRM comercial na criação da empresa. Pode ser corrigido aqui."
         >
@@ -266,6 +273,7 @@ function EditView({
   const [projectModel, setProjectModel] = useState(data.projectModel ?? "");
   const [cadence, setCadence] = useState(data.cadence ?? "");
   const [cnpj, setCnpj] = useState(data.cnpj ? formatCnpj(data.cnpj) : "");
+  const [tradeName, setTradeName] = useState(data.tradeName ?? "");
   const [startedOn, setStartedOn] = useState(data.startedOn ?? "");
   const [endsOn, setEndsOn] = useState(data.endsOn ?? "");
   const [systemUsed, setSystemUsed] = useState(data.systemUsed ?? "");
@@ -320,6 +328,7 @@ function EditView({
     setError(null);
     const res = await saveCompanyDetails(data.companyId, {
       projectModel,
+      tradeName,
       cnpj,
       startedOn,
       endsOn,
@@ -418,6 +427,25 @@ function EditView({
               não tiver.
             </p>
           )}
+        </div>
+
+        <div>
+          <label className={labelClass} htmlFor="cd-trade">
+            Nome fantasia
+          </label>
+          <input
+            id="cd-trade"
+            type="text"
+            value={tradeName}
+            onChange={(e) => setTradeName(e.target.value)}
+            maxLength={200}
+            placeholder="Como a equipe chama o cliente"
+            className={inputClass}
+          />
+          <p className="mt-1 text-xs text-fg-subtle">
+            Entra nas buscas de empresa (junto da razão social e do número) e
+            aparece abaixo do nome. O nome/título da empresa não muda.
+          </p>
         </div>
 
         <div>

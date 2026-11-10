@@ -4,8 +4,9 @@ import type { TaskStatus, TaskKind } from "@/lib/types";
 import TaskInstanceList, {
   type TaskInstanceItem,
 } from "@/components/TaskInstanceList";
-import type { SelectOption } from "@/components/ListControls";
+import type { ComboOption } from "@/components/Combobox";
 import { loadAllLabelsByCompany, type Label } from "@/lib/labels";
+import { tradeHint } from "@/lib/company-name";
 
 type Joined<T> = T | T[] | null;
 
@@ -19,7 +20,7 @@ type InstanceRow = {
   total_seconds: number;
   company_id: string;
   collaborator_id: string;
-  company: Joined<{ name: string }>;
+  company: Joined<{ name: string; trade_name: string | null }>;
   template: Joined<{ kind: TaskKind }>;
 };
 
@@ -34,7 +35,7 @@ function first<T>(value: Joined<T>): T | null {
 const CAP = 300;
 
 const INSTANCE_SELECT =
-  "id, title, status, due_at, task_date, template_id, total_seconds, company_id, collaborator_id, company:companies!task_instances_company_id_fkey(name), template:task_templates!task_instances_template_id_fkey(kind)";
+  "id, title, status, due_at, task_date, template_id, total_seconds, company_id, collaborator_id, company:companies!task_instances_company_id_fkey(name, trade_name), template:task_templates!task_instances_template_id_fkey(kind)";
 
 export default async function ColaboradorTarefasPage() {
   const { supabase, profile } = await guardRole([
@@ -86,12 +87,19 @@ export default async function ColaboradorTarefasPage() {
       kind: first(r.template)?.kind ?? null,
       companyId: r.company_id,
       companyName: company?.name ?? "(empresa removida)",
+      companyTradeName: company?.trade_name ?? null,
       collaboratorId: r.collaborator_id,
       collaboratorName: profile.full_name,
     };
   });
 
-  const companies = dedupe(items.map((i) => [i.companyId, i.companyName]));
+  const companies = dedupeCompanies(
+    items.map((i) => ({
+      id: i.companyId,
+      name: i.companyName,
+      trade: i.companyTradeName ?? null,
+    }))
+  );
 
   const labelsByCompany = Object.fromEntries(labelsMap) as Record<
     string,
@@ -127,13 +135,20 @@ export default async function ColaboradorTarefasPage() {
   );
 }
 
-// Constrói opções de <select> únicas (por id) ordenadas por rótulo.
-function dedupe(pairs: [string, string][]): SelectOption[] {
-  const map = new Map<string, string>();
-  for (const [value, label] of pairs) {
-    if (!map.has(value)) map.set(value, label);
+// Constrói opções únicas (por id) do filtro de empresa, ordenadas por rótulo,
+// carregando o nome fantasia como `hint` (cinza + busca).
+function dedupeCompanies(
+  rows: { id: string; name: string; trade: string | null }[]
+): ComboOption[] {
+  const map = new Map<string, { label: string; trade: string | null }>();
+  for (const r of rows) {
+    if (!map.has(r.id)) map.set(r.id, { label: r.name, trade: r.trade });
   }
   return Array.from(map.entries())
-    .map(([value, label]) => ({ value, label }))
+    .map(([value, { label, trade }]) => ({
+      value,
+      label,
+      hint: tradeHint(label, trade) ?? undefined,
+    }))
     .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
 }

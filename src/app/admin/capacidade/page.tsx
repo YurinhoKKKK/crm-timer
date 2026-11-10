@@ -73,6 +73,16 @@ export default async function CapacidadePage({
 
   const params = (Array.isArray(paramsRes.data) ? paramsRes.data[0] : paramsRes.data) as AtParams | null;
 
+  // Mapa lateral id→nome fantasia (mesma RLS do usuário); as RPCs de atendimento
+  // não devolvem trade_name, então a aba Clientes recebe o fantasia por aqui.
+  const { data: tradeRows } = await supabase.from("companies").select("id, trade_name");
+  const tradeByCompany: Record<string, string | null> = Object.fromEntries(
+    ((tradeRows as { id: string; trade_name: string | null }[] | null) ?? []).map((r) => [
+      r.id,
+      r.trade_name,
+    ])
+  );
+
   return (
     <AppShell
       user={{ name: profile.full_name, role: "admin", avatarUrl: profile.avatarUrl }}
@@ -93,6 +103,7 @@ export default async function CapacidadePage({
         summary={(summaryRes.data as SummaryRow[]) ?? []}
         clients={(clientsRes.data as ClientRow[]) ?? []}
         people={(peopleRes.data as PersonRow[]) ?? []}
+        tradeByCompany={tradeByCompany}
       />
     </AppShell>
   );

@@ -56,6 +56,16 @@ export default async function AcompanhamentoPage({
       : Promise.resolve([] as UnlinkedCompany[]),
   ]);
 
+  // Mapa lateral id→nome fantasia (mesma RLS do usuário); o board vem da RPC
+  // loadFollowupBoard, que não devolve trade_name.
+  const { data: tradeRows } = await supabase.from("companies").select("id, trade_name");
+  const tradeByCompany: Record<string, string | null> = Object.fromEntries(
+    ((tradeRows as { id: string; trade_name: string | null }[] | null) ?? []).map((r) => [
+      r.id,
+      r.trade_name,
+    ])
+  );
+
   return (
     <AppShell
       user={{
@@ -71,6 +81,7 @@ export default async function AcompanhamentoPage({
         tab={tab}
         board={boardRes.rows}
         boardError={boardRes.error}
+        tradeByCompany={tradeByCompany}
         lastSync={lastSync}
         month={month}
         monthOptions={monthOptions()}

@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase-browser";
 import { syncMentions } from "@/lib/mention-actions";
 import type { NoteAttachmentMeta } from "@/lib/notes";
 import type { ReachableCompany } from "@/lib/meetings";
+import { tradeHint } from "@/lib/company-name";
 import Combobox from "@/components/Combobox";
 import {
   URGENCY_ORDER,
@@ -130,7 +131,12 @@ export default function TicketForm({
             id="ticket-company"
             value={companyId}
             onChange={setCompanyId}
-            options={companies.map((c) => ({ value: c.id, label: c.name }))}
+            options={companies.map((c) => ({
+              value: c.id,
+              label: c.name,
+              // nome fantasia em cinza (null quando vazio ou igual ao nome)
+              hint: tradeHint(c.name, c.tradeName) ?? undefined,
+            }))}
             ariaLabel="Empresa do chamado"
             searchPlaceholder="Buscar empresa…"
           />

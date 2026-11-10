@@ -19,7 +19,7 @@ import {
   norm,
   type SelectOption,
 } from "@/components/ListControls";
-import { ComboFilter } from "@/components/Combobox";
+import { ComboFilter, type ComboOption } from "@/components/Combobox";
 import { inputClass, labelClass, btnPrimary, btnSecondary } from "@/lib/ui";
 import TaskDetailLink from "@/components/TaskDetailLink";
 import Avatar from "@/components/Avatar";
@@ -100,7 +100,7 @@ export default function CollaboratorTaskList({
   collaboratorId: string;
   start: string | null;
   end: string | null;
-  companies: SelectOption[];
+  companies: ComboOption[]; // nome fantasia no hint (busca/exibição em cinza)
   types: TypeOption[];
   creators: CreatorOption[];
   initialTasks: CollaboratorTask[];

@@ -56,6 +56,16 @@ export default async function TrafegoPage() {
 
   const rpcRows = (rpc.data as RpcRow[] | null) ?? [];
 
+  // Mapa lateral id→nome fantasia (mesma RLS do usuário); traffic_board não
+  // devolve trade_name, então a busca/exibição do fantasia vem daqui.
+  const { data: tradeRows } = await supabase.from("companies").select("id, trade_name");
+  const tradeByCompany: Record<string, string | null> = Object.fromEntries(
+    ((tradeRows as { id: string; trade_name: string | null }[] | null) ?? []).map((r) => [
+      r.id,
+      r.trade_name,
+    ])
+  );
+
   const companies: TrafficBoardRow[] = rpcRows.map((r) => ({
     id: r.id,
     name: r.name,
@@ -113,6 +123,7 @@ export default async function TrafegoPage() {
       <TrafficBoard
         companies={companies}
         groups={trafficGroups.map(asCompanyGroup)}
+        tradeByCompany={tradeByCompany}
         missingCorrespondence={Array.from(missing).sort((a, b) =>
           a.localeCompare(b, "pt-BR")
         )}

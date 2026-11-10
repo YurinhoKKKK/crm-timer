@@ -6,6 +6,7 @@ import type { TaskTemplate } from "@/lib/types";
 import { updateTaskTemplate, type TodayGenStatus } from "../../actions";
 import { categoryLabel } from "@/lib/task-category";
 import Combobox from "@/components/Combobox";
+import { tradeHint } from "@/lib/company-name";
 import { DateField } from "@/components/DateField";
 import ListingFields, {
   emptyListingForm,
@@ -19,7 +20,7 @@ import {
   chipClass,
 } from "@/lib/ui";
 
-type Option = { id: string; name: string };
+type Option = { id: string; name: string; tradeName?: string | null };
 type PersonOption = { id: string; full_name: string; email: string };
 type Status = "idle" | "saving" | "saved" | "error";
 type Kind = "unica" | "diaria";
@@ -262,7 +263,11 @@ export default function TaskEditor({
             id="t-company"
             value={companyId}
             onChange={setCompanyId}
-            options={companies.map((c) => ({ value: c.id, label: c.name }))}
+            options={companies.map((c) => ({
+              value: c.id,
+              label: c.name,
+              hint: tradeHint(c.name, c.tradeName) ?? undefined,
+            }))}
             ariaLabel="Empresa"
             searchPlaceholder="Buscar empresa…"
           />

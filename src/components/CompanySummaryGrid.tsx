@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { SearchBox, EmptyState, norm } from "@/components/ListControls";
+import { matchesCompany, tradeHint } from "@/lib/company-name";
 import LabelChips from "@/components/LabelChips";
 import NewClientChip from "@/components/NewClientChip";
 import type { Label } from "@/lib/labels";
@@ -32,6 +33,7 @@ function companyNumberOf(name: string): string | null {
 export type CompanyCardItem = {
   id: string;
   name: string;
+  tradeName?: string | null; // nome fantasia (companies.trade_name)
   href: string;
   done: number;
   total: number;
@@ -191,7 +193,7 @@ export default function CompanySummaryGrid({
 
   const filtered = useMemo(() => {
     const q = norm(query.trim());
-    let list = q ? items.filter((c) => norm(c.name).includes(q)) : items;
+    let list = q ? items.filter((c) => matchesCompany(q, c.name, c.tradeName)) : items;
     if (attentionOnly) list = list.filter(needsAttention);
     return list;
   }, [items, query, attentionOnly]);
@@ -402,6 +404,12 @@ function CompanyRow({
         >
           {c.name}
         </h3>
+        {/* Nome fantasia em cinza, abaixo do nome. */}
+        {tradeHint(c.name, c.tradeName) && (
+          <span className="block text-xs text-fg-subtle truncate">
+            {tradeHint(c.name, c.tradeName)}
+          </span>
+        )}
         {/* Responsáveis (consultores + colaboradores) — fica ACIMA do overlay
             (z-10) para os tooltips funcionarem sem navegar. */}
         {((c.consultants?.length ?? 0) > 0 || (c.collaborators?.length ?? 0) > 0) && (

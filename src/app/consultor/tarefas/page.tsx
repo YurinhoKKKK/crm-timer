@@ -5,8 +5,10 @@ import TaskInstanceList, {
   type TaskInstanceItem,
 } from "@/components/TaskInstanceList";
 import type { SelectOption } from "@/components/ListControls";
+import type { ComboOption } from "@/components/Combobox";
 import { loadAllLabelsByCompany, type Label } from "@/lib/labels";
 import { avatarUrl } from "@/lib/avatar";
+import { tradeHint } from "@/lib/company-name";
 
 type Joined<T> = T | T[] | null;
 
@@ -20,7 +22,7 @@ type InstanceRow = {
   total_seconds: number;
   company_id: string;
   collaborator_id: string;
-  company: Joined<{ name: string }>;
+  company: Joined<{ name: string; trade_name: string | null }>;
   collaborator: Joined<{ full_name: string; email: string; avatar_path: string | null }>;
   template: Joined<{ kind: TaskKind }>;
 };
@@ -37,7 +39,7 @@ function first<T>(value: Joined<T>): T | null {
 const CAP = 300;
 
 const INSTANCE_SELECT =
-  "id, title, status, due_at, task_date, template_id, total_seconds, company_id, collaborator_id, company:companies!task_instances_company_id_fkey(name), collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email, avatar_path), template:task_templates!task_instances_template_id_fkey(kind)";
+  "id, title, status, due_at, task_date, template_id, total_seconds, company_id, collaborator_id, company:companies!task_instances_company_id_fkey(name, trade_name), collaborator:profiles!task_instances_collaborator_id_fkey(full_name, email, avatar_path), template:task_templates!task_instances_template_id_fkey(kind)";
 
 export default async function ConsultorTarefasPage() {
   const { supabase, profile } = await guardRole(["consultor"]);
@@ -86,6 +88,7 @@ export default async function ConsultorTarefasPage() {
       kind: first(r.template)?.kind ?? null,
       companyId: r.company_id,
       companyName: company?.name ?? "(empresa removida)",
+      companyTradeName: company?.trade_name ?? null,
       collaboratorId: r.collaborator_id,
       collaboratorName:
         collaborator?.full_name || collaborator?.email || "(colaborador removido)",
@@ -94,7 +97,13 @@ export default async function ConsultorTarefasPage() {
   });
 
   // Opções de filtro derivadas das próprias tarefas (apenas o que aparece).
-  const companies = dedupe(items.map((i) => [i.companyId, i.companyName]));
+  const companies = dedupeCompanies(
+    items.map((i) => ({
+      id: i.companyId,
+      name: i.companyName,
+      trade: i.companyTradeName ?? null,
+    }))
+  );
   const collaborators = dedupe(
     items.map((i) => [i.collaboratorId, i.collaboratorName])
   );
@@ -138,5 +147,23 @@ function dedupe(pairs: [string, string][]): SelectOption[] {
   }
   return Array.from(map.entries())
     .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+}
+
+// Igual ao dedupe, mas carrega o nome fantasia como `hint` (cinza + busca) no
+// filtro de empresa.
+function dedupeCompanies(
+  rows: { id: string; name: string; trade: string | null }[]
+): ComboOption[] {
+  const map = new Map<string, { label: string; trade: string | null }>();
+  for (const r of rows) {
+    if (!map.has(r.id)) map.set(r.id, { label: r.name, trade: r.trade });
+  }
+  return Array.from(map.entries())
+    .map(([value, { label, trade }]) => ({
+      value,
+      label,
+      hint: tradeHint(label, trade) ?? undefined,
+    }))
     .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
 }

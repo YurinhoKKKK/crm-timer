@@ -58,6 +58,16 @@ export default async function DesenvolvimentoPage() {
 
   const rpcRows = (rpc.data as RpcRow[] | null) ?? [];
 
+  // Mapa lateral id→nome fantasia (mesma RLS do usuário); a RPC dev_board não
+  // devolve trade_name, então a busca/exibição do fantasia vem daqui.
+  const { data: tradeRows } = await supabase.from("companies").select("id, trade_name");
+  const tradeByCompany: Record<string, string | null> = Object.fromEntries(
+    ((tradeRows as { id: string; trade_name: string | null }[] | null) ?? []).map((r) => [
+      r.id,
+      r.trade_name,
+    ])
+  );
+
   const companies: DevBoardRow[] = rpcRows.map((r) => ({
     id: r.id,
     name: r.name,
@@ -93,6 +103,7 @@ export default async function DesenvolvimentoPage() {
       <DevBoard
         companies={companies}
         groups={devGroups.map(asCompanyGroup)}
+        tradeByCompany={tradeByCompany}
         userId={profile.id}
         canOpenCompany={isAdmin}
       />

@@ -6,6 +6,8 @@ import { avatarUrl } from "@/lib/avatar";
 import { formatDuration, formatDue } from "@/lib/format";
 import { STATUS_META } from "@/lib/status";
 import type { SelectOption } from "@/components/ListControls";
+import type { ComboOption } from "@/components/Combobox";
+import { tradeHint } from "@/lib/company-name";
 import TaskDetailLink from "@/components/TaskDetailLink";
 import CollaboratorTaskList from "./CollaboratorTaskList";
 import RecentActivities from "./RecentActivities";
@@ -167,9 +169,19 @@ export default async function CollaboratorDetailPage({
     types: TypeOption[];
     creators: { id: string; name: string; avatar_path: string | null }[];
   } | null) ?? { companies: [], types: [], creators: [] };
-  const companyOptions: SelectOption[] = (facets.companies ?? []).map((c) => ({
+  // Mapa lateral id→nome fantasia (mesma RLS do usuário); o RPC de facets não
+  // devolve trade_name, então o hint (busca por fantasia) vem daqui.
+  const { data: tradeRows } = await supabase.from("companies").select("id, trade_name");
+  const tradeByCompany: Record<string, string | null> = Object.fromEntries(
+    ((tradeRows as { id: string; trade_name: string | null }[] | null) ?? []).map((r) => [
+      r.id,
+      r.trade_name,
+    ])
+  );
+  const companyOptions: ComboOption[] = (facets.companies ?? []).map((c) => ({
     value: c.id,
     label: c.name,
+    hint: tradeHint(c.name, tradeByCompany[c.id]) ?? undefined,
   }));
   const typeOptions: TypeOption[] = facets.types ?? [];
   const creatorOptions: CreatorOption[] = (facets.creators ?? []).map((c) => ({

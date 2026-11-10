@@ -66,6 +66,16 @@ export default async function SucessoDoClientePage() {
     }
   }
 
+  // Mapa lateral id→nome fantasia (mesma RLS do usuário); cs_board não devolve
+  // trade_name, então a busca/exibição do fantasia vem daqui.
+  const { data: tradeRows } = await supabase.from("companies").select("id, trade_name");
+  const tradeByCompany: Record<string, string | null> = Object.fromEntries(
+    ((tradeRows as { id: string; trade_name: string | null }[] | null) ?? []).map((r) => [
+      r.id,
+      r.trade_name,
+    ])
+  );
+
   const rows = (rpc.data as RpcRow[] | null) ?? [];
   const companies: CsRow[] = rows.map((r) => {
     const set = byCompany.get(r.id);
@@ -103,6 +113,7 @@ export default async function SucessoDoClientePage() {
       <CsBoard
         companies={companies}
         groups={groups}
+        tradeByCompany={tradeByCompany}
         userId={profile.id}
         alertaId={alertaId}
         riscoId={riscoId}

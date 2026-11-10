@@ -71,6 +71,7 @@ export async function fetchCloserNames(): Promise<string[]> {
 
 export type SaveDetailsInput = {
   projectModel: string; // "" | ProjectModel
+  tradeName: string; // "" | nome fantasia. Vazio → null.
   cnpj: string; // "" | com ou sem máscara (normalizado aqui p/ dígitos)
   startedOn: string; // "" | "YYYY-MM-DD"
   endsOn: string;
@@ -144,13 +145,23 @@ export async function saveCompanyDetails(
 
   const services = input.services.filter((s) => SERVICE_VALUES.has(s));
 
-  // CNPJ mora em companies (não em company_details). Gravamos ANTES de salvar o
-  // resto: se colidir com outra empresa (índice único) ou for barrado pelo CHECK
-  // do banco, paramos aqui sem gravar as demais informações. RLS (companies:
-  // is_admin) é a fronteira real — não-admin recebe erro e nada é salvo.
+  // Nome fantasia: trim + teto de 200 (mesmo do intake). Vazio → null.
+  const trade = input.tradeName.trim();
+  if (trade.length > CLOSER_CAP) {
+    return {
+      error: `O Nome fantasia pode ter no máximo ${CLOSER_CAP} caracteres.`,
+    };
+  }
+  const tradeValue = trade === "" ? null : trade;
+
+  // CNPJ e Nome fantasia moram em companies (não em company_details). Gravamos
+  // ANTES de salvar o resto: se o CNPJ colidir com outra empresa (índice único)
+  // ou for barrado pelo CHECK do banco, paramos aqui sem gravar as demais
+  // informações. RLS (companies: is_admin) é a fronteira real — não-admin recebe
+  // erro e nada é salvo. A troca de trade_name dispara o evento nome_fantasia_alterado.
   const { error: cnpjError } = await supabase
     .from("companies")
-    .update({ cnpj: cnpjValue })
+    .update({ cnpj: cnpjValue, trade_name: tradeValue })
     .eq("id", companyId);
   if (cnpjError) {
     // 23505 = unique_violation (CNPJ já usado por outra empresa).

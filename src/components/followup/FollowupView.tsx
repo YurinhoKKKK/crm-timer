@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { avatarUrl } from "@/lib/avatar";
 import ResponsibleChips from "@/components/ResponsibleChips";
-import { SearchBox, FilterBar, ShowMore, usePaged, norm } from "@/components/ListControls";
+import { SearchBox, FilterBar, ShowMore, usePaged } from "@/components/ListControls";
+import { matchesCompany, tradeHint } from "@/lib/company-name";
 import { type BoardRow, type DayColor, type MonthOption, FOLLOWUP_PERIOD_CONFIG } from "@/lib/followup";
 import { resolvePeriodValue } from "@/lib/period";
 import { FAROL_UI } from "@/components/followup/FarolBadge";
@@ -95,6 +96,7 @@ export default function FollowupView({
   rows,
   role,
   error,
+  tradeByCompany,
   month,
   monthOptions,
   consultantId,
@@ -107,6 +109,7 @@ export default function FollowupView({
   rows: BoardRow[];
   role: "admin" | "consultor";
   error?: string | null;
+  tradeByCompany: Record<string, string | null>;
   month: string;
   monthOptions: MonthOption[];
   consultantId: string;
@@ -186,10 +189,12 @@ export default function FollowupView({
   );
 
   const base = useMemo(() => {
-    const q = norm(query.trim());
+    const q = query.trim();
     if (!q) return byRecovering;
-    return byRecovering.filter((r) => norm(r.companyName).includes(q));
-  }, [byRecovering, query]);
+    return byRecovering.filter((r) =>
+      matchesCompany(q, r.companyName, tradeByCompany[r.companyId])
+    );
+  }, [byRecovering, query, tradeByCompany]);
 
   const bands = useMemo(() => {
     const b = { verde: 0, amarelo: 0, vermelho: 0, aguardando: 0 };
@@ -326,7 +331,12 @@ export default function FollowupView({
         <>
           <ul className="space-y-2.5">
             {visible.map((r) => (
-              <CompanyRow key={r.companyId} row={r} onOpen={() => setSelected(r)} />
+              <CompanyRow
+                key={r.companyId}
+                row={r}
+                trade={tradeByCompany[r.companyId]}
+                onOpen={() => setSelected(r)}
+              />
             ))}
           </ul>
           {hasMore && <ShowMore remaining={remaining} onClick={showMore} />}
@@ -394,10 +404,19 @@ function statusText(row: BoardRow): string | null {
   return null;
 }
 
-function CompanyRow({ row, onOpen }: { row: BoardRow; onOpen: () => void }) {
+function CompanyRow({
+  row,
+  trade,
+  onOpen,
+}: {
+  row: BoardRow;
+  trade?: string | null;
+  onOpen: () => void;
+}) {
   const ui = FAROL_UI[row.color];
   const summary = periodSummary(row);
   const status = statusText(row);
+  const hint = tradeHint(row.companyName, trade);
 
   return (
     <li>
@@ -410,7 +429,10 @@ function CompanyRow({ row, onOpen }: { row: BoardRow; onOpen: () => void }) {
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="font-medium text-fg group-hover:text-risd">{row.companyName}</span>
+            <span className="min-w-0">
+              <span className="block font-medium text-fg group-hover:text-risd">{row.companyName}</span>
+              {hint && <span className="block truncate text-xs text-fg-subtle">{hint}</span>}
+            </span>
             <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
               <span
                 title={cellTooltip(row)}

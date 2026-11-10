@@ -51,6 +51,7 @@ export default function FollowupTabs({
   tab,
   board,
   boardError,
+  tradeByCompany,
   lastSync,
   month,
   monthOptions,
@@ -62,6 +63,7 @@ export default function FollowupTabs({
   tab: FollowupTab;
   board: BoardRow[];
   boardError: string | null;
+  tradeByCompany: Record<string, string | null>;
   lastSync: string | null;
   month: string;
   monthOptions: MonthOption[];
@@ -132,6 +134,7 @@ export default function FollowupTabs({
           rows={board}
           role={role}
           error={boardError}
+          tradeByCompany={tradeByCompany}
           month={month}
           monthOptions={monthOptions}
           consultantId={consultantId}

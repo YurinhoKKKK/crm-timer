@@ -14,7 +14,7 @@ import {
   norm,
   type SelectOption,
 } from "@/components/ListControls";
-import { ComboFilter } from "@/components/Combobox";
+import { ComboFilter, type ComboOption } from "@/components/Combobox";
 import LabelChips from "@/components/LabelChips";
 import Person from "@/components/Person";
 import type { Label } from "@/lib/labels";
@@ -74,7 +74,8 @@ export default function TaskTemplateList({
   labelsByCompany,
 }: {
   templates: TemplateItem[];
-  companies: SelectOption[];
+  // ComboFilter: aceita `hint` (nome fantasia em cinza + busca por ele).
+  companies: ComboOption[];
   collaborators: SelectOption[];
   // Etiquetas herdadas da empresa (company_id -> etiquetas).
   labelsByCompany?: Record<string, Label[]>;

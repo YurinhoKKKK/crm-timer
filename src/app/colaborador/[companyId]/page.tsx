@@ -10,11 +10,13 @@ import { loadCompanyNotes } from "@/lib/notes";
 import { btnSecondary } from "@/lib/ui";
 import PausedCompanyBanner from "@/components/company-groups/PausedCompanyBanner";
 import TaskList, { type TaskItem } from "./TaskList";
+import { tradeHint } from "@/lib/company-name";
 
 type CompanyGroupEmbed = { name: string; kind: string };
 type CompanyRow = {
   id: string;
   name: string;
+  trade_name: string | null;
   group: CompanyGroupEmbed | CompanyGroupEmbed[] | null;
 };
 
@@ -54,7 +56,7 @@ export default async function ColaboradorEmpresaPage({
   ] = await Promise.all([
     supabase
       .from("companies")
-      .select("id, name, group:company_groups(name, kind)")
+      .select("id, name, trade_name, group:company_groups(name, kind)")
       .eq("id", companyId)
       .maybeSingle(),
     scoped()
@@ -126,6 +128,7 @@ export default async function ColaboradorEmpresaPage({
         avatarUrl: profile.avatarUrl,
       }}
       title={company.name}
+      subtitle={tradeHint(company.name, company.trade_name) ?? undefined}
       back={{ href: "/colaborador", label: "Minhas empresas" }}
     >
       {pausedGroupName && (

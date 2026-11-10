@@ -9,7 +9,8 @@ import { resolvePeople } from "@/lib/creator";
 import TaskEditor from "./TaskEditor";
 import DeleteTaskButton from "./DeleteTaskButton";
 
-type Option = { id: string; name: string };
+type Option = { id: string; name: string; tradeName?: string | null };
+type CompanyRow = { id: string; name: string; trade_name: string | null };
 type PersonOption = { id: string; full_name: string; email: string };
 
 export default async function TarefaDetailPage({
@@ -33,7 +34,10 @@ export default async function TarefaDetailPage({
       )
       .eq("id", id)
       .maybeSingle(),
-    supabase.from("companies").select("id, name").order("name", { ascending: true }),
+    supabase
+      .from("companies")
+      .select("id, name, trade_name")
+      .order("name", { ascending: true }),
     supabase
       .from("profiles")
       .select("id, full_name, email")
@@ -47,7 +51,11 @@ export default async function TarefaDetailPage({
   const template = templateData as TaskTemplate | null;
   if (!template) notFound();
 
-  const companies = (companiesData as Option[]) ?? [];
+  const companies: Option[] = ((companiesData as CompanyRow[]) ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    tradeName: c.trade_name,
+  }));
   const collaborators = (collaboratorsData as PersonOption[]) ?? [];
 
   // Marcas da listagem (se for esse o tipo) para pré-preencher o editor.

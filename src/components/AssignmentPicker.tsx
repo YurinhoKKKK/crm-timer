@@ -13,7 +13,15 @@ import Combobox from "@/components/Combobox";
 // salvar. Search e "selecionar todas" cuidam da escala (muitas empresas/padrões).
 
 export type PersonOption = { id: string; full_name: string; email: string };
-export type PickerItem = { id: string; label: string; badge?: ReactNode };
+// `hint`: texto secundário em cinza (ex.: nome fantasia da empresa). Quando
+// presente, também entra na busca — o pai o calcula (tradeHint) e deixa cair
+// fora quando vazio/igual ao nome.
+export type PickerItem = {
+  id: string;
+  label: string;
+  hint?: string;
+  badge?: ReactNode;
+};
 export type PickerRow = { enabled: boolean; collaboratorId: string };
 
 // A partir de quantos itens vale a pena mostrar busca / rolagem interna.
@@ -67,7 +75,14 @@ export default function AssignmentPicker({
   const autoFill = soleResponsibleId ?? defaultResp;
 
   const q = norm(query.trim());
-  const filtered = q ? items.filter((it) => norm(it.label).includes(q)) : items;
+  // Casa o rótulo OU o texto secundário (nome fantasia), sem acento/caixa.
+  const filtered = q
+    ? items.filter(
+        (it) =>
+          norm(it.label).includes(q) ||
+          (it.hint ? norm(it.hint).includes(q) : false)
+      )
+    : items;
 
   function getRow(id: string): PickerRow {
     return rows.get(id) ?? { enabled: false, collaboratorId: "" };
@@ -203,7 +218,16 @@ export default function AssignmentPicker({
                     onChange={(e) => toggleOne(it.id, e.target.checked)}
                   />
                   <span className="flex min-w-0 flex-wrap items-center gap-2">
-                    <span className="font-medium text-fg">{it.label}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium text-fg">
+                        {it.label}
+                      </span>
+                      {it.hint && (
+                        <span className="block truncate text-xs text-fg-subtle">
+                          {it.hint}
+                        </span>
+                      )}
+                    </span>
                     {it.badge}
                   </span>
                 </label>

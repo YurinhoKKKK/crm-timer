@@ -128,7 +128,11 @@ export type DirectoryUser = {
   role: string;
 };
 
-export type ReachableCompany = { id: string; name: string };
+export type ReachableCompany = {
+  id: string;
+  name: string;
+  tradeName?: string | null; // nome fantasia (companies.trade_name), p/ o hint do seletor
+};
 
 // Contexto que a lista precisa para decidir e explicar as AÇÕES por reunião
 // (editar/excluir só do criador; enviar ao Google; faxina do admin). Montado no
@@ -386,11 +390,14 @@ export async function loadReachableCompanies(
 ): Promise<ReachableCompany[]> {
   const { data } = await supabase
     .from("companies")
-    .select("id, name")
+    .select("id, name, trade_name")
     .order("name");
-  return ((data as { id: string; name: string }[]) ?? []).map((c) => ({
+  return (
+    (data as { id: string; name: string; trade_name: string | null }[]) ?? []
+  ).map((c) => ({
     id: c.id,
     name: c.name,
+    tradeName: c.trade_name,
   }));
 }
 

@@ -6,6 +6,7 @@ import { createTaskTemplate } from "../actions";
 import type { TaskCategory } from "@/lib/types";
 import { TASK_CATEGORIES } from "@/lib/task-category";
 import Combobox from "@/components/Combobox";
+import { tradeHint } from "@/lib/company-name";
 import { DateField } from "@/components/DateField";
 import { todayBRT, shiftIso } from "@/lib/date-picker";
 import ConfirmDialog from "@/components/ConfirmDialog";
@@ -23,7 +24,9 @@ import {
   chipClass,
 } from "@/lib/ui";
 
-type Option = { id: string; name: string };
+// Nome fantasia (tradeName) é opcional: o seletor de empresa mostra-o em cinza e
+// permite buscar por ele. Callers sem o campo seguem funcionando (sem subtexto).
+type Option = { id: string; name: string; tradeName?: string | null };
 type PersonOption = { id: string; full_name: string; email: string };
 
 // Tipo (única/diária) — só o ADMIN escolhe. A listagem deixou de ser um "tipo":
@@ -364,7 +367,11 @@ export default function NewTaskForm({
                   id="task-company"
                   value={companyId}
                   onChange={setCompanyId}
-                  options={companies.map((c) => ({ value: c.id, label: c.name }))}
+                  options={companies.map((c) => ({
+                    value: c.id,
+                    label: c.name,
+                    hint: tradeHint(c.name, c.tradeName) ?? undefined,
+                  }))}
                   ariaLabel="Empresa"
                   searchPlaceholder="Buscar empresa…"
                 />

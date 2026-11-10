@@ -26,6 +26,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import Lightbox from "@/components/Lightbox";
 import Modal from "@/components/Modal";
 import type { ReachableCompany } from "@/lib/meetings";
+import { tradeHint } from "@/lib/company-name";
 import { Building2 } from "lucide-react";
 import ReplyThread, { classifyReplyError } from "@/components/replies/ReplyThread";
 import {
@@ -607,6 +608,8 @@ function DetailModal({
                     options={companies.map((c) => ({
                       value: c.id,
                       label: c.name,
+                      // nome fantasia em cinza (null quando vazio ou igual ao nome)
+                      hint: tradeHint(c.name, c.tradeName) ?? undefined,
                     }))}
                     ariaLabel="Empresa do chamado"
                     searchPlaceholder="Buscar empresa…"

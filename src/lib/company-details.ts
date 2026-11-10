@@ -70,6 +70,7 @@ export const CADENCE_LABEL: Record<Cadence, string> = Object.fromEntries(
 
 export type CompanyDetails = {
   projectModel: ProjectModel | null;
+  tradeName: string | null; // Nome fantasia (companies.trade_name); não é o nome/título
   cnpj: string | null; // SÓ os 14 dígitos (sem máscara); formatação é de exibição
   startedOn: string | null; // "YYYY-MM-DD" (data pura)
   endsOn: string | null;
@@ -114,7 +115,7 @@ export async function loadCompanyDetails(
       .eq("company_id", companyId),
     supabase
       .from("companies")
-      .select("cnpj")
+      .select("cnpj, trade_name")
       .eq("id", companyId)
       .maybeSingle(),
   ]);
@@ -146,11 +147,14 @@ export async function loadCompanyDetails(
     updatedByName = people.get(d.updated_by)?.name ?? null;
   }
 
-  const cnpj =
-    (companyRes.data as { cnpj: string | null } | null)?.cnpj ?? null;
+  const companyRow =
+    (companyRes.data as { cnpj: string | null; trade_name: string | null } | null) ??
+    null;
+  const cnpj = companyRow?.cnpj ?? null;
 
   return {
     projectModel: d?.project_model ?? null,
+    tradeName: companyRow?.trade_name ?? null,
     cnpj,
     startedOn: d?.started_on ?? null,
     endsOn: d?.ends_on ?? null,

@@ -10,7 +10,8 @@ import {
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { History, Move, Pause, Play } from "lucide-react";
-import { FilterBar, SearchBox, EmptyState, norm } from "@/components/ListControls";
+import { FilterBar, SearchBox, EmptyState } from "@/components/ListControls";
+import { matchesCompany, tradeHint } from "@/lib/company-name";
 import GroupSection from "@/components/company-groups/GroupSection";
 import BoardGrid, { type BoardColumn } from "@/components/board/BoardGrid";
 import {
@@ -86,6 +87,7 @@ const NOTE_GUTTER_PX = 56;
 // --- Contexto de célula ----------------------------------------------------- //
 type CellCtx = {
   groups: CompanyGroup[];
+  tradeByCompany: Record<string, string | null>; // nome fantasia por empresa (exibição em cinza)
   userId: string; // visitante (autor das Atualizações escritas pelo balão)
   canOpenCompany: boolean; // admin abre a central da empresa
   autoOpenNotesId: string | null; // empresa cujo balão abre sozinho (?empresa=)
@@ -224,6 +226,11 @@ function EmpresaCell({ row, ctx }: { row: DevBoardRow; ctx: CellCtx }) {
         ) : (
           <span className="line-clamp-2 font-medium text-fg" title={row.name}>
             {row.name}
+          </span>
+        )}
+        {tradeHint(row.name, ctx.tradeByCompany[row.id]) && (
+          <span className="block truncate text-xs text-fg-subtle">
+            {tradeHint(row.name, ctx.tradeByCompany[row.id])}
           </span>
         )}
         {row.labels.length > 0 && (
@@ -647,11 +654,13 @@ function DevSection({
 export default function DevBoard({
   companies,
   groups,
+  tradeByCompany,
   userId,
   canOpenCompany,
 }: {
   companies: DevBoardRow[];
   groups: CompanyGroup[]; // os 6 grupos do Desenvolvimento (adaptados a CompanyGroup)
+  tradeByCompany: Record<string, string | null>; // nome fantasia por empresa
   userId: string; // visitante (autor das Atualizações escritas pelo balão)
   canOpenCompany: boolean; // admin abre a central da empresa pelo nome
 }) {
@@ -800,10 +809,10 @@ export default function DevBoard({
   }
 
   const filtered = useMemo(() => {
-    const q = norm(search.trim());
+    const q = search.trim();
     if (!q) return rows;
-    return rows.filter((c) => norm(c.name).includes(q));
-  }, [rows, search]);
+    return rows.filter((c) => matchesCompany(q, c.name, tradeByCompany[c.id]));
+  }, [rows, search, tradeByCompany]);
 
   const sections = useMemo(() => groupCompanies(filtered, groups), [filtered, groups]);
 
@@ -817,6 +826,7 @@ export default function DevBoard({
 
   const ctx: CellCtx = {
     groups,
+    tradeByCompany,
     userId,
     canOpenCompany,
     autoOpenNotesId,

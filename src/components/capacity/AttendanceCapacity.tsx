@@ -7,6 +7,7 @@ import PeriodPicker from "@/components/PeriodPicker";
 import { type PeriodValue } from "@/lib/period";
 import { ATTENDANCE_PERIOD_CONFIG } from "@/lib/capacity";
 import { loadPersonClients, loadClientPeople } from "@/app/admin/capacidade/attendance-actions";
+import { matchesCompany, tradeHint } from "@/lib/company-name";
 
 // Seção "Atendimento por WhatsApp" da Capacidade (admin-only), em três abas: Resumo,
 // Pessoas, Clientes. Só apresentação — os números vêm das RPCs (etapa 3). Regra: a
@@ -52,10 +53,11 @@ function modelLabel(m: string | null) {
 type Tab = "resumo" | "pessoas" | "clientes";
 
 export default function AttendanceCapacity({
-  period, params, summary, clients, people,
+  period, params, summary, clients, people, tradeByCompany,
 }: {
   period: PeriodValue; params: AtParams | null;
   summary: SummaryRow[]; clients: ClientRow[]; people: PersonRow[];
+  tradeByCompany: Record<string, string | null>;
 }) {
   const [tab, setTab] = useState<Tab>("resumo");
 
@@ -114,7 +116,7 @@ export default function AttendanceCapacity({
         />
       )}
       {tab === "pessoas" && <PessoasTab people={people} period={at} />}
-      {tab === "clientes" && <ClientesTab clients={clients} median={median} period={at} />}
+      {tab === "clientes" && <ClientesTab clients={clients} median={median} period={at} tradeByCompany={tradeByCompany} />}
     </section>
   );
 }
@@ -321,7 +323,7 @@ function PersonPanel({ person, period, onClose }: { person: PersonRow; period: A
 
 // ------------------------------------------------------------------ CLIENTES
 type CliSort = "hours" | "name";
-function ClientesTab({ clients, median, period }: { clients: ClientRow[]; median: number; period: AtPeriod }) {
+function ClientesTab({ clients, median, period, tradeByCompany }: { clients: ClientRow[]; median: number; period: AtPeriod; tradeByCompany: Record<string, string | null> }) {
   const [q, setQ] = useState("");
   const [model, setModel] = useState("todos");
   const [sort, setSort] = useState<CliSort>("hours");
@@ -333,16 +335,16 @@ function ClientesTab({ clients, median, period }: { clients: ClientRow[]; median
   }, [clients]);
 
   const filtered = useMemo(() => {
-    const ql = q.trim().toLowerCase();
+    const ql = q.trim();
     let r = clients.filter((c) =>
       (model === "todos" || (c.project_model ?? "sem modelo") === model) &&
-      (ql === "" || companyLabel(c).toLowerCase().includes(ql))
+      (ql === "" || matchesCompany(ql, companyLabel(c), tradeByCompany[c.company_id]))
     );
     r = [...r].sort((a, b) =>
       sort === "hours" ? num(b.monthly_hours) - num(a.monthly_hours) : companyLabel(a).localeCompare(companyLabel(b))
     );
     return r;
-  }, [clients, q, model, sort]);
+  }, [clients, q, model, sort, tradeByCompany]);
 
   const scaleMax = Math.max(1, median * 2, ...clients.map((c) => num(c.monthly_hours)));
 
@@ -391,6 +393,11 @@ function ClientesTab({ clients, median, period }: { clients: ClientRow[]; median
                       <Link href={`/admin/empresas/${c.company_id}`} onClick={(e) => e.stopPropagation()} className="hover:text-risd hover:underline">
                         {companyLabel(c)}
                       </Link>
+                      {tradeHint(companyLabel(c), tradeByCompany[c.company_id]) && (
+                        <span className="block truncate text-xs text-fg-subtle">
+                          {tradeHint(companyLabel(c), tradeByCompany[c.company_id])}
+                        </span>
+                      )}
                     </td>
                     <td className="px-2 py-2 text-right tabular-nums font-medium text-fg">{fmtH(c.monthly_hours)}</td>
                     <td className="px-2 py-2">

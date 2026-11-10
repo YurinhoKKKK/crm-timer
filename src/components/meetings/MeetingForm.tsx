@@ -27,6 +27,7 @@ import {
   btnSecondary,
   chipClass,
 } from "@/lib/ui";
+import { tradeHint } from "@/lib/company-name";
 
 // -----------------------------------------------------------------------------
 // Conversão de fuso — o usuário sempre pensa em horário de Brasília.
@@ -328,7 +329,12 @@ export default function MeetingForm({
             id="meeting-company"
             value={companyId}
             onChange={setCompanyId}
-            options={companies.map((c) => ({ value: c.id, label: c.name }))}
+            options={companies.map((c) => ({
+              value: c.id,
+              label: c.name,
+              // nome fantasia em cinza (null quando vazio ou igual ao nome)
+              hint: tradeHint(c.name, c.tradeName) ?? undefined,
+            }))}
             ariaLabel="Empresa"
             searchPlaceholder="Buscar empresa…"
           />

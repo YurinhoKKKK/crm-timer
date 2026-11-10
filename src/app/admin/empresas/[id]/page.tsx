@@ -6,6 +6,7 @@ import CompanyCentralTabs from "@/components/company-central/CompanyCentralTabs"
 import CompanyListings from "@/components/company-central/CompanyListings";
 import CompanyNotes from "@/components/company-central/CompanyNotes";
 import { loadCompanyCentral } from "@/lib/company-central";
+import { tradeHint } from "@/lib/company-name";
 import { resolvePeriodValue, CENTRAL_PERIOD_CONFIG } from "@/lib/period";
 import { loadCompanyListings, loadListingValidations } from "@/lib/listing";
 import { loadCompanyNotes } from "@/lib/notes";
@@ -84,6 +85,10 @@ export default async function EmpresaCentralPage({
     <AppShell
       user={{ name: profile.full_name, role: "admin", avatarUrl: profile.avatarUrl }}
       title={res.data?.company.name ?? "Empresa"}
+      subtitle={
+        tradeHint(res.data?.company.name ?? "", res.data?.company.tradeName) ??
+        undefined
+      }
       back={{ href: "/admin/empresas", label: "Empresas" }}
     >
       {res.error || !res.data ? (

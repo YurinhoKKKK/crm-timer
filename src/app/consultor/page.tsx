@@ -22,7 +22,12 @@ import { currentMonth, monthToDate, type DayColor } from "@/lib/followup";
 type PersonOption = { id: string; full_name: string; email: string };
 
 // Empresa como vem do banco para este painel: id + nome + grupo (para as seções).
-type CompanyRow = { id: string; name: string; group_id: string | null };
+type CompanyRow = {
+  id: string;
+  name: string;
+  trade_name: string | null;
+  group_id: string | null;
+};
 
 type CompanyCountRow = {
   company_id: string;
@@ -35,6 +40,7 @@ type CompanyCountRow = {
 type CompanySummary = {
   id: string;
   name: string;
+  tradeName: string | null;
   total: number;
   done: number;
   pending: number;
@@ -66,7 +72,7 @@ export default async function ConsultorPage() {
       "companies",
       supabase
         .from("companies")
-        .select("id, name, group_id")
+        .select("id, name, trade_name, group_id")
         .order("name", { ascending: true })
     ),
     perf.timed(
@@ -124,7 +130,11 @@ export default async function ConsultorPage() {
   const pausedGroupByCompany = pausedGroupNamesByCompany(groupByCompany, groups);
 
   // Lista para o seletor de "Nova tarefa" (id + nome).
-  const companies = companyRows.map((c) => ({ id: c.id, name: c.name }));
+  const companies = companyRows.map((c) => ({
+    id: c.id,
+    name: c.name,
+    tradeName: c.trade_name,
+  }));
 
   // Mapa empresa → COR DO DIA relevante. A RPC já é escopada por dentro, e só
   // traz empresas de grupo ativo da carteira do consultor; as demais ficam de
@@ -147,6 +157,7 @@ export default async function ConsultorPage() {
     summaries.set(c.id, {
       id: c.id,
       name: c.name,
+      tradeName: c.trade_name,
       total: 0,
       done: 0,
       pending: 0,
@@ -211,6 +222,7 @@ export default async function ConsultorPage() {
                 (c): CompanyCardItem => ({
                   id: c.id,
                   name: c.name,
+                  tradeName: c.tradeName,
                   href: `/consultor/${c.id}`,
                   done: c.done,
                   total: c.total,

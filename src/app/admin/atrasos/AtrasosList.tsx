@@ -18,7 +18,7 @@ import {
   norm,
   type SelectOption,
 } from "@/components/ListControls";
-import { ComboFilter } from "@/components/Combobox";
+import { ComboFilter, type ComboOption } from "@/components/Combobox";
 import { formatDue } from "@/lib/format";
 import TaskDetailLink from "@/components/TaskDetailLink";
 import Person from "@/components/Person";
@@ -93,7 +93,7 @@ export default function AtrasosList({
 }: {
   start: string | null;
   end: string | null;
-  companies: SelectOption[];
+  companies: ComboOption[]; // nome fantasia no hint (busca/exibição em cinza)
   types: SelectOption[];
   creators: CreatorOpt[];
   responsibles: CreatorOpt[];

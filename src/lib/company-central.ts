@@ -50,6 +50,7 @@ function first<T>(value: Joined<T>): T | null {
 export type CentralCompany = {
   id: string;
   name: string;
+  tradeName: string | null; // Nome fantasia (companies.trade_name)
   whatsappGroupName: string | null;
   whatsappContactId: string | null;
   createdAt: string;
@@ -183,7 +184,7 @@ export async function loadCompanyCentral(
       supabase
         .from("companies")
         .select(
-          "id, name, whatsapp_group_name, whatsapp_contact_id, created_at, created_by, company_details(started_on, ends_on), group:company_groups(name, kind)"
+          "id, name, trade_name, whatsapp_group_name, whatsapp_contact_id, created_at, created_by, company_details(started_on, ends_on), group:company_groups(name, kind)"
         )
         .eq("id", companyId)
         .maybeSingle()
@@ -309,6 +310,7 @@ export async function loadCompanyCentral(
   const company = companyData as {
     id: string;
     name: string;
+    trade_name: string | null;
     whatsapp_group_name: string | null;
     whatsapp_contact_id: string | null;
     created_at: string;
@@ -547,6 +549,7 @@ export async function loadCompanyCentral(
       company: {
         id: company.id,
         name: company.name,
+        tradeName: company.trade_name ?? null,
         whatsappGroupName: company.whatsapp_group_name,
         whatsappContactId: company.whatsapp_contact_id,
         createdAt: company.created_at,

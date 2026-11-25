@@ -209,6 +209,10 @@ body {
 .rich-text mark {
   border-radius: 0.2em;
   padding: 0.05em 0.15em;
+  /* O HTML salvo traz `color: inherit` inline no <mark>; no tema escuro isso
+     herda texto claro sobre o fundo amarelo do destaque e fica ilegível.
+     Forçamos cor escura (vence o inline só com !important). */
+  color: #2b333b !important;
 }
 /* Menção (@usuário): chip discreto da marca, tanto no editor quanto na leitura.
    Vale para o nó do TipTap (data-type="mention") e para o HTML já salvo. */

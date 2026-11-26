@@ -417,6 +417,22 @@ export default async function AdminPage({
             responsibles={atrasoResponsibles}
             periodQuery={periodQ}
           />
+
+          {/* Reconciliação da agenda (Google→CRM) → tela /admin/reconciliacao-agenda */}
+          <Link
+            href="/admin/reconciliacao-agenda"
+            className="group mt-6 flex items-center justify-between rounded-xl border border-line bg-surface p-5 shadow-card transition hover:-translate-y-0.5 hover:border-risd/40 hover:shadow-pop"
+          >
+            <div>
+              <p className="text-sm font-semibold text-fg">Reconciliação da Agenda</p>
+              <p className="mt-1 text-xs text-fg-subtle">
+                Reuniões do CRM que mudaram no Google, aguardando a sua revisão
+              </p>
+            </div>
+            <span className="text-xs text-fg-subtle transition group-hover:text-risd">
+              Abrir →
+            </span>
+          </Link>
         </>
       )}
     </AppShell>

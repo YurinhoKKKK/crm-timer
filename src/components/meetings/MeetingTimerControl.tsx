@@ -105,14 +105,20 @@ export default function MeetingTimerControl({
   );
 
   const load = useCallback(async () => {
-    const all = await fetchReadableMeetingTimers();
-    const t = all.find(matches) ?? null;
-    setTimer(t);
-    if (t && !skewSet.current) {
-      setSkew(clockSkewMs(t.serverNow));
-      skewSet.current = true;
+    try {
+      const all = await fetchReadableMeetingTimers();
+      const t = all.find(matches) ?? null;
+      setTimer(t);
+      if (t && !skewSet.current) {
+        setSkew(clockSkewMs(t.serverNow));
+        skewSet.current = true;
+      }
+    } catch {
+      // Rede caiu: sem o finally o controle ficava no skeleton para sempre.
+      // Mantém o estado atual; o próximo evento de sync recarrega.
+    } finally {
+      setLoaded(true);
     }
-    setLoaded(true);
   }, [matches]);
 
   useEffect(() => {
@@ -155,8 +161,26 @@ export default function MeetingTimerControl({
   async function act(fn: () => Promise<{ error: string | null }>) {
     setBusy(true);
     setError(null);
-    const res = await fn();
+    let res: { error: string | null } | undefined;
+    try {
+      res = await fn();
+    } catch {
+      // Exceção da chamada (rede caiu: o fetch da server action REJEITA antes de
+      // responder). Sem este try o `setBusy(false)` nunca rodava e o botão ficava
+      // travado em "…" para sempre, sem aviso. Cobre iniciar/pausar/retomar/
+      // finalizar/editar o timer.
+      setError(
+        "Não foi possível salvar a mudança. Verifique a conexão e tente de novo."
+      );
+      setBusy(false);
+      return false;
+    }
     setBusy(false);
+    if (!res) {
+      // Sessão encerrada por fora: a action voltou undefined (FALHA 2).
+      setError("Sua sessão expirou. Entre de novo para continuar.");
+      return false;
+    }
     if (res.error) {
       setError(res.error);
       return false;
@@ -583,6 +607,17 @@ function HistoryPanel({ timerId, onClose }: { timerId: string; onClose: () => vo
                 <>
                   <p className="text-[11px] text-fg-subtle">{fmtDateTime(e.editedAt)} · Sistema</p>
                   <p className="text-xs text-fg">Encerrado automaticamente às {fmtTime(e.editedAt)}</p>
+                </>
+              ) : e.eventType === "empresa_alterada" ? (
+                <>
+                  <p className="text-[11px] text-fg-subtle">
+                    {fmtDateTime(e.editedAt)} · {e.editorName ?? "—"}
+                  </p>
+                  <p className="text-xs text-fg">
+                    Empresa alterada de{" "}
+                    <span className="font-semibold">{e.fromCompanyName ?? "—"}</span> para{" "}
+                    <span className="font-semibold">{e.toCompanyName ?? "—"}</span>
+                  </p>
                 </>
               ) : (
                 <>

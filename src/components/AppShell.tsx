@@ -9,6 +9,7 @@ import ThemeToggle from "./ThemeToggle";
 import Avatar from "./Avatar";
 import Logo from "./Logo";
 import ActiveTimerIndicator from "./ActiveTimerIndicator";
+import GoogleAutoSync from "./GoogleAutoSync";
 import ActiveAttendanceIndicator from "./attendance/ActiveAttendanceIndicator";
 import UnreadValidationsBadge from "./UnreadValidationsBadge";
 import OpenTicketsBadge from "./OpenTicketsBadge";
@@ -389,6 +390,11 @@ export default function AppShell({
           {children}
         </main>
       </div>
+
+      {/* Auto-sync da agenda Google do PRÓPRIO usuário em qualquer tela (B15,
+          0174) — mesma action/regra de 10 min da Agenda; guard no localStorage.
+          Renderiza nada; quem não tem Google conectado é no-op. */}
+      <GoogleAutoSync />
 
       {/* Lembrete global de timer rodando — SÓ os cargos que executam tarefas
           (admin, consultor, colaborador). Gestor de Tráfego e Desenvolvedor não

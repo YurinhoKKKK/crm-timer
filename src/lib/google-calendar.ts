@@ -37,7 +37,7 @@ const MAX_LIST_PAGES = 40;
 const EXPIRY_BUFFER_MS = 2 * 60 * 1000;
 
 export type AccessResult =
-  | { status: "ok"; accessToken: string }
+  | { status: "ok"; accessToken: string; email: string | null }
   | { status: "nao_conectado" }
   | { status: "falhou"; error: string };
 
@@ -61,7 +61,7 @@ export async function getValidAccessToken(
 
   const expiry = row.token_expiry ? new Date(row.token_expiry).getTime() : 0;
   if (expiry - Date.now() > EXPIRY_BUFFER_MS) {
-    return { status: "ok", accessToken: row.access_token };
+    return { status: "ok", accessToken: row.access_token, email: row.google_email ?? null };
   }
 
   // Vencido (ou quase): precisa renovar. Sem refresh_token não dá — reconectar.
@@ -78,7 +78,7 @@ export async function getValidAccessToken(
       p_access: refreshed.access_token,
       p_expiry: expiryFromNow(refreshed.expires_in),
     });
-    return { status: "ok", accessToken: refreshed.access_token };
+    return { status: "ok", accessToken: refreshed.access_token, email: row.google_email ?? null };
   } catch (e) {
     return {
       status: "falhou",
@@ -222,6 +222,11 @@ export async function patchCalendarEvent(
     );
   }
 
+  // 404/410: o evento não existe mais nessa agenda (apagado por fora ou conta
+  // trocada). Sinaliza EventGone para o chamador decidir recriar (B14) em vez de
+  // tratar como falha genérica.
+  if (res.status === 404 || res.status === 410) throw new EventGone();
+
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
     const err = json.error;
@@ -292,7 +297,23 @@ export type RawGoogleEvent = {
   start?: { dateTime?: string; date?: string };
   end?: { dateTime?: string; date?: string };
   attendees?: { self?: boolean; responseStatus?: string }[];
+  // Última modificação do evento no Google (RFC3339). Usado como guarda no
+  // auto-sync Google→CRM (0172): só aplica quando é mais novo que meetings.updated_at.
+  updated?: string;
+  // Presente quando o evento é INSTÂNCIA de uma recorrência (singleEvents=true
+  // expande); aponta para o id do evento-mestre. Se o mestre é uma reunião do
+  // CRM, ela virou recorrente no Google → nunca aplicar (A11/0174).
+  recurringEventId?: string;
+  // Para extrair o link do Meet quando o evento mudou (extractMeetLink).
+  conferenceData?: unknown;
+  hangoutLink?: string;
 };
+
+// Link do Meet de um evento cru da LISTA (mesma lógica de extractMeetLink, mas
+// exposta para o sync Google→CRM que precisa detectar troca de link). null se não há.
+export function meetLinkOf(ev: RawGoogleEvent): string | null {
+  return extractMeetLink(ev as Record<string, unknown>);
+}
 
 export type EventsPage = {
   events: RawGoogleEvent[];
@@ -461,6 +482,76 @@ export async function getCalendarEvent(
   return {
     eventStatus: typeof json.status === "string" ? json.status : "confirmed",
     attendees,
+  };
+}
+
+// ---------------------------------------------------------------------
+// LEITURA COMPLETA de UM evento (reconciliação Google→CRM, 0172/0174). A varredura
+// do backlog precisa do estado ATUAL no Google de cada reunião do CRM. Distinções
+// que importam (decisão A1): 404/410 => EventGone (NÃO é cancelamento — o chamador
+// marca "não encontrada" e enfileira); status=cancelled => retorna com
+// status:'cancelled' (cancelamento EXPLÍCITO). `recurring` => o evento virou
+// recorrente (A11: nunca aplicar). all-day (sem dateTime) => start/end null.
+// Só-leitura, agenda própria.
+// ---------------------------------------------------------------------
+export type GoogleEventFull = {
+  status: "ok" | "cancelled";
+  recurring: boolean; // virou evento recorrente no Google (A11)
+  updatedISO: string | null;
+  title: string | null;
+  startISO: string | null; // null = virou all-day (sem dateTime)
+  endISO: string | null;
+  meetLink: string | null;
+};
+
+export async function getCalendarEventFull(
+  accessToken: string,
+  eventId: string
+): Promise<GoogleEventFull> {
+  const url = new URL(
+    `${CALENDAR_EVENTS_ENDPOINT}/${encodeURIComponent(eventId)}`
+  );
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+  } catch {
+    throw new GoogleError(
+      "Não foi possível ler o evento na sua agenda do Google. Tente de novo."
+    );
+  }
+
+  if (res.status === 404 || res.status === 410) throw new EventGone();
+
+  const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!res.ok) {
+    const err = json.error;
+    const msg =
+      err &&
+      typeof err === "object" &&
+      typeof (err as { message?: unknown }).message === "string"
+        ? (err as { message: string }).message
+        : "O Google recusou a leitura do evento.";
+    throw new GoogleError(msg);
+  }
+
+  const start = json.start as { dateTime?: string } | undefined;
+  const end = json.end as { dateTime?: string } | undefined;
+  const summary = typeof json.summary === "string" ? json.summary.trim() : "";
+
+  return {
+    status: json.status === "cancelled" ? "cancelled" : "ok",
+    recurring:
+      (Array.isArray(json.recurrence) && json.recurrence.length > 0) ||
+      typeof json.recurringEventId === "string",
+    updatedISO: typeof json.updated === "string" ? json.updated : null,
+    title: summary || null,
+    startISO: start?.dateTime ?? null,
+    endISO: end?.dateTime ?? null,
+    meetLink: extractMeetLink(json),
   };
 }
 

@@ -86,6 +86,9 @@ export type MeetingRow = {
   // Opt-out do portal do cliente (default false = aparece). Só criador/admin/
   // consultor da empresa alteram, via setMeetingClientHidden.
   clientHidden: boolean;
+  // Quando preenchido: o evento foi removido no Google mas a reunião foi MANTIDA
+  // no CRM (tinha horas de timer). A grade mostra o selo "Removida no Google" (0172).
+  googleRemovedAt: string | null;
   creator: MeetingPerson;
   participants: MeetingPerson[];
 };
@@ -244,6 +247,7 @@ type MeetingDbRow = {
   google_sync_status: GoogleSyncStatus;
   google_sync_error: string | null;
   client_hidden: boolean;
+  google_removed_at: string | null;
   company: { name: string } | { name: string }[] | null;
 };
 
@@ -279,7 +283,7 @@ export async function loadMeetings(
   let query = supabase
     .from("meetings")
     .select(
-      "id, company_id, title, description, starts_at, ends_at, meeting_type, room, room_response, responses_synced_at, created_by, meet_link, google_sync_status, google_sync_error, client_hidden, company:companies(name)"
+      "id, company_id, title, description, starts_at, ends_at, meeting_type, room, room_response, responses_synced_at, created_by, meet_link, google_sync_status, google_sync_error, client_hidden, google_removed_at, company:companies(name)"
     )
     .order("starts_at", { ascending: true });
 
@@ -341,6 +345,7 @@ export async function loadMeetings(
     syncError: r.google_sync_error,
     meetLink: r.meet_link,
     clientHidden: r.client_hidden,
+    googleRemovedAt: r.google_removed_at ?? null,
     creator: person(r.created_by, people),
     participants: (byMeeting.get(r.id) ?? []).map((p) =>
       person(p.userId, people, p.response)
@@ -440,7 +445,11 @@ export async function loadImportedEvents(
 }
 
 // Tudo que a grade mostra num período: reuniões do sistema + eventos importados,
-// já unidos. As duas leituras são independentes — em paralelo.
+// já unidos. As duas leituras são independentes — em paralelo. A CÓPIA importada
+// de uma reunião do CRM (o convite que caiu na agenda Google de um convidado,
+// mesmo google_event_id) fica FORA: a reunião do sistema já aparece para todos,
+// e sem o filtro o convidado conectado via a mesma reunião DUAS vezes na grade.
+// (O conflito já deduplica no banco — B17/0174; aqui é o equivalente da grade.)
 export async function loadAgendaItems(
   supabase: Client,
   range: { fromISO: string; toISO: string }
@@ -449,7 +458,7 @@ export async function loadAgendaItems(
     loadMeetings(supabase, range),
     loadImportedEvents(supabase, range),
   ]);
-  return [...meetings, ...imported];
+  return [...meetings, ...imported.filter((e) => !e.isCrmMeeting)];
 }
 
 // Última sincronização da agenda Google do próprio usuário (para "sincronizado

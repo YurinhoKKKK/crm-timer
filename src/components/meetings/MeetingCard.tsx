@@ -31,6 +31,10 @@ const actBtn =
 const actDanger =
   "inline-flex items-center gap-1.5 rounded-lg border border-red-300/60 bg-surface px-2.5 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10";
 
+// Sessão encerrada por fora (logout em outro dispositivo): a server action pode
+// voltar undefined. Avisamos em vez de ler res.ok de undefined e quebrar (FALHA 2).
+const SESSION_EXPIRED = "Sua sessão expirou. Entre de novo para continuar.";
+
 // Status recém-lidos do Google que sobem para o pai espelhar no seu cache (só o
 // calendário usa — ver Calendar.applyResponses). `byUser` = resposta por
 // participante; `room`/`syncedAt` só vêm no "Atualizar status" (no RSVP mudam só
@@ -147,6 +151,10 @@ export default function MeetingCard({
     setStatusError(null);
     try {
       const res = await refreshMeetingResponses(m.id);
+      if (!res) {
+        setStatusError(SESSION_EXPIRED);
+        return;
+      }
       if (!res.ok) {
         setStatusError(res.error);
         return;
@@ -159,6 +167,12 @@ export default function MeetingCard({
       // Espelha no cache do pai para o valor sobreviver ao fechar/reabrir o modal
       // (o banco já foi gravado pela action; isto só sincroniza o cliente).
       onResponses?.(m.id, { byUser, room: res.room, syncedAt: res.syncedAt });
+    } catch {
+      // Exceção da chamada (rede): sem isto o botão só voltava de "Lendo…" sem
+      // explicar nada.
+      setStatusError(
+        "Não foi possível atualizar o status. Verifique a conexão e tente de novo."
+      );
     } finally {
       setRefreshing(false);
     }
@@ -169,6 +183,10 @@ export default function MeetingCard({
     setRespondError(null);
     try {
       const res = await respondToMeeting(m.id, value);
+      if (!res) {
+        setRespondError(SESSION_EXPIRED);
+        return;
+      }
       if (!res.ok) {
         setRespondError(res.error);
         return;
@@ -179,6 +197,12 @@ export default function MeetingCard({
       onResponses?.(m.id, {
         byUser: new Map([[ctx.currentUserId, res.response]]),
       });
+    } catch {
+      // Exceção da chamada (rede): sem isto o "enviando…" só sumia e a resposta
+      // não era registrada, sem aviso.
+      setRespondError(
+        "Não foi possível enviar sua resposta. Verifique a conexão e tente de novo."
+      );
     } finally {
       setResponding(false);
     }
@@ -202,6 +226,7 @@ export default function MeetingCard({
   async function onToggleClientHidden() {
     await run(async () => {
       const res = await setMeetingClientHidden(m.id, !m.clientHidden);
+      if (!res) return setError(SESSION_EXPIRED);
       if (!res.ok) return setError(res.error ?? "Não foi possível alterar.");
       onResult(
         null,
@@ -219,6 +244,14 @@ export default function MeetingCard({
     setError(null);
     try {
       await fn();
+    } catch {
+      // Exceção da chamada (rede caiu: o fetch da server action REJEITA antes de
+      // responder). As ações internas só tratam `!res.ok`; sem este catch a ação
+      // falhava calada (e o banco ficava intocado). Cobre excluir, ocultar do
+      // cliente, remover do sistema e enviar ao Google.
+      setError(
+        "Não foi possível concluir a ação. Verifique a conexão e tente de novo."
+      );
     } finally {
       setBusy(false);
     }
@@ -227,6 +260,7 @@ export default function MeetingCard({
   async function onDelete() {
     await run(async () => {
       const res = await deleteMeeting(m.id);
+      if (!res) return setError(SESSION_EXPIRED);
       if (!res.ok) return setError(res.error);
       setConfirm(null);
       onResult(res.warning, "Reunião excluída.");
@@ -236,6 +270,7 @@ export default function MeetingCard({
   async function onAdminRemove() {
     await run(async () => {
       const res = await adminRemoveMeeting(m.id);
+      if (!res) return setError(SESSION_EXPIRED);
       if (!res.ok) return setError(res.error ?? "Não foi possível remover.");
       setConfirm(null);
       onResult(
@@ -248,6 +283,7 @@ export default function MeetingCard({
   async function onSync() {
     await run(async () => {
       const res = await syncMeetingToGoogle(m.id);
+      if (!res) return setError(SESSION_EXPIRED);
       if (!res.ok) return setError(res.error);
       onResult(res.warning, "Reunião enviada à sua agenda Google.");
     });
@@ -298,6 +334,14 @@ export default function MeetingCard({
           <TypeBadge type={m.type} />
           {m.room && <RoomBadge room={m.room} response={roomResponse} />}
           <SyncBadge status={m.syncStatus} error={m.syncError} />
+          {m.googleRemovedAt && (
+            <span
+              className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-500/15 dark:text-orange-300"
+              title="O evento foi removido no Google, mas a reunião foi mantida aqui porque tem horas de timer registradas."
+            >
+              Removida no Google
+            </span>
+          )}
         </div>
       </div>
 

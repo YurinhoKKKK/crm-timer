@@ -47,6 +47,10 @@ type PendingDrag = {
   originStartMin: number;
   originEndMin: number;
   isOwn: boolean;
+  // A reunião cabe inteira neste dia? Reunião que cruza a meia-noite (possível
+  // via sincronização Google→CRM) NÃO arrasta: o arrasto recompõe o horário só
+  // com os minutos da fatia visível e reescreveria o horário real em silêncio.
+  fitsDay: boolean;
   active: boolean;
 };
 
@@ -177,8 +181,20 @@ export default function TimeGridView({
         justDraggedRef.current = true;
         if (!d.isOwn) {
           // Tentativa de arrastar reunião de outra pessoa: explica o porquê.
-          setBlockedHint(d.meeting.creator.name);
+          setBlockedHint(
+            `Só ${d.meeting.creator.name} (quem criou) pode reagendar esta reunião.`
+          );
           window.setTimeout(() => setBlockedHint(null), 2600);
+          endDrag();
+          return;
+        }
+        if (!d.fitsDay) {
+          // Reunião que cruza a meia-noite: a fatia visível não representa o
+          // horário inteiro — arrastar reescreveria o horário real em silêncio.
+          setBlockedHint(
+            "Esta reunião atravessa a meia-noite e o arrasto só move dentro de um dia. Ajuste o horário pelo formulário de edição."
+          );
+          window.setTimeout(() => setBlockedHint(null), 3600);
           endDrag();
           return;
         }
@@ -229,6 +245,10 @@ export default function TimeGridView({
       ) as HTMLElement | null;
       const colWidth = colEl ? colEl.getBoundingClientRect().width : 0;
       const day = days[dayIndex];
+      // Minutos CRUS (sem clamp): fora de [0, 1440] = a reunião não cabe neste
+      // dia (cruza a meia-noite) e o arrasto é bloqueado com explicação.
+      const rawStart = minutesInDay(meeting.startsAt, day);
+      const rawEnd = minutesInDay(meeting.endsAt, day);
       dragRef.current = {
         meeting,
         mode,
@@ -236,9 +256,10 @@ export default function TimeGridView({
         colWidth,
         startX: e.clientX,
         startY: e.clientY,
-        originStartMin: clamp(minutesInDay(meeting.startsAt, day), 0, DAY_MIN),
-        originEndMin: clamp(minutesInDay(meeting.endsAt, day), 0, DAY_MIN),
+        originStartMin: clamp(rawStart, 0, DAY_MIN),
+        originEndMin: clamp(rawEnd, 0, DAY_MIN),
         isOwn: meeting.creator.id === currentUserId,
+        fitsDay: rawStart >= 0 && rawEnd <= DAY_MIN,
         active: false,
       };
     },
@@ -303,11 +324,11 @@ export default function TimeGridView({
         </div>
       </div>
 
-      {/* Aviso ao tentar arrastar reunião de outra pessoa */}
+      {/* Aviso de arrasto bloqueado (reunião alheia ou que cruza a meia-noite) */}
       {blockedHint && (
         <div className="pointer-events-none absolute inset-x-0 bottom-3 z-toast flex justify-center px-4">
           <div className="rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 shadow-pop dark:border-amber-500/30 dark:bg-amber-950 dark:text-amber-200">
-            Só {blockedHint} (quem criou) pode reagendar esta reunião.
+            {blockedHint}
           </div>
         </div>
       )}

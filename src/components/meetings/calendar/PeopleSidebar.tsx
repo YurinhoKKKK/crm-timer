@@ -6,6 +6,25 @@ import { SearchBox, norm } from "@/components/ListControls";
 import { personColor } from "@/lib/meeting-colors";
 import type { DirectoryUser } from "@/lib/meetings";
 
+// Idade da agenda importada de cada pessoa (B15/0174): "há X" sob o nome quando
+// a pessoa está LIGADA na grade — deixa claro quão fresca é a comparação.
+export type PersonSyncInfo = {
+  googleConnected: boolean;
+  lastSyncedAt: string | null;
+};
+
+function syncAgeLabel(info: PersonSyncInfo | undefined): string | null {
+  if (!info) return null;
+  if (!info.googleConnected) return "sem Google";
+  if (!info.lastSyncedAt) return "agenda nunca sincronizada";
+  const mins = Math.floor((Date.now() - new Date(info.lastSyncedAt).getTime()) / 60000);
+  if (mins < 1) return "agenda agora mesmo";
+  if (mins < 60) return `agenda há ${mins} min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 48) return `agenda há ${hours} h`;
+  return `agenda há ${Math.floor(hours / 24)} dias`;
+}
+
 // Painel "Agendas" (como o "Minhas agendas" do Google): liga/desliga a agenda de
 // cada pessoa na grade. Ao abrir, vem marcado SÓ o próprio usuário — o resto o
 // usuário liga para comparar. Cada pessoa tem a sua cor consistente.
@@ -13,6 +32,7 @@ export default function PeopleSidebar({
   people,
   selected,
   currentUserId,
+  syncInfo,
   onToggle,
   onOnlyMe,
   onCollapse,
@@ -20,6 +40,8 @@ export default function PeopleSidebar({
   people: DirectoryUser[];
   selected: Set<string>;
   currentUserId: string;
+  // userId -> idade da agenda importada (B15). Ausente = não carregou ainda.
+  syncInfo?: Map<string, PersonSyncInfo>;
   onToggle: (id: string) => void;
   onOnlyMe: () => void;
   // Recolhe o painel (desktop). No mobile a gaveta fecha pela barra.
@@ -86,6 +108,13 @@ export default function PeopleSidebar({
           filtered.map((u) => {
             const on = selected.has(u.id);
             const color = personColor(u.id);
+            // Idade da agenda: só para pessoas LIGADAS (o dado importa quando a
+            // agenda dela está na grade) e que não são o próprio usuário (a dele
+            // tem o "sincronizado há X" na barra).
+            const age =
+              on && u.id !== currentUserId
+                ? syncAgeLabel(syncInfo?.get(u.id))
+                : null;
             return (
               <li key={u.id}>
                 <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-1.5 py-1.5 transition hover:bg-surface-2">
@@ -101,6 +130,11 @@ export default function PeopleSidebar({
                     {u.name}
                     {u.id === currentUserId && (
                       <span className="text-fg-subtle"> (você)</span>
+                    )}
+                    {age && (
+                      <span className="block truncate text-[10px] leading-tight text-fg-subtle">
+                        {age}
+                      </span>
                     )}
                   </span>
                   <span

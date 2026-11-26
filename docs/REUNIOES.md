@@ -229,3 +229,23 @@ empresa) omite o callback — já dá `router.refresh`, que relê do banco. Sem 
 - **Multi-agenda:** hoje só a agenda **primária** de cada interno é lida/importada.
 - **Teste ponta-a-ponta** da importação e das respostas com a agenda Google real do
   usuário (as Fatias A–D estão no ar aguardando validação no navegador).
+
+## Decisões de produto fechadas (auditoria de nov/2026)
+
+- **Visibilidade total das reuniões é intencional.** `meeting_is_visible()` deixa
+  qualquer sessão interna (admin, consultor, colaborador, gestor de tráfego,
+  desenvolvedor) ver todas as reuniões de todas as empresas — a grade da /agenda
+  cruza as agendas da equipe por desenho. Não restringir por alcance de empresa.
+- **`google_get_account` devolve os tokens descriptografados ao PRÓPRIO dono** (e
+  só a ele — escopo por `auth.uid()`, EXECUTE de `authenticated`). É consequência
+  aceita da decisão "sem `service_role`": o servidor só fala com o Google usando a
+  sessão de quem está logado, então o token precisa chegar à action. Risco residual
+  documentado: código malicioso rodando COM a sessão do usuário (XSS, extensão)
+  conseguiria chamar a RPC e exfiltrar o próprio refresh_token. Tokens de
+  TERCEIROS continuam inacessíveis em qualquer caminho. Sem mudança de código.
+- **Desligamento de usuário: ninguém é apagado.** `auth.users`/`profiles` têm FKs
+  NO ACTION espalhadas (meetings.created_by, meeting_timers.started_by,
+  notifications.user_id, company_events.actor_id…) que bloqueiam o DELETE — e é
+  assim que deve ficar: a prática é o admin apenas REVOGAR o acesso (senha/sessão)
+  e reatribuir as responsabilidades; o histórico e as horas permanecem. O fluxo
+  formal de desligamento será desenhado em frente própria.

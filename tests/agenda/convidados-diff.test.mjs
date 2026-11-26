@@ -161,7 +161,9 @@ test("criação sem Google conectado: reunião salva, convidados gravados, aviso
     { meeting_id: "m-novo", user_id: "p1" },
     { meeting_id: "m-novo", user_id: "p2" },
   ]);
-  // setSync gravou nao_conectado na reunião.
-  const sync = ops.filter((o) => o.table === "meetings" && o.verb === "update").at(-1);
-  assert.equal(sync.payload.google_sync_status, "nao_conectado");
+  // setSync gravou nao_conectado via RPC meetings_set_sync (0175).
+  const sync = ops.find((o) => o.table === "rpc:meetings_set_sync");
+  assert.ok(sync, "setSync deveria chamar a RPC meetings_set_sync");
+  assert.equal(sync.payload.p_status, "nao_conectado");
+  assert.equal(sync.payload.p_has_event, false);
 });

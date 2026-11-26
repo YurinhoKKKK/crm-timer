@@ -148,13 +148,16 @@ export async function fetchReadableMeetingTimers(): Promise<MeetingTimerState[]>
 // Gate no banco: admin, quem iniciou ou consultor da empresa. Colaborador/cliente
 // recebem 42501 → a UI trata como `restricted` (nem o link deve aparecer p/ eles).
 export type MeetingAuditEntry = {
-  eventType: "edit" | "auto_close";
+  eventType: "edit" | "auto_close" | "company_delete" | "empresa_alterada";
   editedAt: string;
   editedBy: string | null;
   editorName: string | null;
   oldSeconds: number | null;
   newSeconds: number;
   justification: string;
+  // Só em 'empresa_alterada' (ITEM 4/0177): empresa de origem e destino da troca.
+  fromCompanyName: string | null;
+  toCompanyName: string | null;
 };
 
 export async function fetchMeetingTimerHistory(timerId: string): Promise<{
@@ -175,13 +178,15 @@ export async function fetchMeetingTimerHistory(timerId: string): Promise<{
 
   const rows =
     (data as {
-      event_type: "edit" | "auto_close";
+      event_type: "edit" | "auto_close" | "company_delete" | "empresa_alterada";
       edited_at: string;
       edited_by: string | null;
       editor_name: string | null;
       old_seconds: number | string | null;
       new_seconds: number | string;
       justification: string;
+      from_company_name: string | null;
+      to_company_name: string | null;
     }[]) ?? [];
 
   return {
@@ -194,6 +199,8 @@ export async function fetchMeetingTimerHistory(timerId: string): Promise<{
       oldSeconds: r.old_seconds === null ? null : Number(r.old_seconds),
       newSeconds: Number(r.new_seconds),
       justification: r.justification,
+      fromCompanyName: r.from_company_name,
+      toCompanyName: r.to_company_name,
     })),
   };
 }

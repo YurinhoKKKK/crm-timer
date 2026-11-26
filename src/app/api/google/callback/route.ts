@@ -102,11 +102,27 @@ export async function GET(request: NextRequest) {
     return back(request, "error", "O Google não devolveu um token válido.");
   }
 
+  // 5b. ESCOPO DA AGENDA é obrigatório (B12/0174). O Google permite desmarcar
+  // permissões no consentimento; sem calendar.events.owned a conexão fica "meia"
+  // (cria reunião → "insufficient authentication scopes", importa nada). Nesse
+  // caso NÃO consideramos conectado: nada é gravado e pedimos para refazer
+  // marcando a permissão de agenda. Casos reais: Filipe Peres, Camilli.
+  if (!tokens.scope.includes("calendar.events.owned")) {
+    return back(
+      request,
+      "error",
+      "A permissão de agenda não foi concedida. Conecte de novo e MARQUE a caixa de acesso ao Google Agenda na tela do Google."
+    );
+  }
+
   // 6. grava cifrado, via função SECURITY DEFINER, com a sessão do usuário.
-  //    p_email vem do id_token (openid+email) — usado para exibir a conta e
-  //    alertar divergência. refresh pode faltar em reconsentimento — a função
-  //    preserva o refresh anterior nesse caso.
-  const { error } = await supabase.rpc("google_upsert_account", {
+  //    google_connect_account (0177) valida no servidor: conta já em uso por
+  //    outro usuário, troca bloqueada por reunião futura na conta atual, e — na
+  //    troca permitida — zera o estado de sync, apaga o espelho da conta antiga,
+  //    audita 'conta_trocada' e libera o auto-sync se não houver nada a
+  //    reconciliar. p_email vem do id_token; refresh pode faltar em
+  //    reconsentimento (a função preserva o anterior).
+  const { data, error } = await supabase.rpc("google_connect_account", {
     p_email: tokens.email,
     p_access: tokens.access_token,
     p_refresh: tokens.refresh_token,
@@ -118,6 +134,33 @@ export async function GET(request: NextRequest) {
       request,
       "error",
       "Conexão autorizada, mas não foi possível salvá-la. Tente de novo."
+    );
+  }
+
+  const result = (data ?? {}) as {
+    status?: string;
+    count?: number;
+    email?: string;
+  };
+
+  // Conta Google já ligada a outro usuário do CRM: nada foi salvo (FALHA 3.1).
+  if (result.status === "conta_em_uso") {
+    return back(
+      request,
+      "error",
+      "Esta conta Google já está conectada a outro usuário do CRM."
+    );
+  }
+
+  // Troca bloqueada por reuniões futuras na conta atual: nada foi salvo (FALHA 3.2).
+  if (result.status === "troca_bloqueada") {
+    const n = result.count ?? 0;
+    const email = result.email ?? "atual";
+    const reunioes = n === 1 ? "1 reunião futura" : `${n} reuniões futuras`;
+    return back(
+      request,
+      "error",
+      `Você tem ${reunioes} na conta ${email}. Para trocar de conta, exclua ou remarque essas reuniões antes ou fale com o administrador.`
     );
   }
 

@@ -15,17 +15,25 @@ import MeetingCard, {
 } from "@/components/meetings/MeetingCard";
 import ResultBanner from "@/components/meetings/ResultBanner";
 import CalendarToolbar, { type CalendarView } from "./CalendarToolbar";
-import PeopleSidebar from "./PeopleSidebar";
+import PeopleSidebar, { type PersonSyncInfo } from "./PeopleSidebar";
 import TimeGridView from "./TimeGridView";
 import MonthView from "./MonthView";
 import {
   fetchMeetingsRange,
   updateMeeting,
+  syncMeetingToGoogle,
   checkMeetingConflicts,
   type ConflictRow,
 } from "@/app/meeting-actions";
 import { syncMyGoogleCalendar } from "@/app/google-import-actions";
+import {
+  scanGoogleReconciliation,
+  listMyPendingGoogleMeetings,
+  fetchAgendaSyncStatus,
+  type PendingGoogleMeeting,
+} from "@/app/meeting-reconcile-actions";
 import { personColor } from "@/lib/meeting-colors";
+import { tryBeginAutoSync, endAutoSync } from "@/lib/google-sync-guard";
 import { describeConflict, formatMeetingRange, isImported } from "@/lib/meetings";
 import { btnPrimary, btnSecondary } from "@/lib/ui";
 import type {
@@ -51,6 +59,9 @@ import {
 } from "./datetime";
 
 const DAY_MS = 24 * 60 * 60000;
+// Sessão encerrada por fora (logout em outro dispositivo): a server action pode
+// voltar undefined. Avisamos sem derrubar a tela nem perder o que o usuário fez.
+const SESSION_EXPIRED = "Sua sessão expirou. Entre de novo para continuar.";
 // Ao abrir a agenda, se a última sincronização com o Google for mais velha que
 // isto, dispara um sync em segundo plano (sem travar a tela).
 const SYNC_STALE_MS = 10 * 60 * 1000;
@@ -89,22 +100,28 @@ function shiftAnchor(view: CalendarView, anchor: Civil, dir: 1 | -1): Civil {
   return addMonths(anchor, dir);
 }
 
-// Move otimista de UMA reunião dentro do período visível. Arrastar nunca cruza a
-// chave (mesma semana/dia), então basta atualizar as linhas da chave atual. Só
-// reuniões do sistema arrastam; importados ficam intocados.
-function moveInKey(
+// Move otimista de UMA reunião em TODAS as janelas do cache: a mesma reunião
+// vive nas chaves vizinhas pré-buscadas e nas outras visões (dia/semana/mês);
+// atualizar só a chave atual deixava horário VELHO ao navegar. Serve também de
+// reversão (voltando aos horários originais). Importados ficam intocados.
+function moveEverywhere(
   map: Map<string, GridItem[]>,
-  key: string,
   id: string,
   startISO: string,
   endISO: string
 ): Map<string, GridItem[]> {
-  const rows = map.get(key);
-  if (!rows) return map;
-  const next = rows.map((r) =>
-    r.id === id ? { ...r, startsAt: startISO, endsAt: endISO } : r
-  );
-  return new Map(map).set(key, next);
+  const next = new Map<string, GridItem[]>();
+  for (const [k, rows] of Array.from(map.entries())) {
+    next.set(
+      k,
+      rows.map((r) =>
+        !isImported(r) && r.id === id
+          ? { ...r, startsAt: startISO, endsAt: endISO }
+          : r
+      )
+    );
+  }
+  return next;
 }
 
 type Draft = { startISO?: string; endISO?: string };
@@ -191,16 +208,23 @@ export default function Calendar({
   const [result, setResult] = useState<{ warning: string | null; successText: string } | null>(null);
   // Sincronização com o Google (Fatia 2): carimbo da última vez e estado do botão.
   const [lastSync, setLastSync] = useState<string | null>(initialLastSync);
+  // B13: reuniões FUTURAS do próprio usuário fora do Google (banner persistente).
+  const [pendingGoogle, setPendingGoogle] = useState<PendingGoogleMeeting[]>([]);
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  // B15: idade da agenda importada por pessoa (sidebar + aviso de conflito).
+  const [syncInfo, setSyncInfo] = useState<Map<string, PersonSyncInfo>>(new Map());
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
-  // Arrasto solto que caiu em conflito — aguarda a confirmação do usuário.
-  // `backup` guarda os itens do período para reverter se ele cancelar.
+  // Arrasto solto que precisa de confirmação: caiu em conflito OU a checagem de
+  // conflito falhou (checkFailed — sem rede não dá para afirmar "sem conflito",
+  // então pergunta em vez de gravar calado). A reversão volta aos horários
+  // ORIGINAIS guardados no próprio `meeting` (o otimismo só mexe em cópias).
   const [dragConfirm, setDragConfirm] = useState<{
     meeting: MeetingRow;
     startISO: string;
     endISO: string;
     conflicts: ConflictRow[];
-    backup: GridItem[];
+    checkFailed: boolean;
   } | null>(null);
 
   // Mobile: a grade de semana não cabe — abre em Dia. Só no primeiro render.
@@ -345,6 +369,56 @@ export default function Calendar({
     []
   );
 
+  // B13/B15: carrega as pendências próprias e a idade das agendas ao abrir e a
+  // cada sync bem-sucedido. Fire-and-forget; erro silencioso (não trava a grade).
+  const refreshPendings = useCallback(() => {
+    void listMyPendingGoogleMeetings().then(setPendingGoogle).catch(() => {});
+    void fetchAgendaSyncStatus()
+      .then((rows) =>
+        setSyncInfo(
+          new Map(
+            rows.map((r) => [
+              r.userId,
+              { googleConnected: r.googleConnected, lastSyncedAt: r.lastSyncedAt },
+            ])
+          )
+        )
+      )
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    refreshPendings();
+  }, [refreshPendings]);
+
+  // Enviar uma pendência ao Google a partir do banner (B13).
+  const sendPending = useCallback(
+    async (meetingId: string) => {
+      setSendingId(meetingId);
+      try {
+        const res = await syncMeetingToGoogle(meetingId);
+        if (!res) {
+          setSyncMsg(SESSION_EXPIRED); // sessão encerrada por fora (FALHA 2)
+          return;
+        }
+        if (res.ok) {
+          setPendingGoogle((prev) => prev.filter((p) => p.id !== meetingId));
+          invalidate();
+        } else {
+          setSyncMsg(res.error);
+        }
+      } catch {
+        // Exceção da chamada (rede): sem isto o botão só voltava de "Enviando…"
+        // e nada explicava a falha.
+        setSyncMsg(
+          "Não foi possível salvar a mudança. Verifique a conexão e tente de novo."
+        );
+      } finally {
+        setSendingId(null);
+      }
+    },
+    [invalidate]
+  );
+
   // Sincroniza a agenda do Google do PRÓPRIO usuário (só o token dele é
   // alcançável — ver google-import-actions). No sucesso, recarrega o período para
   // os importados aparecerem/atualizarem. `silent` (auto-sync no load) não mostra
@@ -354,24 +428,55 @@ export default function Calendar({
       if (syncing) return;
       setSyncing(true);
       if (!silent) setSyncMsg(null);
-      const res = await syncMyGoogleCalendar();
-      setSyncing(false);
-      if (res.status === "ok") {
-        setLastSync(res.lastSyncedAt);
-        invalidate();
-        if (!silent) setSyncMsg(null);
-      } else if (res.status === "nao_conectado") {
+      try {
+        const res = await syncMyGoogleCalendar();
+        if (!res) {
+          // Sessão encerrada por fora: a action voltou undefined (FALHA 2).
+          if (!silent) setSyncMsg(SESSION_EXPIRED);
+          return;
+        }
+        if (res.status === "ok") {
+          setLastSync(res.lastSyncedAt);
+          invalidate();
+          // FALHA 1: quando a sincronização enfileira divergências (mudanças
+          // feitas no Google em reuniões do CRM), avisa que elas aguardam o admin.
+          if (res.queued > 0) {
+            const n = res.queued;
+            setSyncMsg(
+              `${n === 1 ? "1 mudança feita" : `${n} mudanças feitas`} no Google ${
+                n === 1 ? "aguarda" : "aguardam"
+              } revisão do administrador.`
+            );
+          } else if (!silent) {
+            setSyncMsg(null);
+          }
+          // Reconciliação Google→CRM (0172): enfileira divergências das reuniões do
+          // CRM deste usuário para a revisão do admin. Gatilhada no servidor (no máx.
+          // a cada 6h e só enquanto ele não foi reconciliado); aqui é fire-and-forget.
+          void scanGoogleReconciliation().catch(() => {});
+          refreshPendings();
+        } else if (res.status === "nao_conectado") {
+          if (!silent)
+            setSyncMsg("Conecte sua conta Google no seu perfil para importar a agenda.");
+        } else {
+          if (!silent) setSyncMsg(res.message);
+        }
+      } catch {
+        // Rede caiu no meio: sem o finally o botão ficava "Sincronizando…" para
+        // sempre (e nenhum sync futuro rodava até recarregar).
         if (!silent)
-          setSyncMsg("Conecte sua conta Google no seu perfil para importar a agenda.");
-      } else {
-        if (!silent) setSyncMsg(res.message);
+          setSyncMsg("Não foi possível sincronizar agora. Verifique a conexão e tente de novo.");
+      } finally {
+        setSyncing(false);
       }
     },
-    [syncing, invalidate]
+    [syncing, invalidate, refreshPendings]
   );
 
   // Auto-sync ao abrir, se a última for velha (ou nunca) e houver conta conectada.
-  // Roda uma vez, em segundo plano; erros ficam silenciosos aqui.
+  // Roda uma vez, em segundo plano; erros ficam silenciosos aqui. O guard
+  // COMPARTILHADO (google-sync-guard) garante que este disparo e o do
+  // GoogleAutoSync do AppShell nunca rodem em dobro — quem chegar primeiro vale.
   const autoSyncedRef = useRef(false);
   useEffect(() => {
     if (autoSyncedRef.current) return;
@@ -380,7 +485,8 @@ export default function Calendar({
       !lastSync || Date.now() - new Date(lastSync).getTime() > SYNC_STALE_MS;
     if (!stale) return;
     autoSyncedRef.current = true;
-    void runSync(true);
+    if (!tryBeginAutoSync(currentUserId)) return; // o AppShell (ou outra aba) já cobriu
+    void runSync(true).finally(endAutoSync);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [googleConnected]);
 
@@ -398,29 +504,52 @@ export default function Calendar({
 
   // Grava o reagendamento: banco → Google (fluxo da fatia 1.1). No sucesso,
   // reconcilia o período em SILÊNCIO (sem limpar o cache → sem "Carregando…",
-  // mantendo o otimismo até a resposta chegar). Na falha, REVERTE para o backup
-  // e avisa — a mudança não fica pela metade.
+  // mantendo o otimismo até a resposta chegar). Na falha, REVERTE todas as
+  // janelas aos horários originais (guardados no próprio `meeting`) e avisa —
+  // a mudança não fica pela metade.
   const finishReschedule = useCallback(
-    async (
-      meeting: MeetingRow,
-      startISO: string,
-      endISO: string,
-      backup: GridItem[]
-    ) => {
-      const res = await updateMeeting({
-        meetingId: meeting.id,
-        companyId: meeting.companyId,
-        companyName: meeting.companyName,
-        title: meeting.title,
-        description: meeting.description ?? "",
-        type: meeting.type,
-        room: meeting.room,
-        startISO,
-        endISO,
-        participantIds: meeting.participants.map((p) => p.id),
-      });
+    async (meeting: MeetingRow, startISO: string, endISO: string) => {
+      let res;
+      try {
+        res = await updateMeeting({
+          meetingId: meeting.id,
+          companyId: meeting.companyId,
+          companyName: meeting.companyName,
+          title: meeting.title,
+          description: meeting.description ?? "",
+          type: meeting.type,
+          room: meeting.room,
+          startISO,
+          endISO,
+          participantIds: meeting.participants.map((p) => p.id),
+        });
+      } catch {
+        // Exceção da chamada (rede caiu: o fetch da server action REJEITA antes de
+        // a action responder). O ramo `!res.ok` abaixo nunca roda, então sem este
+        // catch a tela ficava no horário novo e o banco no antigo, calado. Reverte
+        // em TODAS as janelas (mesmo caminho da falha de action) e avisa.
+        setCache((prev) =>
+          moveEverywhere(prev, meeting.id, meeting.startsAt, meeting.endsAt)
+        );
+        setResult({
+          warning:
+            "Não foi possível salvar a mudança. Verifique a conexão e tente de novo.",
+          successText: "",
+        });
+        return;
+      }
+      if (!res) {
+        // Sessão encerrada por fora (FALHA 2): reverte e avisa, sem derrubar a tela.
+        setCache((prev) =>
+          moveEverywhere(prev, meeting.id, meeting.startsAt, meeting.endsAt)
+        );
+        setResult({ warning: SESSION_EXPIRED, successText: "" });
+        return;
+      }
       if (!res.ok) {
-        setCache((prev) => new Map(prev).set(key, backup));
+        setCache((prev) =>
+          moveEverywhere(prev, meeting.id, meeting.startsAt, meeting.endsAt)
+        );
         setResult({
           warning: `Não foi possível reagendar: ${res.error}`,
           successText: "",
@@ -438,14 +567,15 @@ export default function Calendar({
     [key, fromISO, toISO]
   );
 
-  // Soltou o arrasto: aplica o feedback otimista, roda a MESMA verificação de
-  // conflito (todos os participantes + o criador, no servidor) e, havendo
-  // sobreposição, PEDE CONFIRMAÇÃO sem bloquear. Sem conflito, grava direto.
+  // Soltou o arrasto: aplica o feedback otimista (em todas as janelas), roda a
+  // MESMA verificação de conflito (participantes + criador, no servidor) e,
+  // havendo sobreposição, PEDE CONFIRMAÇÃO sem bloquear. Sem conflito, grava
+  // direto. Se a VERIFICAÇÃO falhar (rede), também pergunta — "não deu para
+  // verificar" não é "sem conflito".
   const onReschedule = useCallback(
     async (meeting: MeetingRow, startISO: string, endISO: string) => {
-      const backup = cache.get(key) ?? [];
-      setCache((prev) => moveInKey(prev, key, meeting.id, startISO, endISO));
-      let conflicts: ConflictRow[] = [];
+      setCache((prev) => moveEverywhere(prev, meeting.id, startISO, endISO));
+      let conflicts: ConflictRow[] | null = null;
       try {
         conflicts = await checkMeetingConflicts(
           startISO,
@@ -454,24 +584,33 @@ export default function Calendar({
           meeting.id
         );
       } catch {
-        conflicts = [];
+        conflicts = null; // falhou a checagem: pergunta em vez de gravar calado
       }
-      if (conflicts.length > 0) {
-        setDragConfirm({ meeting, startISO, endISO, conflicts, backup });
+      if (conflicts === null || conflicts.length > 0) {
+        setDragConfirm({
+          meeting,
+          startISO,
+          endISO,
+          conflicts: conflicts ?? [],
+          checkFailed: conflicts === null,
+        });
         return;
       }
-      await finishReschedule(meeting, startISO, endISO, backup);
+      await finishReschedule(meeting, startISO, endISO);
     },
-    [cache, key, finishReschedule]
+    [finishReschedule]
   );
 
-  // Cancela o arrasto em conflito: reverte o otimismo ao lugar de origem.
+  // Cancela o arrasto pendente: reverte o otimismo aos horários originais.
   const cancelDragConfirm = useCallback(() => {
     setDragConfirm((c) => {
-      if (c) setCache((prev) => new Map(prev).set(key, c.backup));
+      if (c)
+        setCache((prev) =>
+          moveEverywhere(prev, c.meeting.id, c.meeting.startsAt, c.meeting.endsAt)
+        );
       return null;
     });
-  }, [key]);
+  }, []);
 
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -519,6 +658,54 @@ export default function Calendar({
         </p>
       )}
 
+      {/* B13: aviso PERSISTENTE — reuniões futuras do usuário fora do Google. */}
+      {pendingGoogle.length > 0 && (
+        <div className="mb-3 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2.5 dark:border-amber-500/30 dark:bg-amber-500/10">
+          <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
+            {pendingGoogle.length === 1
+              ? "1 reunião futura sua não está na sua agenda Google:"
+              : `${pendingGoogle.length} reuniões futuras suas não estão na sua agenda Google:`}
+          </p>
+          <ul className="mt-1.5 space-y-1">
+            {pendingGoogle.map((p) => (
+              <li
+                key={p.id}
+                className="flex flex-wrap items-center justify-between gap-2 text-xs text-amber-800 dark:text-amber-200"
+              >
+                <span className="min-w-0 truncate">
+                  <span className="font-medium">{p.title}</span>
+                  {" · "}
+                  {new Date(p.startsAt).toLocaleString("pt-BR", {
+                    timeZone: "America/Sao_Paulo",
+                    day: "2-digit",
+                    month: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                  {p.companyName ? ` · ${p.companyName}` : ""}
+                  {p.syncStatus === "falhou" && p.syncError
+                    ? `: ${p.syncError}`
+                    : ""}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void sendPending(p.id)}
+                  disabled={sendingId === p.id || !googleConnected}
+                  title={
+                    googleConnected
+                      ? "Enviar esta reunião para a sua agenda Google"
+                      : "Conecte sua conta Google no perfil para enviar"
+                  }
+                  className="shrink-0 rounded-full border border-amber-400/60 px-2.5 py-0.5 font-medium transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-amber-500/20"
+                >
+                  {sendingId === p.id ? "Enviando…" : "Enviar para o Google"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Área (painel + grade): a linha recebe a altura disponível (CSS var) e
           filhos preenchem com lg:h-full; grade e painel rolam por dentro. */}
       <div
@@ -539,6 +726,7 @@ export default function Calendar({
             people={directory}
             selected={selected}
             currentUserId={currentUserId}
+            syncInfo={syncInfo}
             onToggle={toggle}
             onOnlyMe={() => setSelected(new Set([currentUserId]))}
             onCollapse={toggleSidebar}
@@ -660,28 +848,47 @@ export default function Calendar({
         {dragConfirm && (
           <div className="space-y-4">
             <div>
-              <h2 className="font-semibold text-fg">Possível conflito de horário</h2>
+              <h2 className="font-semibold text-fg">
+                {dragConfirm.checkFailed
+                  ? "Não foi possível verificar conflitos"
+                  : "Possível conflito de horário"}
+              </h2>
               <p className="mt-1 text-sm text-fg-muted">
-                Mover “{dragConfirm.meeting.title}” para{" "}
-                {formatMeetingRange(dragConfirm.startISO, dragConfirm.endISO)}{" "}
-                sobrepõe:
+                {dragConfirm.checkFailed ? (
+                  <>
+                    A verificação de conflitos falhou agora (sem resposta do
+                    servidor). Mover “{dragConfirm.meeting.title}” para{" "}
+                    {formatMeetingRange(dragConfirm.startISO, dragConfirm.endISO)}{" "}
+                    mesmo assim?
+                  </>
+                ) : (
+                  <>
+                    Mover “{dragConfirm.meeting.title}” para{" "}
+                    {formatMeetingRange(dragConfirm.startISO, dragConfirm.endISO)}{" "}
+                    sobrepõe:
+                  </>
+                )}
               </p>
             </div>
-            <ul className="space-y-1.5 rounded-xl border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-              {dragConfirm.conflicts.map((c) => {
-                const { who, tail } = describeConflict(c, nameById);
-                return (
-                  <li key={`${c.source}-${c.refId}`}>
-                    <span className="font-medium">{who}</span>
-                    {tail}
-                  </li>
-                );
-              })}
-            </ul>
-            <p className="text-xs text-fg-subtle">
-              É só um aviso — você pode mover mesmo assim. A verificação cobre as
-              reuniões deste sistema e os eventos da sua agenda do Google.
-            </p>
+            {dragConfirm.conflicts.length > 0 && (
+              <ul className="space-y-1.5 rounded-xl border border-amber-300/60 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                {dragConfirm.conflicts.map((c) => {
+                  const { who, tail } = describeConflict(c, nameById);
+                  return (
+                    <li key={`${c.source}-${c.refId}`}>
+                      <span className="font-medium">{who}</span>
+                      {tail}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {!dragConfirm.checkFailed && (
+              <p className="text-xs text-fg-subtle">
+                É só um aviso — você pode mover mesmo assim. A verificação cobre as
+                reuniões deste sistema e os eventos da sua agenda do Google.
+              </p>
+            )}
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -689,7 +896,7 @@ export default function Calendar({
                 onClick={() => {
                   const c = dragConfirm;
                   setDragConfirm(null);
-                  finishReschedule(c.meeting, c.startISO, c.endISO, c.backup);
+                  finishReschedule(c.meeting, c.startISO, c.endISO);
                 }}
               >
                 Mover mesmo assim

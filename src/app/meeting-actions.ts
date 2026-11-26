@@ -126,14 +126,22 @@ export async function createMeeting(
   }
   const meetingId = created.id as string;
 
-  // ---- 2. participantes internos (RLS mp_write só deixa o criador escrever)
+  // ---- 2. participantes internos (RLS mp_write só deixa o criador escrever).
+  // Erro aqui não é mais engolido (B16): a reunião fica criada, mas o aviso diz
+  // que a lista de convidados não foi gravada.
+  let participantsWarning: string | null = null;
   const participantIds = uniqueIds(input.participantIds);
   if (participantIds.length > 0) {
-    await supabase
+    const { error: partErr } = await supabase
       .from("meeting_participants")
       .insert(
         participantIds.map((uid) => ({ meeting_id: meetingId, user_id: uid }))
       );
+    if (partErr) {
+      logDbError("createMeeting.participants", partErr, { meetingId, userId: user.id });
+      participantsWarning =
+        "Reunião criada, mas não foi possível gravar os convidados — revise a lista.";
+    }
   }
 
   // ---- 3. tenta o Google (nunca derruba a reunião já salva)
@@ -150,14 +158,18 @@ export async function createMeeting(
       roomEmail: roomCalendarEmail(room),
       withMeet: input.type === "meet",
     },
-    { existingEventId: null, hadMeet: false }
+    { existingEventId: null, hadMeet: false, existingEmail: null }
   );
 
+  const googleWarning = warningFor("criar", outcome);
   return {
     ok: true,
     meetingId,
-    sync: outcome.sync,
-    warning: warningFor("criar", outcome),
+    // conta_diferente não altera o status no banco (o evento segue na conta
+    // antiga); o campo não é lido pelo front, mas mantemos um GoogleSyncStatus válido.
+    sync: outcome.sync === "conta_diferente" ? "sincronizado" : outcome.sync,
+    warning:
+      [participantsWarning, googleWarning].filter(Boolean).join(" ") || null,
   };
 }
 
@@ -181,7 +193,7 @@ export async function updateMeeting(
   // e confirma a autoria (o RLS também barra, mas assim a mensagem é clara).
   const { data: existing, error: exErr } = await supabase
     .from("meetings")
-    .select("created_by, google_event_id, meeting_type")
+    .select("created_by, google_event_id, meeting_type, google_email")
     .eq("id", input.meetingId)
     .single();
   if (exErr || !existing) return { ok: false, error: "Reunião não encontrada." };
@@ -213,15 +225,54 @@ export async function updateMeeting(
     };
   }
 
-  // ---- 2. participantes: substitui o conjunto (apaga todos + reinsere o novo)
+  // ---- 2. participantes: DIFF em vez de apagar-e-reinserir (B16) — quem
+  // continua na reunião PRESERVA o response já espelhado (aceitou/recusou).
+  // Erros de escrita não são mais engolidos: viram aviso no retorno.
+  let participantsWarning: string | null = null;
   const participantIds = uniqueIds(input.participantIds);
-  await supabase.from("meeting_participants").delete().eq("meeting_id", input.meetingId);
-  if (participantIds.length > 0) {
-    await supabase
-      .from("meeting_participants")
-      .insert(
-        participantIds.map((uid) => ({ meeting_id: input.meetingId, user_id: uid }))
-      );
+  const { data: curParts, error: curErr } = await supabase
+    .from("meeting_participants")
+    .select("user_id")
+    .eq("meeting_id", input.meetingId);
+  if (curErr) {
+    logDbError("updateMeeting.participants.read", curErr, {
+      meetingId: input.meetingId, userId: user.id,
+    });
+    participantsWarning =
+      "Alterações salvas, mas não foi possível ler os convidados atuais — a lista pode não ter sido atualizada.";
+  } else {
+    const current = new Set(
+      ((curParts as { user_id: string }[] | null) ?? []).map((p) => p.user_id)
+    );
+    const wanted = new Set(participantIds);
+    const toRemove = Array.from(current).filter((id) => !wanted.has(id));
+    const toAdd = participantIds.filter((id) => !current.has(id));
+    if (toRemove.length > 0) {
+      const { error: delErr } = await supabase
+        .from("meeting_participants")
+        .delete()
+        .eq("meeting_id", input.meetingId)
+        .in("user_id", toRemove);
+      if (delErr) {
+        logDbError("updateMeeting.participants.delete", delErr, {
+          meetingId: input.meetingId, userId: user.id,
+        });
+        participantsWarning =
+          "Alterações salvas, mas não foi possível remover alguns convidados.";
+      }
+    }
+    if (toAdd.length > 0) {
+      const { error: insErr } = await supabase
+        .from("meeting_participants")
+        .insert(toAdd.map((uid) => ({ meeting_id: input.meetingId, user_id: uid })));
+      if (insErr) {
+        logDbError("updateMeeting.participants.insert", insErr, {
+          meetingId: input.meetingId, userId: user.id,
+        });
+        participantsWarning =
+          "Alterações salvas, mas não foi possível adicionar alguns convidados.";
+      }
+    }
   }
 
   // ---- 3. Google: PATCH se o evento já existe; se a reunião nunca chegou ao
@@ -242,14 +293,19 @@ export async function updateMeeting(
     {
       existingEventId: existing.google_event_id ?? null,
       hadMeet: existing.meeting_type === "meet" && !!existing.google_event_id,
+      existingEmail: (existing.google_email as string | null) ?? null,
     }
   );
 
+  const googleWarning = warningFor("editar", outcome);
   return {
     ok: true,
     meetingId: input.meetingId,
-    sync: outcome.sync,
-    warning: warningFor("editar", outcome),
+    // conta_diferente não altera o status no banco (o evento segue na conta
+    // antiga); o campo não é lido pelo front, mas mantemos um GoogleSyncStatus válido.
+    sync: outcome.sync === "conta_diferente" ? "sincronizado" : outcome.sync,
+    warning:
+      [participantsWarning, googleWarning].filter(Boolean).join(" ") || null,
   };
 }
 
@@ -353,7 +409,7 @@ export async function syncMeetingToGoogle(
   const { data: m, error } = await supabase
     .from("meetings")
     .select(
-      "created_by, google_sync_status, google_event_id, meeting_type, room, title, description, starts_at, ends_at, company:companies(name)"
+      "created_by, google_sync_status, google_event_id, google_email, meeting_type, room, title, description, starts_at, ends_at, company:companies(name)"
     )
     .eq("id", meetingId)
     .single();
@@ -374,6 +430,9 @@ export async function syncMeetingToGoogle(
     (p) => p.user_id
   );
 
+  // B14: se a reunião JÁ tem event_id (ex.: edição cujo push falhou), tenta
+  // PATCH naquele evento; o pushToGoogle só cria um novo se o Google devolver
+  // 404/410. Antes era sempre INSERT — duplicava o evento na agenda.
   const outcome = await pushToGoogle(
     supabase,
     meetingId,
@@ -387,13 +446,22 @@ export async function syncMeetingToGoogle(
       roomEmail: roomCalendarEmail(m.room as string | null),
       withMeet: m.meeting_type === "meet",
     },
-    { existingEventId: null, hadMeet: false }
+    {
+      existingEventId: (m.google_event_id as string | null) ?? null,
+      hadMeet: m.meeting_type === "meet" && !!m.google_event_id,
+      existingEmail: (m.google_email as string | null) ?? null,
+    }
   );
 
   if (outcome.sync === "nao_conectado")
     return {
       ok: false,
       error: "Conecte sua conta Google no seu perfil antes de enviar a reunião.",
+    };
+  if (outcome.sync === "conta_diferente")
+    return {
+      ok: false,
+      error: `Esta reunião está na conta Google ${outcome.email}, que não está mais conectada.`,
     };
   if (outcome.sync === "falhou")
     return {
@@ -688,13 +756,22 @@ type SyncDetails = {
 type GoogleOutcome =
   | { sync: "sincronizado"; meetMissing: boolean }
   | { sync: "nao_conectado" }
-  | { sync: "falhou"; error: string };
+  | { sync: "falhou"; error: string }
+  // FALHA 3.4: a reunião pertence a uma conta Google que não é a conectada agora.
+  // NÃO cria evento novo (deixaria o antigo órfão) e NÃO altera google_email.
+  | { sync: "conta_diferente"; email: string };
 
 async function pushToGoogle(
   supabase: Awaited<ReturnType<typeof createClient>>,
   meetingId: string,
   details: SyncDetails,
-  opts: { existingEventId: string | null; hadMeet: boolean }
+  opts: {
+    existingEventId: string | null;
+    hadMeet: boolean;
+    // google_email da reunião (conta dona do evento). Quando difere da conta
+    // conectada, o envio é recusado em vez de criar um evento novo na conta errada.
+    existingEmail: string | null;
+  }
 ): Promise<GoogleOutcome> {
   const token = await getValidAccessToken(supabase);
   if (token.status === "nao_conectado") {
@@ -704,6 +781,18 @@ async function pushToGoogle(
   if (token.status === "falhou") {
     await setSync(supabase, meetingId, "falhou", token.error);
     return { sync: "falhou", error: token.error };
+  }
+
+  // FALHA 3.4: evento numa conta diferente da conectada. Um PATCH naquele event_id
+  // daria 404 na conta nova e o fallback criaria um evento DUPLICADO/órfão. Recusa
+  // sem tocar no banco (google_email intacto); o CRM já guardou a edição.
+  if (
+    opts.existingEventId &&
+    opts.existingEmail &&
+    token.email &&
+    opts.existingEmail !== token.email
+  ) {
+    return { sync: "conta_diferente", email: opts.existingEmail };
   }
 
   const participants = await participantEmails(supabase, details.attendeeIds);
@@ -721,15 +810,40 @@ async function pushToGoogle(
     withMeet: details.withMeet,
   };
   try {
-    const event = opts.existingEventId
-      ? await patchCalendarEvent(token.accessToken, opts.existingEventId, payload, {
-          hadMeet: opts.hadMeet,
-        })
-      : await insertCalendarEvent(token.accessToken, payload);
-    await setSync(supabase, meetingId, "sincronizado", null, {
+    // B14: com event_id existente, SEMPRE tenta PATCH primeiro; só cria um evento
+    // NOVO se o Google disser que aquele não existe mais (404/410 → EventGone).
+    // Antes, o reenvio pós-falha fazia INSERT direto e duplicava o evento.
+    let event: Awaited<ReturnType<typeof insertCalendarEvent>>;
+    if (opts.existingEventId) {
+      try {
+        event = await patchCalendarEvent(
+          token.accessToken,
+          opts.existingEventId,
+          payload,
+          { hadMeet: opts.hadMeet }
+        );
+      } catch (e) {
+        if (!(e instanceof EventGone)) throw e;
+        event = await insertCalendarEvent(token.accessToken, payload);
+      }
+    } else {
+      event = await insertCalendarEvent(token.accessToken, payload);
+    }
+    const saved = await setSync(supabase, meetingId, "sincronizado", null, {
       eventId: event.eventId,
       meetLink: event.meetLink,
+      email: token.email,
     });
+    if (!saved) {
+      // O Google gravou, o CRM não (achado 5): sem registrar o event_id, um
+      // reenvio criaria evento DUPLICADO na agenda. Avisa com instrução clara
+      // em vez de fingir sucesso.
+      return {
+        sync: "falhou",
+        error:
+          "a reunião chegou à sua agenda Google, mas o CRM não conseguiu registrar o vínculo. Tente “Enviar para o Google” daqui a pouco.",
+      };
+    }
     return {
       sync: "sincronizado",
       meetMissing: details.withMeet && !event.meetLink,
@@ -751,6 +865,8 @@ function warningFor(
   outcome: GoogleOutcome
 ): string | null {
   const saved = action === "criar" ? "Reunião criada e salva" : "Alterações salvas";
+  if (outcome.sync === "conta_diferente")
+    return `${saved}. Esta reunião está na conta Google ${outcome.email}, que não está mais conectada, então ela não foi atualizada no Google.`;
   if (outcome.sync === "nao_conectado")
     return `${saved}. Sua conta Google não está conectada, então ela não foi ${
       action === "criar" ? "adicionada à" : "atualizada na"
@@ -848,26 +964,35 @@ function describeWriteError(
   }
 }
 
-// Grava o resultado da sincronização. Em sucesso, guarda o event_id/agenda/meet.
-// Em nao_conectado/falhou LIMPA event_id/meet_link (a reunião não está no Google).
+// Grava o resultado da sincronização via RPC meetings_set_sync (0175): o banco
+// valida criador/status/conta e, em sucesso com evento, limpa as marcas de
+// removida/não encontrada. Em nao_conectado/falhou o event_id anterior é MANTIDO
+// de propósito: o reenvio tenta PATCH nele e só cria evento novo se o Google
+// disser 404/410 (B14 — evita duplicar). O ERRO é checado (achado 5): retorna
+// false quando a gravação falhou mesmo após uma nova tentativa — sem isto, um
+// evento criado no Google com event_id não gravado duplicava no reenvio.
 async function setSync(
   supabase: Awaited<ReturnType<typeof createClient>>,
   meetingId: string,
   status: GoogleSyncStatus,
   error: string | null,
-  google?: { eventId: string; meetLink: string | null }
-): Promise<void> {
-  const patch: Record<string, unknown> = {
-    google_sync_status: status,
-    google_sync_error: error,
-    updated_at: new Date().toISOString(),
+  google?: { eventId: string; meetLink: string | null; email: string | null }
+): Promise<boolean> {
+  const args = {
+    p_meeting: meetingId,
+    p_status: status,
+    p_error: error,
+    p_has_event: !!google,
+    p_event_id: google?.eventId ?? null,
+    p_meet_link: google?.meetLink ?? null,
+    p_email: google?.email ?? null,
   };
-  if (google) {
-    patch.google_event_id = google.eventId || null;
-    patch.google_calendar_id = "primary";
-    patch.meet_link = google.meetLink;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const { error: rpcErr } = await supabase.rpc("meetings_set_sync", args);
+    if (!rpcErr) return true;
+    logDbError("setSync", rpcErr, { meetingId, status, attempt });
   }
-  await supabase.from("meetings").update(patch).eq("id", meetingId);
+  return false;
 }
 
 // E-mails dos participantes para o convite. A RLS de profiles não deixa o

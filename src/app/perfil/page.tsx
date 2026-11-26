@@ -35,6 +35,7 @@ export default async function PerfilPage({
     "consultor",
     "colaborador",
     "gestor_trafego",
+    "desenvolvedor",
   ]);
 
   // guardRole não traz o e-mail; busca aqui (registro próprio, via RLS).
@@ -48,12 +49,16 @@ export default async function PerfilPage({
   // grant para o navegador; ver migrations 0043/0044).
   const { data: gcal } = await supabase
     .from("google_accounts")
-    .select("google_email, connected_at")
+    .select("google_email, connected_at, scope")
     .eq("user_id", profile.id)
     .maybeSingle();
 
   const systemEmail = extra?.email ?? "";
   const googleEmail = gcal?.google_email ?? null;
+  // Conexão SEM a permissão de agenda (B12/0174): conectada antes do gate do
+  // callback, só com userinfo — reuniões não vão ao Google. Pede reconexão.
+  const missingAgendaScope =
+    !!gcal && !(gcal.scope ?? "").includes("calendar.events.owned");
   // Divergência: conta Google conectada difere do e-mail do sistema.
   const emailMismatch =
     !!googleEmail &&
@@ -97,6 +102,7 @@ export default async function PerfilPage({
             googleEmail={googleEmail}
             connectedAt={gcal?.connected_at ?? null}
             emailMismatch={emailMismatch}
+            missingAgendaScope={missingAgendaScope}
             systemEmail={systemEmail}
             flashStatus={flashStatus}
             flashMsg={searchParams.g_msg ?? null}

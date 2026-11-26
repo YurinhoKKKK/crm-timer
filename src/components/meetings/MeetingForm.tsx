@@ -9,6 +9,7 @@ import {
   updateMeeting,
   checkMeetingConflicts,
 } from "@/app/meeting-actions";
+import { fetchAgendaSyncStatus } from "@/app/meeting-reconcile-actions";
 import {
   MEETING_TYPE_OPTIONS,
   MEETING_ROOM_OPTIONS,
@@ -190,6 +191,9 @@ export default function MeetingForm({
   };
 
   const [conflicts, setConflicts] = useState<ConflictLike[]>([]);
+  // B15: convidados cuja agenda importada está VELHA (>24h) ou nunca sincronizou
+  // — o aviso de conflito pode estar desatualizado para eles.
+  const [staleAgendas, setStaleAgendas] = useState<string[]>([]);
   const [checking, setChecking] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -213,15 +217,36 @@ export default function MeetingForm({
     const seq = ++seqRef.current;
     setChecking(true);
     const timer = setTimeout(async () => {
-      const rows = await checkMeetingConflicts(
-        startISO,
-        endISO,
-        Array.from(participants),
-        meetingId
-      );
-      if (seq !== seqRef.current) return; // resposta obsoleta
-      setConflicts(rows);
-      setChecking(false);
+      try {
+        const ids = Array.from(participants);
+        const [rows, syncRows] = await Promise.all([
+          checkMeetingConflicts(startISO, endISO, ids, meetingId),
+          fetchAgendaSyncStatus().catch(() => []),
+        ]);
+        if (seq !== seqRef.current) return; // resposta obsoleta
+        // FALHA 2: sessão encerrada por fora pode fazer a action voltar undefined.
+        // Tratar como "sem conflito" (lista vazia) em vez de quebrar a tela — o
+        // aviso é best-effort e nunca deve derrubar o formulário aberto.
+        setConflicts(Array.isArray(rows) ? rows : []);
+        const safeSyncRows = Array.isArray(syncRows) ? syncRows : [];
+        // B15: convidado com Google conectado mas agenda importada velha (>24h) ou
+        // nunca sincronizada — o "sem conflito" dele pode estar defasado.
+        const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+        setStaleAgendas(
+          ids
+            .filter((id) => {
+              const s = safeSyncRows.find((r) => r.userId === id);
+              if (!s || !s.googleConnected) return false;
+              return !s.lastSyncedAt || new Date(s.lastSyncedAt).getTime() < cutoff;
+            })
+            .map((id) => nameById.get(id) ?? "(sem nome)")
+        );
+        setChecking(false);
+      } catch {
+        // Rede caiu no meio da checagem: sem isto o "Verificando conflitos…"
+        // ficava girando para sempre. O aviso é best-effort; o salvar não depende.
+        if (seq === seqRef.current) setChecking(false);
+      }
     }, 500);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -264,11 +289,23 @@ export default function MeetingForm({
         mode === "edit" && meetingId
           ? await updateMeeting({ ...payload, meetingId })
           : await createMeeting(payload);
+      if (!res) {
+        // Sessão encerrada por fora (FALHA 2): avisa sem perder o que foi digitado.
+        setFormError("Sua sessão expirou. Entre de novo para continuar.");
+        return;
+      }
       if (!res.ok) {
         setFormError(res.error);
         return;
       }
       startTransition(() => onDone(res.warning));
+    } catch {
+      // Exceção da chamada (rede caiu: o fetch da server action REJEITA antes de
+      // responder). Sem este catch o botão só voltava de "Salvando…/Criando…" e
+      // nada era gravado, sem aviso.
+      setFormError(
+        "Não foi possível salvar a reunião. Verifique a conexão e tente de novo."
+      );
     } finally {
       setSubmitting(false);
     }
@@ -508,6 +545,17 @@ export default function MeetingForm({
         nameById={nameById}
       />
 
+      {/* B15: agenda importada de convidado velha demais — o "sem conflito" dele
+          pode estar defasado. Aviso informativo, nunca bloqueia. */}
+      {staleAgendas.length > 0 && (
+        <p className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs text-fg-muted">
+          A agenda do Google de{" "}
+          <span className="font-medium text-fg">{staleAgendas.join(", ")}</span>{" "}
+          não é sincronizada há mais de 24 horas: pode haver compromissos que o
+          aviso de conflito não enxerga.
+        </p>
+      )}
+
       {formError && (
         <p className="text-sm text-red-600 dark:text-red-400">{formError}</p>
       )}
@@ -558,10 +606,12 @@ function ConflictNotice({
   conflicts: ConflictLike[];
   nameById: Map<string, string>;
 }) {
-  if (checking && conflicts.length === 0) {
+  // Defensivo (FALHA 2): nunca ler .length/.map de um valor possivelmente undefined.
+  const list = conflicts ?? [];
+  if (checking && list.length === 0) {
     return <p className="text-xs text-fg-subtle">Verificando conflitos…</p>;
   }
-  if (conflicts.length === 0) return null;
+  if (list.length === 0) return null;
 
   return (
     <div className="rounded-xl border border-amber-300/60 bg-amber-50 p-3 text-sm dark:border-amber-500/30 dark:bg-amber-500/10">
@@ -569,7 +619,7 @@ function ConflictNotice({
         Possível conflito de horário
       </p>
       <ul className="mt-1.5 space-y-1 text-amber-800 dark:text-amber-200">
-        {conflicts.map((c) => {
+        {list.map((c) => {
           const { who, tail } = describeConflict(c, nameById);
           return (
             <li key={`${c.source}-${c.refId}`}>

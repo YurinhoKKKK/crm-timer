@@ -160,7 +160,7 @@ export async function GET(request: NextRequest) {
     return back(
       request,
       "error",
-      `Você tem ${reunioes} na conta ${email}. Para trocar de conta, exclua ou remarque essas reuniões antes ou fale com o administrador.`
+      `Você tem ${reunioes} na conta ${email}. Para trocar de conta, exclua essas reuniões ou aguarde que elas aconteçam. Se precisar de ajuda, fale com o administrador.`
     );
   }
 

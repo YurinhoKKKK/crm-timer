@@ -509,6 +509,15 @@ export async function deleteCompany(
           "Esta empresa tem chamados de suporte vinculados e não pode ser excluída.",
       };
     }
+    // Qualquer outra FK (23503): depois da 0178 o histórico não deveria mais
+    // barrar a exclusão, mas se bater aqui nunca expomos a mensagem crua do
+    // Postgres — mensagem genérica orientando o suporte.
+    if (error.code === "23503") {
+      return {
+        error:
+          "Não foi possível excluir a empresa. Tente de novo ou fale com o suporte técnico.",
+      };
+    }
     return { error: error.message };
   }
 

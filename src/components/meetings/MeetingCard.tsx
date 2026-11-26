@@ -565,7 +565,11 @@ export default function MeetingCard({
       <div className="mt-3 border-t border-line pt-3">
         {confirm === "delete" ? (
           <ConfirmRow
-            question="Excluir esta reunião? Os convidados serão avisados e o evento será removido da sua agenda Google."
+            question={
+              ctx.googleConnected
+                ? "Excluir esta reunião? Os convidados serão avisados e o evento será removido da sua agenda Google."
+                : "Excluir esta reunião? Sua conta Google não está conectada, então o evento pode continuar na sua agenda Google."
+            }
             confirmLabel="Sim, excluir"
             busy={busy}
             danger

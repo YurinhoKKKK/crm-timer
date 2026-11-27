@@ -270,9 +270,8 @@ export default function ReconciliationPanel({
 
       {rows.length === 0 && (
         <div className="rounded-xl border border-line bg-surface-2 p-8 text-center text-sm text-fg-muted">
-          Nenhuma divergência pendente. Quando um usuário com Google conectado
-          sincronizar a agenda, as reuniões do CRM que mudaram no Google aparecem
-          aqui para a sua revisão.
+          Nenhuma divergência. O sistema resolve as mudanças do Google sozinho; só
+          aparecem aqui os casos que precisam de decisão.
         </div>
       )}
 

@@ -19,7 +19,11 @@ export type NotificationType =
   // watchdog (sem execução recente).
   | "digisac_sync_auth"
   | "digisac_sync_error"
-  | "digisac_sync_stalled";
+  | "digisac_sync_stalled"
+  // Evento de reunião do CRM apagado na agenda Google do dono (0179): futura sem
+  // timer foi removida do CRM; futura com timer foi mantida por ter horas. Leva à
+  // Agenda. (O caso de conta divergente usa 'agenda_conta_diferente'.)
+  | "agenda_evento_apagado";
 
 // 'desenvolvedor' já é um destino VÁLIDO de roteamento (etapa 4 do
 // Desenvolvimento). O cargo em si — acesso, policies, telas — é construído na
@@ -63,6 +67,7 @@ export function notificationHref(
   switch (n.type) {
     case "reuniao_convite":
     case "reuniao_cancelada":
+    case "agenda_evento_apagado":
       return "/agenda";
     case "tarefa_atribuida":
     case "tarefa_recorrente_atribuida":
